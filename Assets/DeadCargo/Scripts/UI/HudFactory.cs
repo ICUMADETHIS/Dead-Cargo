@@ -1,4 +1,6 @@
+using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace DeadCargo.UI
@@ -23,6 +25,17 @@ namespace DeadCargo.UI
 
         private static readonly Color RuleColor = new Color32(81, 108, 110, 160);
         private static readonly Color KeyColor = new Color32(50, 66, 68, 243);
+
+        private static readonly ColorBlock ButtonColors = new ColorBlock
+        {
+            normalColor = Color.white,
+            highlightedColor = new Color(0.82f, 0.95f, 1f),
+            pressedColor = new Color(0.6f, 0.72f, 0.78f),
+            selectedColor = Color.white,
+            disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.6f),
+            colorMultiplier = 1f,
+            fadeDuration = 0.08f
+        };
 
         private static Font headingFont;
         private static Font numericFont;
@@ -108,6 +121,37 @@ namespace DeadCargo.UI
             background.raycastTarget = false;
             Label("Key", keycap, key, 0f, 0f, width, KeySize, 13, Ink, TextAnchor.MiddleCenter, true);
             return keycap;
+        }
+
+        /// <summary>A plate-styled button with a centred label, placed from the parent's top-left corner.</summary>
+        internal static Button TextButton(string name, RectTransform parent, string label, float x, float y, float width, float height,
+            int size, Color accent, Action onClick)
+        {
+            HudPlate plate = Plate(name, parent, new Vector2(0f, 1f), width, height);
+            SetOffset(plate.rectTransform, x, y);
+            plate.SetAccent(accent);
+            Label("Label", plate.rectTransform, label, 0f, 0f, width, height, size, Ink, TextAnchor.MiddleCenter);
+            return MakeButton(plate, onClick);
+        }
+
+        /// <summary>Turns a plate into a button. Hover and press tint the whole plate.</summary>
+        internal static Button MakeButton(HudPlate plate, Action onClick)
+        {
+            plate.raycastTarget = true;
+            var button = plate.gameObject.AddComponent<Button>();
+            button.targetGraphic = plate;
+            button.colors = ButtonColors;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+
+            // A clicked button stays selected, and Enter would then submit it again. Keyboard shortcuts are handled
+            // by the screens themselves, so the selection is cleared after every click.
+            button.onClick.AddListener(() =>
+            {
+                if (EventSystem.current != null)
+                    EventSystem.current.SetSelectedGameObject(null);
+                onClick();
+            });
+            return button;
         }
 
         /// <summary>A full-size image covering its parent.</summary>

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using DeadCargo.EditorTools.TestRange;
-using DeadCargo.UI;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -39,26 +38,13 @@ namespace DeadCargo.EditorTools
         private const string KitNamespace = "VSX";
         private const string DeadCargoNamespace = "DeadCargo";
 
-        /// <summary>What a tidy pass changed.</summary>
-        public readonly struct TidyResult
-        {
-            public TidyResult(int moved, int removed)
-            {
-                Moved = moved;
-                Removed = removed;
-            }
-
-            public int Moved { get; }
-            public int Removed { get; }
-        }
-
         [MenuItem(TidyMenuPath, priority = 150)]
         private static void TidyOpenScene()
         {
             Scene scene = SceneManager.GetActiveScene();
-            TidyResult result = Tidy(scene);
+            int moved = Tidy(scene);
             EditorSceneManager.MarkSceneDirty(scene);
-            Debug.Log($"Tidied '{scene.name}': {result.Moved} object(s) filed into folders, {result.Removed} superseded object(s) removed.");
+            Debug.Log($"Tidied '{scene.name}': {moved} object(s) filed into folders.");
         }
 
         [MenuItem(TidyMenuPath, true)]
@@ -98,15 +84,14 @@ namespace DeadCargo.EditorTools
         }
 
         /// <summary>
-        /// Files every root object that belongs in a folder, removes superseded objects and sorts the folders to the top.
+        /// Files every root object that belongs in a folder and sorts the folders to the top.
         /// Kit objects, vehicles, agents and test range content are left where they are. Supports Undo.
         /// </summary>
-        public static TidyResult Tidy(Scene scene)
+        /// <returns>The number of objects moved.</returns>
+        public static int Tidy(Scene scene)
         {
             Undo.SetCurrentGroupName("Tidy Hierarchy");
             int undoGroup = Undo.GetCurrentGroup();
-
-            int removed = RemoveLegacyObjects(scene);
             int moved = 0;
 
             foreach (GameObject root in scene.GetRootGameObjects())
@@ -122,7 +107,7 @@ namespace DeadCargo.EditorTools
             RemoveEmptyFolders(scene);
             SortRoots(scene);
             Undo.CollapseUndoOperations(undoGroup);
-            return new TidyResult(moved, removed);
+            return moved;
         }
 
         private static Transform GetFolder(Scene scene, string folder)
@@ -204,22 +189,6 @@ namespace DeadCargo.EditorTools
                 gameObject.transform.localPosition == Vector3.zero &&
                 gameObject.transform.localRotation == Quaternion.identity &&
                 gameObject.transform.localScale == Vector3.one;
-        }
-
-        // The standalone cargo and heat panels from phases 1 and 3, replaced by the run HUD.
-        private static int RemoveLegacyObjects(Scene scene)
-        {
-            int removed = 0;
-            foreach (GameObject root in scene.GetRootGameObjects())
-            {
-                if (!root.TryGetComponent(out CargoHudPanel _) && !root.TryGetComponent(out HeatHudPanel _))
-                    continue;
-
-                Undo.DestroyObjectImmediate(root);
-                removed++;
-            }
-
-            return removed;
         }
 
         private static void RemoveEmptyFolders(Scene scene)

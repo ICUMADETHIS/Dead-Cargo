@@ -7,7 +7,7 @@ Assets/DeadCargo/
   Scripts/UI/          HUD and menus
   Editor/              editor-only tooling
   Data/<Feature>/      ScriptableObject assets
-  Resources/           assets found at runtime by name (HUD fonts, scene flow settings)
+  Resources/           assets found at runtime by name (HUD fonts, scene flow settings, cargo catalog)
   Scenes/              game scenes (Mothership)
   DevTest/             test range, its template and the dev console
 Docs/                  design, roadmap, standards
@@ -64,7 +64,12 @@ Every scene follows one layout, so it stays readable as the game grows.
 - **Ships, characters and game agents must stay at the root.** The kit finds a ship's parts through `transform.root` for hit detection, radar and boarding. A ship inside a folder breaks all three. Ships spawned at runtime go at the root for the same reason.
 - Folders are empty objects at the origin. They sit at the top of the hierarchy in the order above.
 - Setup tools create objects through `SceneHierarchy.EnsureObject`, which files them into the right folder. Do not create loose root objects.
-- **Dead Cargo > Tidy Hierarchy (Open Scene)**, also in the God Menu **Project** tab, files existing objects into folders and removes superseded ones. It supports Undo.
+- **Dead Cargo > Tidy Hierarchy (Open Scene)**, also in the God Menu **Project** tab, files existing objects into folders. It supports Undo. Superseded objects are deleted, not hidden.
+
+## Save data
+- All saved progress lives in one `PlayerProfile`, changed only through `ProfileStore`, which saves after every change.
+- Save data refers to assets by stable ID (`CargoItemDefinition.Id`), never by name or path, and resolves IDs through a catalog.
+- Never change an item's ID once saves exist. Change the format by raising `PlayerProfile.CurrentVersion` and migrating in `ProfileStore`.
 
 ## Units
 | Quantity | Unit |

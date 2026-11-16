@@ -9,7 +9,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 3 | Heat | Heat meter, tiers, decay, heat from weapons and cargo, heat HUD | Done, tested 2026-11-16 |
 | 4 | Authority response | Authority ships spawn according to the heat tier | Done, tested 2026-11-16 |
 | 5 | Extraction | Jump-drive spool, extraction result, cargo lost on death | Done, tested 2026-11-16 |
-| 6 | Mothership hub | 6a: mothership scene, loading screen, launch and return. 6b: save data, stash, credits, selling | 6a built, awaiting test |
+| 6 | Mothership hub | 6a: mothership scene, loading screen, launch and return. 6b: save data, stash, credits, selling | 6a done, tested 2026-11-16. 6b built, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -277,7 +277,7 @@ The run becomes a loop: start on the mothership, launch into a sector, come home
 | `Editor/GodMenu/Tabs/MothershipTab.cs` | God Menu tab: open and load scenes |
 
 ### Test steps (6a)
-1. Open the Dev Test Range with the phase 5 setup in it. In the God Menu **Project** tab, press **Tidy Open Scene**. The Cargo HUD and Heat HUD objects are removed, the Dead Cargo objects move into the Systems, UI and Environment folders, and the kit objects stay at the root. Press Play once to confirm the range still works as before.
+1. Open the Dev Test Range with the phase 5 setup in it. In the God Menu **Project** tab, press **Tidy Open Scene**. The Dead Cargo objects move into the Systems, UI and Environment folders, and the kit objects stay at the root. Press Play once to confirm the range still works as before. (Passed 2026-11-16. The tidy also removed the superseded Cargo HUD and Heat HUD objects; that step has since been retired.)
 2. In the **Project** tab, press **Set Up** next to Phase 6 - Mothership. A Mothership scene is created in `Assets/DeadCargo/Scenes/`, and both scenes appear in the Build Settings.
 3. Press Play in the range. Run as normal, extract, and press **Enter** on the report. The loading screen shows RETURNING TO MOTHERSHIP and the hub appears with the last run's result.
 4. Click **LAUNCH RUN**, or press **Enter**. The loading screen shows JUMPING TO SECTOR and the range loads. The dev console does not pop open.
@@ -288,3 +288,36 @@ The run becomes a loop: start on the mothership, launch into a sector, come home
 
 ### Tuning
 Scene paths on `Assets/DeadCargo/Resources/SceneFlowSettings.asset`.
+
+### Design (6b)
+- The player has one **profile**, saved as JSON in Unity's persistent data folder (`profile.json`). It is saved straight after every change, so quitting at any point loses nothing.
+- The profile holds credits, the **stash** (item and quantity), the count of runs extracted and lost, and a summary of the last run.
+- When a run is **extracted**, the hold's cargo is added to the stash. A **lost** run banks nothing. Either way the run is counted and becomes the last run. This happens the moment the run ends, in any sector scene.
+- The hub shows credits (top right), the last run and the service record (left), the stash (right) and the launch button (bottom right).
+- Each stash row shows the item, quantity, mass and value, with a **SELL** button that sells the whole stack. **SELL ALL**, or **S**, sells everything. Items sell at their full unit value. Credits update at once.
+- Cargo items gain a stable **ID** for save data, set from the asset name the first time. The **cargo catalog** (`Resources/CargoCatalog.asset`) lists every item so saves can find them. It refreshes on its own when cargo items are added or removed.
+- A broken save file is kept beside the original as `profile.corrupt.json` and a fresh profile starts, so a bad file never blocks the game.
+- The profile records a version number, so later phases can migrate old saves.
+
+### Implementation (6b)
+| File | Role |
+|---|---|
+| `Scripts/Profile/PlayerProfile.cs` | Saved data: credits, stash, record, last run |
+| `Scripts/Profile/StashEntry.cs` | Item ID and quantity |
+| `Scripts/Profile/RunSummary.cs` | Saved summary of a finished run |
+| `Scripts/Profile/ProfileStore.cs` | Load, save, bank, sell, reset. Raises `Changed` |
+| `Scripts/Cargo/CargoCatalog.cs` | Every cargo item, found by ID |
+| `Scripts/Cargo/CargoItemDefinition.cs` | Gains `Id` |
+| `Scripts/Extraction/RunTracker.cs` | Records each run and banks extracted cargo |
+| `Scripts/Mothership/MothershipHub.cs`, `Scripts/UI/MothershipHubView.cs` | Credits, stash, selling, service record |
+| `Editor/CargoCatalogBuilder.cs` | Keeps the catalog and item IDs current |
+| `Editor/MothershipPhaseSetup.cs` | Also creates the catalog |
+| `Editor/GodMenu/Tabs/MothershipTab.cs` | Profile section: credits, stash, reset, save folder |
+
+### Test steps (6b)
+1. With the range open, press **Re-run** next to Phase 6 - Mothership in the **Project** tab. `Assets/DeadCargo/Resources/CargoCatalog.asset` appears with the three cargo items.
+2. Press Play in the range, collect cargo, extract and return to the mothership. The stash lists the cargo and credits read 0 cr.
+3. Press **SELL** on one row. That stack disappears and credits rise by its value. Press **SELL ALL** (or **S**) to sell the rest.
+4. Launch, collect cargo, and lose the ship. Back on the mothership the stash is unchanged and the service record counts one loss.
+5. Stop Play and press Play in the Mothership scene. Credits, stash, record and last run are all still there.
+6. In the God Menu **Mothership** tab, the Profile section shows the same numbers. **+1,000 cr** adds credits, and the hub updates during play. **Reset Profile** asks first, then clears everything. **Open Save Folder** shows `profile.json`.

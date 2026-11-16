@@ -4,6 +4,7 @@ using DeadCargo.Authority;
 using DeadCargo.Cargo;
 using DeadCargo.Flow;
 using DeadCargo.Heat;
+using DeadCargo.Profile;
 using UnityEngine;
 using UnityEngine.Events;
 using VSX.UniversalVehicleCombat;
@@ -13,7 +14,7 @@ namespace DeadCargo.Extraction
     /// <summary>
     /// Decides how the run ends. The run ship is the last ship with a jump drive that the player boarded.
     /// The run is extracted when that ship jumps, and lost when it is destroyed or the player dies.
-    /// A lost run empties the ship's hold.
+    /// A lost run empties the ship's hold. Every run is recorded to the profile, and an extracted hold is banked into the stash.
     /// The tracker owns the end of the run: it replaces the kit's game-over flow and locks all input once the run is over.
     /// </summary>
     [DisallowMultipleComponent]
@@ -33,9 +34,6 @@ namespace DeadCargo.Extraction
 
         /// <summary>The tracker for the loaded scene, or null.</summary>
         public static RunTracker Active { get; private set; }
-
-        /// <summary>The most recent finished run this session, or null. Survives scene loads so the mothership can show it.</summary>
-        public static RunResult LastResult { get; private set; }
 
         /// <summary>Raised once, when the run is extracted or lost.</summary>
         public event Action<RunResult> Ended;
@@ -74,7 +72,6 @@ namespace DeadCargo.Extraction
         private static void ResetStatics()
         {
             Active = null;
-            LastResult = null;
         }
 
         private void OnEnable()
@@ -208,7 +205,7 @@ namespace DeadCargo.Extraction
 
             HeatTier? peakHeat = heat != null ? heat.Tiers[peakTierIndex] : (HeatTier?)null;
             Result = new RunResult(outcome, Time.time - startTime, peakHeat, authorityShipsDestroyed, cargo);
-            LastResult = Result;
+            RecordToProfile(Result);
 
             if (outcome == RunOutcome.Lost)
             {
@@ -220,6 +217,15 @@ namespace DeadCargo.Extraction
 
             DisableAllInput();
             Ended?.Invoke(Result);
+        }
+
+        // Saved the moment the run ends, so the result and any banked cargo survive quitting from the report.
+        private static void RecordToProfile(RunResult result)
+        {
+            bool extracted = result.Outcome == RunOutcome.Extracted;
+            string peakHeat = result.PeakHeat.HasValue ? result.PeakHeat.Value.Label : string.Empty;
+            var summary = new RunSummary(extracted, result.Duration, peakHeat, result.AuthorityShipsDestroyed, result.CargoValue, result.CargoMass);
+            ProfileStore.RecordRun(summary, extracted ? result.Cargo : null);
         }
 
         // Covers the kit's menu controls too: resuming from its pause menu would unfreeze the world and re-enable the player.

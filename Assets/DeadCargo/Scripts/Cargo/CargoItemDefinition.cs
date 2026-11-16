@@ -6,6 +6,9 @@ namespace DeadCargo.Cargo
     [CreateAssetMenu(fileName = "CargoItem", menuName = "Dead Cargo/Cargo Item")]
     public sealed class CargoItemDefinition : ScriptableObject
     {
+        [Tooltip("Stable key in save data. Set from the asset name the first time; never change it once saves exist.")]
+        [SerializeField] private string id;
+
         [SerializeField] private string displayName = "Cargo";
 
         [Tooltip("Mass of one unit, in tonnes.")]
@@ -13,6 +16,9 @@ namespace DeadCargo.Cargo
 
         [Tooltip("Sale value of one unit, in credits.")]
         [SerializeField, Min(0)] private int unitValue = 10;
+
+        /// <summary>Save-data key. Falls back to the asset name until an ID is assigned.</summary>
+        public string Id => string.IsNullOrEmpty(id) ? name : id;
 
         public string DisplayName => displayName;
         public float UnitMass => unitMass;

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DeadCargo.Cargo;
 using DeadCargo.Extraction;
 using DeadCargo.Flow;
 using DeadCargo.Mothership;
@@ -11,8 +12,9 @@ using UnityEngine.SceneManagement;
 namespace DeadCargo.EditorTools
 {
     /// <summary>
-    /// Sets up phase 6a with the open scene as the sector: creates the mothership scene if it is missing,
-    /// points the scene flow settings at both scenes and adds them to the Build Settings. Safe to run more than once.
+    /// Sets up phase 6 with the open scene as the sector: creates the mothership scene if it is missing,
+    /// points the scene flow settings at both scenes, adds them to the Build Settings and builds the cargo catalog.
+    /// Safe to run more than once.
     /// </summary>
     internal static class MothershipPhaseSetup
     {
@@ -27,14 +29,15 @@ namespace DeadCargo.EditorTools
 
         private static readonly Color SpaceColor = new Color32(7, 13, 19, 255);
 
-        /// <summary>True when the settings point at a mothership scene that exists.</summary>
+        /// <summary>True when the settings point at a mothership scene that exists and the cargo catalog exists.</summary>
         public static bool IsInstalled
         {
             get
             {
                 var settings = AssetDatabase.LoadAssetAtPath<SceneFlowSettings>(SettingsPath);
                 return settings != null && !string.IsNullOrEmpty(settings.SectorScene) &&
-                    AssetDatabase.LoadAssetAtPath<SceneAsset>(settings.MothershipScene) != null;
+                    AssetDatabase.LoadAssetAtPath<SceneAsset>(settings.MothershipScene) != null &&
+                    AssetDatabase.LoadAssetAtPath<CargoCatalog>(CargoCatalogBuilder.CatalogPath) != null;
             }
         }
 
@@ -58,10 +61,12 @@ namespace DeadCargo.EditorTools
             SceneFlowSettings settings = EnsureSettings(sector.path);
             bool sceneCreated = EnsureMothershipScene(settings.MothershipScene, sector);
             bool buildChanged = EnsureBuildSettings(settings.MothershipScene, sector.path);
+            CargoCatalog catalog = CargoCatalogBuilder.EnsureCatalog();
 
             Selection.activeObject = settings;
             Debug.Log($"Phase 6 mothership set up. Sector: '{sector.path}'. Mothership: '{settings.MothershipScene}'" +
-                (sceneCreated ? " (created)" : "") + (buildChanged ? ". Build Settings updated." : "."), settings);
+                (sceneCreated ? " (created)" : "") + (buildChanged ? ". Build Settings updated." : ".") +
+                $" Cargo catalog lists {catalog.Items.Count} item(s).", settings);
         }
 
         [MenuItem(MenuPath, true)]

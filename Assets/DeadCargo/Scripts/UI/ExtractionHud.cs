@@ -55,7 +55,6 @@ namespace DeadCargo.UI
         {
             HudFactory.ConfigureCanvas(gameObject, SortingOrder);
             view = new ExtractionHudView((RectTransform)transform);
-            SuppressPhasePanels();
         }
 
         private void Start()
@@ -321,27 +320,6 @@ namespace DeadCargo.UI
         private void Layout()
         {
             view.Layout(heat != null, hold != null, jumpDrive != null, manifestOpen, noticeVisible);
-        }
-
-        private void SuppressPhasePanels()
-        {
-            // The phase setup tools create standalone readout canvases. Suppress them before their Start hooks.
-            foreach (GameObject root in gameObject.scene.GetRootGameObjects())
-            {
-                if (!root.TryGetComponent(out Canvas canvas))
-                    continue;
-
-                if (root.TryGetComponent(out CargoHudPanel cargoPanel))
-                {
-                    cargoPanel.enabled = false;
-                    canvas.enabled = false;
-                }
-                if (root.TryGetComponent(out HeatHudPanel heatPanel))
-                {
-                    heatPanel.enabled = false;
-                    canvas.enabled = false;
-                }
-            }
         }
 
         private static float[] GetHeatBoundaries(HeatTracker tracker)
