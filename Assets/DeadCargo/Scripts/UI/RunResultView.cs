@@ -38,6 +38,8 @@ namespace DeadCargo.UI
         private readonly RectTransform totalRule;
         private readonly Text totalLabel;
         private readonly Text totalValue;
+        private readonly Text feeLabel;
+        private readonly Text feeValue;
         private readonly RectTransform footerKey;
         private readonly Text footerLabel;
 
@@ -94,6 +96,8 @@ namespace DeadCargo.UI
             totalLabel = HudFactory.Label("Total label", p, "", Padding, 0, 300, 26, 18, ink);
             totalValue = HudFactory.Label("Total value", p, "", 300, 0, Width - Padding - 300, 40, 32, ink, TextAnchor.MiddleRight, true);
             HudFactory.Fit(totalValue, 18);
+            feeLabel = HudFactory.Label("Fee label", p, "", Padding, 0, 300, 24, 16, muted);
+            feeValue = HudFactory.Label("Fee value", p, "", 300, 0, Width - Padding - 300, 24, 18, ink, TextAnchor.MiddleRight, true);
             footerKey = HudFactory.Key(p, "ENTER", 0, 0, FooterKeyWidth);
             footerLabel = HudFactory.Label("Footer action", p, "", 0, 0, ContentWidth, 22, 17, ink);
 
@@ -111,9 +115,12 @@ namespace DeadCargo.UI
             Color accent = extracted ? HudFactory.SuccessColor : HudFactory.WarningColor;
 
             panel.SetAccent(accent);
-            outcome.text = extracted ? "EXTRACTED" : "SHIP LOST";
+            outcome.text = OutcomeTitle(result);
             outcome.color = accent;
-            summary.text = extracted ? "Jump complete. The hold made it out." : "The ship is gone, and its hold went with it.";
+            summary.text = extracted
+                ? result.Route == ExtractionRoute.ExtractionPoint ? "Extraction point reached. The hold made it out." : "Jump complete. The hold made it out."
+                : result.ShipLost ? "The ship is gone, and its hold went with it."
+                : "You did not make it back. The hold is lost.";
 
             runTime.text = FormatDuration(result.Duration);
             if (result.PeakHeat.HasValue)
@@ -139,8 +146,21 @@ namespace DeadCargo.UI
             totalValue.color = extracted ? HudFactory.Ink : HudFactory.WarningColor;
             HudFactory.SetOffset(totalValue.rectTransform, 300f, y + 11f);
 
-            // The key cap sits just left of the action label, whatever its length.
+            // A lost ship adds a fee line: the charge, or a free basic hull when the player could not pay.
             float footer = y + 66f;
+            feeLabel.enabled = feeValue.enabled = result.ShipLost;
+            if (result.ShipLost)
+            {
+                bool paid = result.ShipLossFee > 0;
+                feeLabel.text = paid ? "SHIP REPLACEMENT" : "BASIC HULL ISSUED";
+                feeValue.text = paid ? $"−{result.ShipLossFee:N0} cr" : "no charge";
+                feeValue.color = paid ? HudFactory.WarningColor : HudFactory.Muted;
+                HudFactory.SetOffset(feeLabel.rectTransform, Padding, y + 54f);
+                HudFactory.SetOffset(feeValue.rectTransform, 300f, y + 54f);
+                footer += 32f;
+            }
+
+            // The key cap sits just left of the action label, whatever its length.
             footerLabel.text = action;
             float labelWidth = Mathf.Ceil(footerLabel.preferredWidth);
             float labelX = Width - Padding - labelWidth;
@@ -225,6 +245,14 @@ namespace DeadCargo.UI
                 TextAnchor.MiddleLeft, numeric);
             HudFactory.Fit(value, 16);
             return value;
+        }
+
+        private static string OutcomeTitle(RunResult result)
+        {
+            if (result.Outcome == RunOutcome.Extracted)
+                return "EXTRACTED";
+
+            return result.ShipLost ? "SHIP LOST" : "RUN LOST";
         }
 
         private static string FormatDuration(float seconds)

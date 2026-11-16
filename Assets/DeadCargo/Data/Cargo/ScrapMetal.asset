@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 34bc4d07cbd87634787a27a4f5bc81dd, type: 3}
   m_Name: ScrapMetal
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cargo.CargoItemDefinition
+  id: ScrapMetal
   displayName: Scrap Metal
   unitMass: 2
   unitValue: 40

@@ -12,14 +12,23 @@ namespace DeadCargo.EditorTools.GodMenu
         private string[] tierLabels = new string[0];
 
         public override string Title => "Heat";
-        public override int Order => 30;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 20;
+
+        public override bool IsAvailable => GodMenuContext.IsPlaying && HeatTracker.Active != null;
+
+        public override string Summary
+        {
+            get
+            {
+                HeatTracker tracker = GodMenuContext.IsPlaying ? HeatTracker.Active : null;
+                return tracker != null ? $"{tracker.CurrentTier.Label}  {tracker.Heat:0}" : null;
+            }
+        }
 
         public override void OnGUI()
         {
             HeatTracker tracker = GodMenuContext.IsPlaying ? HeatTracker.Active : null;
-            if (GodMenuContext.IsPlaying && tracker == null)
-                EditorGUILayout.HelpBox("No heat tracker in the scene. Run the Phase 3 setup from the Project tab.", MessageType.Warning);
-
             using (new EditorGUI.DisabledScope(tracker == null))
             {
                 DrawLevel(tracker);

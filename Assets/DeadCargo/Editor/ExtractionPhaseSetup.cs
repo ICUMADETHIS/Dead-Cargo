@@ -21,6 +21,12 @@ namespace DeadCargo.EditorTools
         [MenuItem(MenuPath, priority = 204)]
         private static void Run()
         {
+            Apply();
+        }
+
+        /// <summary>Sets up the open scene. Returns false when it cannot, after a dialog explains why.</summary>
+        internal static bool Apply()
+        {
             Scene scene = SceneManager.GetActiveScene();
 
             VehicleEngines3D ship = SceneSetupUtility.FindShip(scene);
@@ -28,14 +34,14 @@ namespace DeadCargo.EditorTools
             {
                 EditorUtility.DisplayDialog(DialogTitle,
                     "Select the player's ship in the Hierarchy, then run this again.", "OK");
-                return;
+                return false;
             }
 
             GameAgent player = SceneSetupUtility.FindPlayer(scene);
             if (player == null)
             {
                 EditorUtility.DisplayDialog(DialogTitle, "No player game agent was found in the open scene.", "OK");
-                return;
+                return false;
             }
 
             Undo.SetCurrentGroupName("Set Up Phase 5 Extraction");
@@ -44,6 +50,8 @@ namespace DeadCargo.EditorTools
             if (ship.GetComponent<JumpDrive>() == null)
                 Undo.AddComponent<JumpDrive>(ship.gameObject);
 
+            // The jump drive burns dark matter, so the sector needs some to collect.
+            DarkMatterSetup.Apply(scene, ship.transform);
             EnsureInput(scene, player);
             SceneHierarchy.EnsureObject<RunTracker>(scene, TrackerName, SceneHierarchy.Systems);
             SceneHierarchy.EnsureObject<RunResultScreen>(scene, ResultScreenName, SceneHierarchy.UI, true);
@@ -52,6 +60,7 @@ namespace DeadCargo.EditorTools
             Undo.CollapseUndoOperations(undoGroup);
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log($"Phase 5 extraction set up on '{ship.name}' in scene '{scene.name}'.", ship);
+            return true;
         }
 
         [MenuItem(MenuPath, true)]

@@ -11,7 +11,10 @@ namespace DeadCargo.Cargo
 
         [SerializeField] private string displayName = "Cargo";
 
-        [Tooltip("Mass of one unit, in tonnes.")]
+        [Tooltip("Where the item is stored. Dark matter has its own weightless slot that cannot be jettisoned.")]
+        [SerializeField] private CargoSlot slot = CargoSlot.Hold;
+
+        [Tooltip("Mass of one unit, in tonnes. Ignored in the dark matter slot, which is weightless.")]
         [SerializeField, Min(0.01f)] private float unitMass = 1f;
 
         [Tooltip("Sale value of one unit, in credits.")]
@@ -21,7 +24,11 @@ namespace DeadCargo.Cargo
         public string Id => string.IsNullOrEmpty(id) ? name : id;
 
         public string DisplayName => displayName;
-        public float UnitMass => unitMass;
+        public CargoSlot Slot => slot;
+
+        /// <summary>Mass of one unit, in tonnes. Zero for dark matter.</summary>
+        public float UnitMass => slot == CargoSlot.DarkMatter ? 0f : unitMass;
+
         public int UnitValue => unitValue;
     }
 }

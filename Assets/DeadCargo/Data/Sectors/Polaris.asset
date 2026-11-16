@@ -1,0 +1,37 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f73e59720af4bf64286180c9c0049579, type: 3}
+  m_Name: Polaris
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.SectorDefinition
+  displayName: Polaris
+  seed: -1215888716
+  size: {x: 40000, y: 6000, z: 40000}
+  cellSize: 1000
+  regions:
+  - name: Arrival Point
+    kind: 2
+    centre: {x: 0, y: 0, z: 0}
+    radii: {x: 2500, y: 2500, z: 2500}
+    density: 1
+    falloff: 0.5
+  - name: Main Belt
+    kind: 0
+    centre: {x: 5000, y: 0, z: 8000}
+    radii: {x: 10000, y: 1500, z: 7000}
+    density: 0.8
+    falloff: 0.5
+  - name: Wreck Field
+    kind: 1
+    centre: {x: -10000, y: 400, z: -5000}
+    radii: {x: 5000, y: 1200, z: 5000}
+    density: 0.6
+    falloff: 0.4

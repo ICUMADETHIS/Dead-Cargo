@@ -1,0 +1,19 @@
+{
+    "name": "DeadCargo.Destruction.Diagnostics",
+    "rootNamespace": "DeadCargo.Destruction",
+    "references": [
+        "DeadCargo.Destruction.Core",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

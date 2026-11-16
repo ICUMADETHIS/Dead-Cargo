@@ -17,6 +17,7 @@ namespace DeadCargo.UI
         internal static readonly Color WarningColor = new Color32(255, 121, 91, 255);
         internal static readonly Color JumpColor = new Color32(116, 206, 255, 255);
         internal static readonly Color SuccessColor = new Color32(124, 226, 158, 255);
+        internal static readonly Color DarkMatterColor = new Color32(178, 136, 255, 255);
 
         private const string HeadingFontPath = "HUD/BarlowCondensed-SemiBold";
         private const string NumericFontPath = "HUD/IBMPlexMono-Regular";
@@ -83,6 +84,19 @@ namespace DeadCargo.UI
             text.text = content;
             text.color = tint;
             text.alignment = alignment;
+            text.supportRichText = false;
+            text.raycastTarget = false;
+            return text;
+        }
+
+        /// <summary>A label centred on its parent's centre, for elements positioned by their centre, such as markers.</summary>
+        internal static Text CentredLabel(string name, RectTransform parent, float width, float height, int size, Color tint, bool numeric = false)
+        {
+            var text = Anchored(name, parent, new Vector2(0.5f, 0.5f), width, height).gameObject.AddComponent<Text>();
+            text.font = numeric ? NumericFont : HeadingFont;
+            text.fontSize = size;
+            text.color = tint;
+            text.alignment = TextAnchor.MiddleCenter;
             text.supportRichText = false;
             text.raycastTarget = false;
             return text;

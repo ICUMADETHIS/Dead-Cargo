@@ -12,6 +12,7 @@ namespace DeadCargo.UI
         private const float Width = 356f;
         private const float HeatHeight = 76f;
         private const float JumpHeight = 76f;
+        private const float PointHeight = 76f;
         private const float CargoHeight = 106f;
         private const float NoticeHeight = 37f;
         private const float Gutter = 8f;
@@ -24,17 +25,24 @@ namespace DeadCargo.UI
 
         private readonly HudPlate heatPlate;
         private readonly HudPlate jumpPlate;
+        private readonly HudPlate pointPlate;
         private readonly HudPlate cargoPlate;
         private readonly HudPlate manifestPlate;
         private readonly HudPlate noticePlate;
         private readonly HudMeter heatMeter;
         private readonly HudMeter jumpMeter;
+        private readonly HudMeter pointMeter;
         private readonly HudMeter loadMeter;
+        private readonly Text heatTitle;
         private readonly Text tier;
         private readonly Text heatNumber;
         private readonly Text jumpStatus;
         private readonly Text jumpTime;
         private readonly Text jumpAction;
+        private readonly Text pointStatus;
+        private readonly Text pointValue;
+        private readonly Text pointAction;
+        private readonly RectTransform pointKey;
         private readonly Text cargoTitle;
         private readonly Text cargoMass;
         private readonly Text cargoValue;
@@ -45,6 +53,12 @@ namespace DeadCargo.UI
         private readonly Text notice;
         private readonly Text[,] manifestRows = new Text[RowsPerPage, 4];
         private readonly CanvasGroup noticeGroup;
+
+        /// <summary>
+        /// Size of the bottom-right screen corner the visible plates cover, margins included, in reference pixels.
+        /// Zero when no plate is shown. Updated by <see cref="Layout"/>.
+        /// </summary>
+        internal Vector2 StackSize { get; private set; }
 
         internal ExtractionHudView(RectTransform parent)
         {
@@ -68,7 +82,9 @@ namespace DeadCargo.UI
 
             heatPlate = MakePlate("Authority Heat", parent, HeatHeight);
             RectTransform heatRect = heatPlate.rectTransform;
-            HudFactory.Label("Heat title", heatRect, "AUTHORITY HEAT", 19, 7, 203, 19, 15, muted);
+            heatTitle = HudFactory.Label("Heat title", heatRect, "AUTHORITY HEAT", 19, 7, 220, 19, 15, muted);
+            heatTitle.supportRichText = true;
+            HudFactory.Fit(heatTitle, 11);
             tier = HudFactory.Label("Heat tier", heatRect, "", 19, 24, 232, 32, 25, ink);
             HudFactory.Fit(tier, 17);
             heatNumber = HudFactory.Label("Heat score", heatRect, "", 242, 16, 95, 36, 27, ink, TextAnchor.MiddleRight, true);
@@ -86,6 +102,17 @@ namespace DeadCargo.UI
             jumpTime = HudFactory.Label("Jump time", jumpRect, "", 222, 24, 115, 32, 25, ink, TextAnchor.MiddleRight, true);
             HudFactory.Fit(jumpTime, 15);
             jumpMeter = HudFactory.Meter("Jump meter", jumpRect, 19, 57, 318, 7);
+
+            pointPlate = MakePlate("Extraction Point", parent, PointHeight);
+            RectTransform pointRect = pointPlate.rectTransform;
+            HudFactory.Label("Point title", pointRect, "EXTRACTION POINT", 19, 7, 203, 19, 15, muted);
+            pointKey = HudFactory.Key(pointRect, "U", 257, 8);
+            pointAction = HudFactory.Label("Point shortcut", pointRect, "UPLINK", 281, 6, 57, 22, 15, ink, TextAnchor.MiddleRight);
+            pointStatus = HudFactory.Label("Point status", pointRect, "", 19, 24, 200, 32, 25, ink);
+            HudFactory.Fit(pointStatus, 15);
+            pointValue = HudFactory.Label("Point value", pointRect, "", 222, 24, 115, 32, 25, ink, TextAnchor.MiddleRight, true);
+            HudFactory.Fit(pointValue, 15);
+            pointMeter = HudFactory.Meter("Point meter", pointRect, 19, 57, 318, 7);
 
             manifestPlate = MakePlate("Cargo Manifest", parent, 129);
             manifestPlate.SetAccent(cargo);
@@ -116,7 +143,27 @@ namespace DeadCargo.UI
             notice = HudFactory.Label("Notice text", noticePlate.rectTransform, "", 19, 5, 318, 25, 18, ink);
             HudFactory.Fit(notice, 12);
             noticeGroup = noticePlate.gameObject.AddComponent<CanvasGroup>();
-            Layout(false, false, false, false, false);
+            Layout(false, false, false, false, false, false);
+        }
+
+        /// <summary>
+        /// Shows the nearest extraction point: its state, the figure on the right (distance or seconds left),
+        /// and the U prompt, which is bright when the uplink can start.
+        /// </summary>
+        internal void SetPoint(string status, Color color, string value, bool showPrompt, bool promptReady)
+        {
+            pointStatus.text = status;
+            pointStatus.color = color;
+            pointPlate.SetAccent(color);
+            pointValue.text = value;
+            pointKey.gameObject.SetActive(showPrompt);
+            pointAction.enabled = showPrompt;
+            pointAction.color = promptReady ? HudFactory.Ink : HudFactory.Muted;
+        }
+
+        internal void SetPointProgress(float fraction, Color color)
+        {
+            pointMeter.SetProgress(fraction, color);
         }
 
         internal void SetHeatBoundaries(float[] values)
@@ -133,6 +180,14 @@ namespace DeadCargo.UI
             heatMeter.SetProgress(fraction, statusColor);
         }
 
+        /// <summary>Adds the number of Authority ships hunting the player to the heat plate's title, in red.</summary>
+        internal void SetHunters(int count)
+        {
+            heatTitle.text = count > 0
+                ? $"AUTHORITY HEAT  <color=#FF795B>· {count} {(count == 1 ? "HUNTER" : "HUNTERS")}</color>"
+                : "AUTHORITY HEAT";
+        }
+
         /// <summary>Shows an idle drive and the spool time the current load would need, in seconds.</summary>
         internal void SetJumpReady(float spoolTime)
         {
@@ -141,22 +196,36 @@ namespace DeadCargo.UI
             jumpTime.text = $"{Mathf.CeilToInt(spoolTime)} s";
             jumpTime.color = HudFactory.Muted;
             jumpAction.text = "SPOOL";
+            jumpPlate.SetAccent(HudFactory.JumpColor);
             jumpMeter.SetProgress(0f, HudFactory.JumpColor);
         }
 
-        /// <summary>Shows a spooling drive with whole seconds left.</summary>
-        internal void SetJumpCountdown(int secondsRemaining)
+        /// <summary>Shows an idle drive short of fuel: dark matter aboard against what a jump burns, as a filling bar.</summary>
+        internal void SetJumpFuel(int aboard, int required)
         {
-            jumpStatus.text = "SPOOLING";
-            jumpStatus.color = HudFactory.JumpColor;
+            jumpStatus.text = "DARK MATTER";
+            jumpStatus.color = HudFactory.DarkMatterColor;
+            jumpTime.text = $"{aboard} / {required}";
+            jumpTime.color = HudFactory.Ink;
+            jumpAction.text = "SPOOL";
+            jumpPlate.SetAccent(HudFactory.DarkMatterColor);
+            jumpMeter.SetProgress(required > 0 ? (float)aboard / required : 1f, HudFactory.DarkMatterColor);
+        }
+
+        /// <summary>Shows a spooling drive: its state (SPOOLING, TOO FAST, DISRUPTED) and whole seconds left.</summary>
+        internal void SetJumpCountdown(int secondsRemaining, string status, Color statusColor)
+        {
+            jumpStatus.text = status;
+            jumpStatus.color = statusColor;
+            jumpPlate.SetAccent(statusColor);
             jumpTime.text = $"{secondsRemaining} s";
             jumpTime.color = HudFactory.Ink;
             jumpAction.text = "CANCEL";
         }
 
-        internal void SetJumpProgress(float fraction)
+        internal void SetJumpProgress(float fraction, Color color)
         {
-            jumpMeter.SetProgress(fraction, HudFactory.JumpColor);
+            jumpMeter.SetProgress(fraction, color);
         }
 
         internal void SetCargo(CargoHold hold, bool expanded)
@@ -224,14 +293,16 @@ namespace DeadCargo.UI
             noticeGroup.alpha = alpha;
         }
 
-        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool isExpanded, bool hasNotice)
+        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasPoint, bool isExpanded, bool hasNotice)
         {
             float y = BottomMargin;
             Stack(cargoPlate, hasCargo, ref y);
             Stack(heatPlate, hasHeat, ref y);
             Stack(jumpPlate, hasJumpDrive, ref y);
+            Stack(pointPlate, hasPoint, ref y);
             Stack(manifestPlate, hasCargo && isExpanded, ref y);
             Stack(noticePlate, hasNotice, ref y);
+            StackSize = y > BottomMargin ? new Vector2(RightMargin + Width, y - Gutter) : Vector2.zero;
         }
 
         private static void Stack(HudPlate plate, bool visible, ref float y)

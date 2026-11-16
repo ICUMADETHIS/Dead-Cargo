@@ -1,0 +1,94 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: PolarisSky
+  m_Shader: {fileID: 4800000, guid: c42b9d1f24442964789481113139c29a, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _NebulaMap:
+        m_Texture: {fileID: 2800000, guid: 0ed8bd8de1311844b9fdbf2e130193ce, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints:
+    - _NebulaBakeHash: -26576846
+    m_Floats:
+    - _BackdropBands: 3
+    - _BackdropWidth: 0.5
+    - _BackdropWobble: 0.2
+    - _CloudLighting: 0.7
+    - _CloudRelief: 0.05
+    - _DustLanes: 0.75
+    - _DustThreshold: 0.55
+    - _Exposure: 1
+    - _FarDrift: 0.15
+    - _FarNebula: 0.6
+    - _FarNebulaThreshold: 0.42
+    - _HatchLines: 300
+    - _HatchWidth: 1.4
+    - _Hatching: 0
+    - _HighlightLevel: 0.1
+    - _InkWidth: 0
+    - _NebulaBandFocus: 0.92
+    - _NebulaBandWidth: 0.25
+    - _NebulaFlow: 0.012
+    - _NebulaFlowSpeed: 0.03
+    - _NebulaHueScale: 1.2
+    - _NebulaHueSplit: 0.6
+    - _NebulaOctaves: 5
+    - _NebulaOpacity: 0.85
+    - _NebulaScale: 3.2
+    - _NebulaSeed: 1243
+    - _NebulaSoftness: 0.08
+    - _NebulaStarDimming: 0.5
+    - _NebulaSwirl: 1
+    - _StarPlaneBoost: 2
+    - _StarSeed: 32728
+    - _StarSparkle: 0.3
+    - _StarTwinkle: 0.15
+    - _TwinkleSpeed: 0.8
+    m_Colors:
+    - _DustRotation: {r: -60, g: 200, b: 45, a: 0}
+    - _FarNebulaColor: {r: 0.032, g: 0.036, b: 0.06, a: 1}
+    - _FarNebulaRotation: {r: 40, g: 110, b: -30, a: 0}
+    - _Galaxies: {r: 8, g: 0.2, b: 5, a: 0.35}
+    - _GalaxyColor: {r: 0.55, g: 0.52, b: 0.66, a: 1}
+    - _HighlightColor: {r: 0.28, g: 0.31, b: 0.38, a: 1}
+    - _InkColor: {r: 0.02, g: 0.02, b: 0.035, a: 1}
+    - _LightDirection: {r: 0.45, g: 0.5, b: -0.75, a: 0}
+    - _NebulaColorA0: {r: 0.05, g: 0.068, b: 0.095, a: 1}
+    - _NebulaColorA1: {r: 0.09, g: 0.125, b: 0.165, a: 1}
+    - _NebulaColorA2: {r: 0.16, g: 0.21, b: 0.26, a: 1}
+    - _NebulaColorB0: {r: 0.085, g: 0.06, b: 0.06, a: 1}
+    - _NebulaColorB1: {r: 0.16, g: 0.11, b: 0.09, a: 1}
+    - _NebulaColorB2: {r: 0.34, g: 0.25, b: 0.2, a: 1}
+    - _NebulaThresholds: {r: 0.48, g: 0.62, b: 0.78, a: 0}
+    - _PlaneColor: {r: 0.02, g: 0.027, b: 0.045, a: 1}
+    - _ShadowTint: {r: 0.45, g: 0.45, b: 0.6, a: 1}
+    - _SkyRotation: {r: -18, g: 35, b: 28, a: 0}
+    - _StarCoolColor: {r: 0.76, g: 0.86, b: 1, a: 1}
+    - _StarLarge: {r: 14, g: 0.3, b: 1.8, a: 1.4}
+    - _StarMedium: {r: 40, g: 0.25, b: 1.1, a: 0.75}
+    - _StarSmall: {r: 90, g: 0.3, b: 0.7, a: 0.4}
+    - _StarTints: {r: 0.12, g: 0.08, b: 0, a: 0}
+    - _StarWarmColor: {r: 1, g: 0.9, b: 0.76, a: 1}
+    - _VoidColor: {r: 0.006, g: 0.008, b: 0.016, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

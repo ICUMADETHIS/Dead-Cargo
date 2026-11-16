@@ -35,5 +35,8 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/SpaceCombatKit/SpaceCombat/Demos/Scenes/SimpleDemos/SCK_Basics_Weapons.unity
     guid: 40716a81f1542974ba03105c47fc3569
+  - enabled: 1
+    path: Assets/DeadCargo/Scenes/Polaris.unity
+    guid: 83ebc825695879d44b2ca6854b99fb1d
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

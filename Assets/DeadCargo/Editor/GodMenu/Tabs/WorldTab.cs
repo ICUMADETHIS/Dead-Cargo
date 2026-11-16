@@ -1,4 +1,5 @@
 using DeadCargo.Cargo;
+using DeadCargo.Flow;
 using UnityEditor;
 using UnityEngine;
 using VSX.UniversalVehicleCombat;
@@ -15,15 +16,16 @@ namespace DeadCargo.EditorTools.GodMenu
         private float crateDistance = 40f;
 
         public override string Title => "World";
-        public override int Order => 40;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 50;
+
+        // Sector tools only: the mothership has no world to spawn into.
+        public override bool IsAvailable => GodMenuContext.IsPlaying && !SceneFlow.InMothership;
 
         public override void OnGUI()
         {
-            using (new EditorGUI.DisabledScope(!GodMenuContext.IsPlaying))
-            {
-                DrawEnemies();
-                DrawCargo();
-            }
+            DrawEnemies();
+            DrawCargo();
         }
 
         private static void DrawEnemies()
@@ -87,9 +89,11 @@ namespace DeadCargo.EditorTools.GodMenu
                 switch (GodMenuGUI.ButtonRow(CrateLabels, enabled))
                 {
                     case 0:
+                        // Dark matter spawns as its glowing sphere, everything else as a crate.
+                        CargoItemDefinition item = GodMenuContext.CargoItems[crateItemIndex];
                         Vector3 position = vehicle.transform.position + vehicle.transform.forward * crateDistance;
-                        CargoPickup crate = Object.Instantiate(cratePrefab, position, Quaternion.identity);
-                        crate.Initialize(GodMenuContext.CargoItems[crateItemIndex], crateQuantity);
+                        CargoPickup pickup = Object.Instantiate(GodMenuContext.LoadPickupPrefab(item), position, Quaternion.identity);
+                        pickup.Initialize(item, crateQuantity);
                         break;
                     case 1:
                         GodMenuContext.ClearLooseCargo();

@@ -38,6 +38,7 @@ namespace DeadCargo.Profile
             credits = Mathf.Max(0, credits + amount);
         }
 
+        /// <summary>Counts the run, makes it the last run and takes any ship-loss fee from credits.</summary>
         internal void RecordRun(RunSummary summary)
         {
             if (summary.Extracted)
@@ -45,6 +46,7 @@ namespace DeadCargo.Profile
             else
                 runsLost++;
 
+            AddCredits(-summary.ShipLossFee);
             lastRun = summary;
             hasLastRun = true;
         }

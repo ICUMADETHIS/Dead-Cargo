@@ -10,14 +10,27 @@ namespace DeadCargo.EditorTools.GodMenu
         private static readonly string[] HoldLabels = { "Empty Hold", "Jettison All" };
 
         public override string Title => "Cargo";
-        public override int Order => 20;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 10;
+
+        public override bool IsAvailable => GodMenuContext.Hold != null;
+
+        public override string Summary
+        {
+            get
+            {
+                CargoHold hold = GodMenuContext.Hold;
+                if (hold == null)
+                    return null;
+
+                string darkMatter = hold.DarkMatterUnits > 0 ? $"  ·  {hold.DarkMatterUnits} DM" : "";
+                return $"{hold.TotalMass:0.#} / {hold.MassCapacity:0.#} t{darkMatter}";
+            }
+        }
 
         public override void OnGUI()
         {
             CargoHold hold = GodMenuContext.Hold;
-            if (GodMenuContext.IsPlaying && hold == null)
-                EditorGUILayout.HelpBox("No cargo hold in the scene. Run the Phase 1 setup from the Project tab.", MessageType.Warning);
-
             using (new EditorGUI.DisabledScope(hold == null))
             {
                 DrawHold(hold);
@@ -38,6 +51,7 @@ namespace DeadCargo.EditorTools.GodMenu
                 float load = hold != null ? hold.LoadFraction : 0f;
 
                 GodMenuGUI.Bar(load, $"{mass:0.#} / {capacity:0.#} t", GodMenuGUI.Accent);
+                GodMenuGUI.Field("Dark Matter", hold != null ? $"{hold.DarkMatterUnits} / {hold.DarkMatterCapacity}" : "0");
                 GodMenuGUI.Field("Value", hold != null ? $"{hold.TotalValue:N0} cr" : "0 cr");
 
                 CargoJettison jettison = hold != null ? hold.GetComponent<CargoJettison>() : null;

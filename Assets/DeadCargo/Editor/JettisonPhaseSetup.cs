@@ -19,6 +19,12 @@ namespace DeadCargo.EditorTools
         [MenuItem(MenuPath, priority = 201)]
         private static void Run()
         {
+            Apply();
+        }
+
+        /// <summary>Sets up the open scene. Returns false when it cannot, after a dialog explains why.</summary>
+        internal static bool Apply()
+        {
             Scene scene = SceneManager.GetActiveScene();
 
             VehicleEngines3D ship = SceneSetupUtility.FindShip(scene);
@@ -26,21 +32,21 @@ namespace DeadCargo.EditorTools
             {
                 EditorUtility.DisplayDialog(DialogTitle,
                     "Select the player's ship in the Hierarchy, then run this again.", "OK");
-                return;
+                return false;
             }
 
             if (ship.GetComponent<CargoHold>() == null)
             {
                 EditorUtility.DisplayDialog(DialogTitle,
                     $"'{ship.name}' has no cargo hold. Run the Phase 1 setup first.", "OK");
-                return;
+                return false;
             }
 
             GameAgent player = SceneSetupUtility.FindPlayer(scene);
             if (player == null)
             {
                 EditorUtility.DisplayDialog(DialogTitle, "No player game agent was found in the open scene.", "OK");
-                return;
+                return false;
             }
 
             Undo.SetCurrentGroupName("Set Up Phase 2 Jettison");
@@ -53,6 +59,7 @@ namespace DeadCargo.EditorTools
             Undo.CollapseUndoOperations(undoGroup);
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log($"Phase 2 jettison set up on '{ship.name}' in scene '{scene.name}'.", ship);
+            return true;
         }
 
         [MenuItem(MenuPath, true)]

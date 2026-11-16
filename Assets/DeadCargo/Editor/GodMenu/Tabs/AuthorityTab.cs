@@ -9,18 +9,24 @@ namespace DeadCargo.EditorTools.GodMenu
     {
         private static readonly string[] ActionLabels = { "Spawn Ship", "Despawn All" };
 
+        private AuthorityResponse response;
+
         public override string Title => "Authority";
-        public override int Order => 35;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 30;
+
+        public override bool IsAvailable => response != null;
+
+        public override string Summary =>
+            response != null ? $"{response.ActiveShipCount} / {response.CurrentResponse.MaxShips} ships" : null;
+
+        public override void OnUpdate()
+        {
+            response = GodMenuContext.IsPlaying ? AuthorityResponse.Active : null;
+        }
 
         public override void OnGUI()
         {
-            AuthorityResponse response = GodMenuContext.IsPlaying
-                ? Object.FindFirstObjectByType<AuthorityResponse>()
-                : null;
-
-            if (GodMenuContext.IsPlaying && response == null)
-                EditorGUILayout.HelpBox("No Authority response in the scene. Run the Phase 4 setup from the Project tab.", MessageType.Warning);
-
             using (new EditorGUI.DisabledScope(response == null))
                 DrawResponse(response);
         }

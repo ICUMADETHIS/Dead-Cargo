@@ -13,11 +13,16 @@ namespace DeadCargo.EditorTools
     {
         private const string MenuPath = "Dead Cargo/Setup/Phase 1 - Cargo (Open Scene)";
         private const string DataFolder = "Assets/DeadCargo/Data/Cargo";
-        private const string PickupRootName = "Cargo Pickups";
         private const string HudName = "Extraction HUD";
 
         [MenuItem(MenuPath, priority = 200)]
         private static void Run()
+        {
+            Apply();
+        }
+
+        /// <summary>Sets up the open scene. Returns false when it cannot, after a dialog explains why.</summary>
+        internal static bool Apply()
         {
             Scene scene = SceneManager.GetActiveScene();
             VehicleEngines3D ship = SceneSetupUtility.FindShip(scene);
@@ -25,7 +30,7 @@ namespace DeadCargo.EditorTools
             {
                 EditorUtility.DisplayDialog("Phase 1 - Cargo",
                     "Select the player's ship in the Hierarchy, then run this again.", "OK");
-                return;
+                return false;
             }
 
             Undo.SetCurrentGroupName("Set Up Phase 1 Cargo");
@@ -39,6 +44,7 @@ namespace DeadCargo.EditorTools
             Undo.CollapseUndoOperations(undoGroup);
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log($"Phase 1 cargo set up on '{ship.name}' in scene '{scene.name}'.", ship);
+            return true;
         }
 
         [MenuItem(MenuPath, true)]
@@ -90,7 +96,7 @@ namespace DeadCargo.EditorTools
             if (SceneSetupUtility.FindInScene<CargoPickup>(scene).Count > 0)
                 return;
 
-            var root = new GameObject(PickupRootName);
+            var root = new GameObject(SceneSetupUtility.CargoPickupsRoot);
             Undo.RegisterCreatedObjectUndo(root, "Create Cargo Pickups");
 
             // Total mass exceeds the default hold so the full-hold case can be tested.

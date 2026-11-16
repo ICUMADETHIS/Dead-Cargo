@@ -13,4 +13,4 @@ MonoBehaviour:
   m_Name: SceneFlowSettings
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Flow.SceneFlowSettings
   mothershipScene: Assets/DeadCargo/Scenes/Mothership.unity
-  sectorScene: Assets/DeadCargo/DevTest/Dev Test Range.unity
+  sectorScene: Assets/DeadCargo/Scenes/Polaris.unity

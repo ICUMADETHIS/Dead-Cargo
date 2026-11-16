@@ -8,7 +8,9 @@ Assets/DeadCargo/
   Editor/              editor-only tooling
   Data/<Feature>/      ScriptableObject assets
   Resources/           assets found at runtime by name (HUD fonts, scene flow settings, cargo catalog)
-  Scenes/              game scenes (Mothership)
+  Shaders/             Dead Cargo's own shaders (DeadCargo/...)
+  Materials/           materials, and data baked from them (Materials/Sky: one sky per sector)
+  Scenes/              game scenes (Mothership, Polaris)
   DevTest/             test range, its template and the dev console
 Docs/                  design, roadmap, standards
 ```
@@ -39,8 +41,9 @@ One public type per file. The file name matches the type.
 - Units go in tooltips and summaries (tonnes, credits, seconds).
 
 ## Kit integration
-- Kit files under `Assets/SpaceCombatKit/` and `Assets/FlatKit/` are never edited. Extend through components, events and public API.
+- Kit files under `Assets/SpaceCombatKit/`, `Assets/FlatKit/` and `Assets/DrawDebugTools/` are never edited. Extend through components, events and public API.
 - The kit compiles into the default assembly, so Dead Cargo code does too. Assembly definitions are deferred until the kit is isolated.
+- Exception: pure code with no kit or scene dependency may have its own assembly. `DeadCargo.Destruction.Core` (voxel maths and its Burst jobs, unsafe code allowed) and its editor tests, `DeadCargo.Destruction.Diagnostics`, are the first. Everything else stays in the default assembly.
 
 ## Scenes
 - Work happens in the scene that is open. Setup tools act on the active scene, support Undo, and are safe to run twice.
@@ -57,9 +60,9 @@ Every scene follows one layout, so it stays readable as the game grows.
 | `Systems` | Dead Cargo scene services and managers: Heat Tracker, Authority Response, Run Tracker, EventSystem, dev bootstrap |
 | `UI` | Canvases and screens: Extraction HUD, Run Result Screen, Mothership Hub |
 | `Cameras` | Cameras that are not part of the kit's camera rig |
-| `Environment` | Lights, probes and set dressing |
+| `Environment` | Lights, probes, set dressing and visual effects (Space Dust) |
 | Kit objects | `SceneObjects`, `VehicleCamera`, `Player`, ships and characters stay **at the root** |
-| Range content | `Level`, `Cargo Pickups` stay at the root, because the Range tab spawns them by root name |
+| Range content | `Level`, `Cargo Pickups`, `Extraction Points` stay at the root, because the Range tab spawns them by root name |
 
 - **Ships, characters and game agents must stay at the root.** The kit finds a ship's parts through `transform.root` for hit detection, radar and boarding. A ship inside a folder breaks all three. Ships spawned at runtime go at the root for the same reason.
 - Folders are empty objects at the origin. They sit at the top of the hierarchy in the order above.
@@ -84,10 +87,51 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 
 - **One tab per system.** Each tab is a class deriving from `GodMenuTab` in `GodMenu/Tabs/`. The window discovers tabs automatically, so a new tab is one new file.
 - **Tabs collapse.** Every tab is a header bar that folds its contents away. Only the first tab starts open. The button at the left of the window header collapses or expands them all.
-- **Order** sets the position in the window. Existing values step in tens (Session 0, Range 5, Player 10, Cargo 20, Heat 30, Authority 35, Extraction 38, World 40, Mothership 45, Project 1000) so tabs can be inserted between them.
+- **Groups.** Every tab belongs to a headed group, and `Order` sets its place within the group, in steps of ten.
+
+  | Group | Shown | Tabs |
+  |---|---|---|
+  | GAME | Always | Session 0, Mothership 10 |
+  | LIVE RUN | In Play Mode, when the tab's system is in the scene | Player 0, Cargo 10, Heat 20, Authority 30, Extraction 40, World 50, Sector 60, Destruction 70 |
+  | EDITOR | Outside Play Mode. Range only in the test range or a blank scene, never the mothership or a game sector | Range 0, Project 10 |
+
+- **Show only what applies.** Override `IsAvailable` so a tab hides when its system is missing or the mode is wrong. Never show a tab full of disabled controls or "run the setup" warnings. The Project tab reports setup status.
+- **Summaries.** Give each tab a `Summary`: a few words of live status on its header (heat tier, hold mass, spool countdown). This keeps collapsed tabs useful, so users can leave them closed.
+- **Fewer, fuller tabs.** Extend an existing tab before adding a new one. A new tab must cover a whole system.
+- **Cheap updates.** Scene searches go in `OnUpdate` (ten times a second), never in `OnGUI` or `Summary`, and they are skipped while the tab is hidden.
 - **Sections** group controls inside a tab and also collapse. Wrap each group in `GodMenuGUI.SectionScope` and return early when it is not expanded. Keep a tab to a few sections.
 - **Shared look.** Use `GodMenuGUI` for buttons, bars and status rows. Do not create styles inside a tab.
 - **Fits a narrow window.** The window is often docked in a thin column. Lay out buttons with `GodMenuGUI.ButtonRow`, which wraps onto extra lines, and list rows with `BeginItemRow` / `EndItemRow`, which drop their buttons below the label when space is tight. Do not place several controls in a raw horizontal group, and do not give controls a fixed minimum width.
 - **Shared state.** Look up the player, hold and assets through `GodMenuContext`.
-- **A phase that adds a system** adds or extends its tab, and adds one line to the phase list in `ProjectTab`.
+- **A phase that adds a sector system** extends a tab (or adds one, if it must), and adds one step to `SectorSetup.Steps`. Its setup tool gets an `Apply()` that returns false after explaining the problem in a dialog. The Project tab shows one **Set Up Sector** button, never a row per phase.
 - Tabs only call public game API. If a cheat needs something new, add a documented method to the system rather than reaching into private state.
+
+## Sector generation
+- Generated content is a pure function of the sector seed and a position. Never use `UnityEngine.Random`, time, or frame counts in a generator; use `SectorRandom` seeded from `SectorSpace.CellSeed`.
+- Give each independent use of a cell its own stream number, so adding one kind of content never shifts another.
+- Draw the same number of random values for every candidate, kept or rejected, so one result never shifts the next.
+- Generators work in sector space. Convert through `SectorSpace.WorldToSector` and `SectorToWorld`, never by assuming the two are the same.
+- Generation code is plain value types with no managed references, so it can run in Burst jobs.
+
+## Space visuals
+- **Near objects: comic cel.** Ships, rocks and stations use `DeadCargo/Comic Surface`: hard colour steps, each softened over exactly one pixel with `fwidth`; a lit side, a tinted shadow side and a highlight; ink outlines; hatching in the shadows. Kit models get it by copying their Flat Kit materials (`ComicLookSetup`), never by editing kit materials.
+- **The sky: deep space.** Mostly near-black void, sparse stars, muted desaturated gas with soft edges, dust lanes for depth. No saturated colour and no ink by default. Far things are flat and faint; only near things carry ink and strong light, which is what makes space read as endless.
+- **Motion from time, never the CPU.** Animate in the shader from `_Time`, with a strength setting where 0 holds it still. Wrap growing angles with `fmod`.
+- **Endless fields wrap in the shader.** Effects that fill space around the camera (space dust) use one static mesh that the vertex shader wraps around `_WorldSpaceCameraPos`, fading out before the wrap. No spawning, no per-object CPU work.
+- **Every effect blends.** Each comic effect has a strength setting, so the look can be dialled back to plain cel shading.
+- **Sizes in pixels where crispness matters.** Stars and similar points are sized in pixels at 1080p and scale with screen height, never in world or angle units that blur or vanish.
+- **Bake what is costly and fixed.** Noise that does not change at runtime is baked in the editor, and the shader thresholds the filtered value. Colours and thresholds stay live material settings.
+- **Shader and baker agree.** Where C# and a shader share maths (such as `OctahedralMapping`), the C# names the shader function it must match, and the shader names the C#.
+- **One material per sector**, named after the scene, with seeds from the name. Settings get tooltips in the material inspector.
+
+## Destruction
+- **One damage path.** Anything that changes shape when hit implements `IDestructible`. Kit weapons reach it through a `DestructionDamageReceiver` beside each of its colliders; other systems call `ApplyDamage` with a `DamageEvent`. Destructibles do not also carry a kit `Damageable`.
+- **Grids belong to the scheduler.** Voxel grids are read by jobs through raw pointers, so only `VoxelScheduler` touches them, and only when no job is running. Everything else queues work through `VoxelBody.Carve`, `Cut` and `ApplyDamage`.
+- **Deterministic rock.** Asteroid shape and ore follow the sector generation rules: a pure function of type, size and seed. Visual randomness (chips, piece spin) may use `UnityEngine.Random`.
+- **Scale 1.** Voxel bodies are never scaled; cuts and grids work in metres.
+- **Report what is removed.** Every cut raises `MaterialRemoved` with what it took, by material. Systems that care (mining, heat, missions) listen; they never read grids.
+- **Tested core.** A change to the voxel core comes with checks in `VoxelSelfTest`. Run **Dead Cargo > Diagnostics > Destruction Self-Test** before handing a change over, and the **Smoke Test** in the God Menu Destruction tab for anything touching the pipeline.
+
+## Debug drawing
+- Use Draw Debug Tools (`using DDT;`, `DrawDebugTools.DrawLine(...)`) for in-game debug drawing. Its calls are compiled out of release builds.
+- Debug drawing lives in its own component beside the system it shows, switched from the God Menu, and off by default.

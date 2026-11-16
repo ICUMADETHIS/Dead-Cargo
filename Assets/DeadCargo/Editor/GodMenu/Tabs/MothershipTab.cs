@@ -16,14 +16,16 @@ namespace DeadCargo.EditorTools.GodMenu
     {
         private const int DebugCredits = 1000;
 
-        private static readonly string[] PlayLabels = { "Go To Mothership", "Launch Sector" };
-        private static readonly string[] EditLabels = { "Open Mothership", "Open Sector" };
-        private static readonly string[] SettingsLabels = { "Select Settings" };
+        private static readonly string[] PlayLabels = { "Go To Mothership", "Launch Sector", "Settings" };
+        private static readonly string[] EditLabels = { "Open Mothership", "Open Sector", "Open Polaris", "Settings" };
         private static readonly string[] ProfileLabels = { "+1,000 cr", "Sell All", "Clear Stash" };
         private static readonly string[] ProfileFileLabels = { "Reset Profile", "Open Save Folder" };
 
         public override string Title => "Mothership";
-        public override int Order => 45;
+        public override GodMenuGroup Group => GodMenuGroup.Game;
+        public override int Order => 10;
+
+        public override string Summary => $"{ProfileStore.Current.Credits:N0} cr";
 
         public override void OnGUI()
         {
@@ -107,24 +109,16 @@ namespace DeadCargo.EditorTools.GodMenu
                 GodMenuGUI.Field("Sector", SceneLabel(settings.SectorScene));
 
                 if (GodMenuContext.IsPlaying)
-                    DrawTravel();
+                    DrawTravel(settings);
                 else
                     DrawOpen(settings);
-
-                if (GodMenuGUI.ButtonRow(SettingsLabels) == 0)
-                {
-                    Selection.activeObject = settings;
-                    EditorGUIUtility.PingObject(settings);
-                }
             }
         }
 
-        private static void DrawTravel()
+        private static void DrawTravel(SceneFlowSettings settings)
         {
             bool idle = !SceneFlow.IsLoading;
-            GodMenuGUI.Field("Loading", idle ? "No" : "Yes");
-
-            bool[] enabled = { idle && SceneFlow.HasMothership && !SceneFlow.InMothership, idle && SceneFlow.HasSector };
+            bool[] enabled = { idle && SceneFlow.HasMothership && !SceneFlow.InMothership, idle && SceneFlow.HasSector, true };
             switch (GodMenuGUI.ButtonRow(PlayLabels, enabled))
             {
                 case 0:
@@ -133,12 +127,15 @@ namespace DeadCargo.EditorTools.GodMenu
                 case 1:
                     SceneFlow.LaunchSector();
                     break;
+                case 2:
+                    SelectSettings(settings);
+                    break;
             }
         }
 
         private static void DrawOpen(SceneFlowSettings settings)
         {
-            bool[] enabled = { SceneExists(settings.MothershipScene), SceneExists(settings.SectorScene) };
+            bool[] enabled = { SceneExists(settings.MothershipScene), SceneExists(settings.SectorScene), true, true };
             switch (GodMenuGUI.ButtonRow(EditLabels, enabled))
             {
                 case 0:
@@ -147,7 +144,20 @@ namespace DeadCargo.EditorTools.GodMenu
                 case 1:
                     OpenScene(settings.SectorScene);
                     break;
+                case 2:
+                    // Creates the scene the first time. Run after this GUI pass, because it opens dialogs and swaps scenes.
+                    EditorApplication.delayCall += () => SectorSceneSetup.OpenOrCreate();
+                    break;
+                case 3:
+                    SelectSettings(settings);
+                    break;
             }
+        }
+
+        private static void SelectSettings(SceneFlowSettings settings)
+        {
+            Selection.activeObject = settings;
+            EditorGUIUtility.PingObject(settings);
         }
 
         // Opening a scene rebuilds the editor layout mid-draw, so the current GUI pass is abandoned.

@@ -13,8 +13,11 @@ namespace DeadCargo.Profile
         [SerializeField] private int authorityShipsDestroyed;
         [SerializeField] private int cargoValue;
         [SerializeField] private float cargoMass;
+        [SerializeField] private bool shipLost;
+        [SerializeField] private int shipLossFee;
 
-        public RunSummary(bool extracted, float duration, string peakHeat, int authorityShipsDestroyed, int cargoValue, float cargoMass)
+        public RunSummary(bool extracted, float duration, string peakHeat, int authorityShipsDestroyed, int cargoValue, float cargoMass,
+            bool shipLost, int shipLossFee)
         {
             this.extracted = extracted;
             this.duration = duration;
@@ -22,9 +25,11 @@ namespace DeadCargo.Profile
             this.authorityShipsDestroyed = authorityShipsDestroyed;
             this.cargoValue = cargoValue;
             this.cargoMass = cargoMass;
+            this.shipLost = shipLost;
+            this.shipLossFee = shipLossFee;
         }
 
-        /// <summary>True when the ship jumped out; false when it was lost.</summary>
+        /// <summary>True when the ship jumped out; false when the run was lost.</summary>
         public bool Extracted => extracted;
 
         /// <summary>Run length, in seconds.</summary>
@@ -40,5 +45,11 @@ namespace DeadCargo.Profile
 
         /// <summary>Mass of the hold at the end of the run, in tonnes.</summary>
         public float CargoMass => cargoMass;
+
+        /// <summary>True when the run ship was destroyed.</summary>
+        public bool ShipLost => shipLost;
+
+        /// <summary>Replacement fee taken for the lost ship, in credits. Zero when the player could not pay.</summary>
+        public int ShipLossFee => shipLossFee;
     }
 }

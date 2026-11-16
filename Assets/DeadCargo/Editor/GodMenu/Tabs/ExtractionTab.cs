@@ -5,25 +5,119 @@ using VSX.UniversalVehicleCombat;
 
 namespace DeadCargo.EditorTools.GodMenu
 {
-    /// <summary>Inspect the run and drive the jump drive.</summary>
+    /// <summary>Inspect the run, and drive both ways out: the jump drive and the extraction point.</summary>
     internal sealed class ExtractionTab : GodMenuTab
     {
+        // Distance in front of the point, in metres, where Go To Point leaves the ship, facing the ring.
+        private const float ApproachDistance = 80f;
+
         private static readonly string[] RunLabels = { "Restart Run" };
         private static readonly string[] DriveLabels = { "Start Spool", "Cancel Spool", "Jump Now" };
+        private static readonly string[] PointLabels = { "Go To Point", "Start Uplink", "Open Now", "Close" };
 
         public override string Title => "Extraction";
-        public override int Order => 38;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 40;
+
+        public override bool IsAvailable => GodMenuContext.IsPlaying && RunTracker.Active != null;
+
+        public override string Summary
+        {
+            get
+            {
+                RunTracker tracker = GodMenuContext.IsPlaying ? RunTracker.Active : null;
+                if (tracker == null)
+                    return null;
+
+                if (tracker.Drive != null && tracker.Drive.IsSpooling)
+                    return $"{(tracker.Drive.IsHeld ? "Held" : "Spooling")}  {Mathf.CeilToInt(tracker.Drive.SpoolRemaining)} s";
+
+                return tracker.IsOver ? StateLabel(tracker) : FormatDuration(tracker.Elapsed);
+            }
+        }
 
         public override void OnGUI()
         {
             RunTracker tracker = GodMenuContext.IsPlaying ? RunTracker.Active : null;
-            if (GodMenuContext.IsPlaying && tracker == null)
-                EditorGUILayout.HelpBox("No run tracker in the scene. Run the Phase 5 setup from the Project tab.", MessageType.Warning);
-
             using (new EditorGUI.DisabledScope(tracker == null))
             {
                 DrawRun(tracker);
                 DrawJumpDrive(tracker);
+                DrawExtractionPoint();
+            }
+        }
+
+        private static void DrawExtractionPoint()
+        {
+            using (var section = new GodMenuGUI.SectionScope("Extraction Point"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                Vehicle vehicle = GodMenuContext.PlayerVehicle;
+                Vector3 from = vehicle != null ? vehicle.transform.position : Vector3.zero;
+                ExtractionPoint point = ExtractionPoint.FindNearest(from);
+                if (point == null)
+                {
+                    GUILayout.Label("No extraction point in the scene. Run Set Up Sector in Edit Mode.", EditorStyles.wordWrappedMiniLabel);
+                    return;
+                }
+
+                switch (point.State)
+                {
+                    case ExtractionPointState.Uplinking:
+                        GodMenuGUI.Bar(point.Progress, $"UPLINK   {point.TimeRemaining:0} s to open", GodMenuGUI.Accent);
+                        break;
+                    case ExtractionPointState.Open:
+                        GodMenuGUI.Bar(point.Progress, $"OPEN   {point.TimeRemaining:0} s left", GodMenuGUI.Positive);
+                        break;
+                    default:
+                        GodMenuGUI.Bar(0f, "DORMANT", GodMenuGUI.Neutral);
+                        break;
+                }
+
+                if (vehicle != null)
+                    GodMenuGUI.Field("Distance", $"{point.DistanceTo(from):0} m");
+
+                // Start Uplink ignores the activation range, so it can be tested from anywhere.
+                bool[] enabled =
+                {
+                    vehicle != null,
+                    point.CanStartUplink,
+                    point.State != ExtractionPointState.Open,
+                    point.State != ExtractionPointState.Dormant
+                };
+
+                switch (GodMenuGUI.ButtonRow(PointLabels, enabled))
+                {
+                    case 0:
+                        MoveToPoint(vehicle, point);
+                        break;
+                    case 1:
+                        point.StartUplink();
+                        break;
+                    case 2:
+                        point.OpenNow();
+                        break;
+                    case 3:
+                        point.Close();
+                        break;
+                }
+            }
+        }
+
+        // Stops the ship in front of the ring, facing it, so flying straight on goes through.
+        private static void MoveToPoint(Vehicle vehicle, ExtractionPoint point)
+        {
+            Transform ring = point.transform;
+            Vector3 position = ring.position + ring.forward * ApproachDistance;
+            vehicle.transform.SetPositionAndRotation(position, Quaternion.LookRotation(-ring.forward, Vector3.up));
+
+            Rigidbody body = vehicle.CachedRigidbody;
+            if (body != null && !body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
             }
         }
 
@@ -70,12 +164,20 @@ namespace DeadCargo.EditorTools.GodMenu
                     return;
                 }
 
-                if (drive.IsSpooling)
+                if (drive.IsSpooling && drive.IsHeld)
+                    GodMenuGUI.Bar(drive.SpoolProgress, $"HELD, TOO FAST (over {drive.MaxSpoolSpeed:0} m/s)   {drive.SpoolRemaining:0.0} s", GodMenuGUI.Negative);
+                else if (drive.IsSpooling)
                     GodMenuGUI.Bar(drive.SpoolProgress, $"SPOOLING   {drive.SpoolRemaining:0.0} s", GodMenuGUI.Positive);
+                else if (drive.HasJumped)
+                    GodMenuGUI.Bar(1f, "JUMPED", GodMenuGUI.Neutral);
+                else if (!drive.HasFuel)
+                    GodMenuGUI.Bar((float)drive.DarkMatterAboard / drive.DarkMatterPerJump,
+                        $"NEEDS DARK MATTER   {drive.DarkMatterAboard} / {drive.DarkMatterPerJump}", GodMenuGUI.Neutral);
                 else
-                    GodMenuGUI.Bar(0f, drive.HasJumped ? "JUMPED" : $"READY   {drive.EstimatedSpoolTime:0.0} s spool", GodMenuGUI.Neutral);
+                    GodMenuGUI.Bar(0f, $"READY   {drive.EstimatedSpoolTime:0.0} s spool", GodMenuGUI.Neutral);
 
-                bool[] enabled = { drive.CanSpool, drive.IsSpooling, drive.IsSpooling || drive.CanSpool };
+                // Jump Now forces a jump without fuel, so it stays usable for testing.
+                bool[] enabled = { drive.CanSpool, drive.IsSpooling, drive.CanCompleteSpool };
 
                 switch (GodMenuGUI.ButtonRow(DriveLabels, enabled))
                 {
@@ -108,7 +210,10 @@ namespace DeadCargo.EditorTools.GodMenu
             if (!tracker.IsOver)
                 return tracker.Drive != null && tracker.Drive.IsSpooling ? "Extracting" : "In progress";
 
-            return tracker.Result.Outcome == RunOutcome.Extracted ? "Extracted" : "Ship lost";
+            if (tracker.Result.Outcome == RunOutcome.Extracted)
+                return "Extracted";
+
+            return tracker.Result.ShipLost ? "Ship lost" : "Run lost";
         }
 
         private static string FormatDuration(float seconds)

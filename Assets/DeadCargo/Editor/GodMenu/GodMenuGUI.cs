@@ -29,6 +29,9 @@ namespace DeadCargo.EditorTools.GodMenu
         private static GUIStyle headerSubtitle;
         private static GUIStyle pill;
         private static GUIStyle tabTitle;
+        private static GUIStyle tabSummary;
+        private static GUIStyle groupTitle;
+        private static GUIStyle hint;
         private static GUIStyle section;
         private static GUIStyle sectionTitle;
         private static GUIStyle barLabel;
@@ -87,6 +90,25 @@ namespace DeadCargo.EditorTools.GodMenu
 
             tabTitle = new GUIStyle(EditorStyles.foldout) { fontStyle = FontStyle.Bold, fontSize = 13 };
 
+            tabSummary = new GUIStyle(EditorStyles.miniLabel)
+            {
+                alignment = TextAnchor.MiddleRight,
+                clipping = TextClipping.Clip,
+                normal = { textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.72f, 0.75f) : new Color(0.2f, 0.2f, 0.22f) }
+            };
+
+            groupTitle = new GUIStyle(EditorStyles.miniBoldLabel)
+            {
+                alignment = TextAnchor.LowerLeft,
+                normal = { textColor = Accent }
+            };
+
+            hint = new GUIStyle(EditorStyles.wordWrappedMiniLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                padding = new RectOffset(10, 10, 4, 4)
+            };
+
             section = new GUIStyle(EditorStyles.helpBox)
             {
                 padding = new RectOffset(10, 10, 6, 8),
@@ -132,8 +154,20 @@ namespace DeadCargo.EditorTools.GodMenu
             }
         }
 
-        /// <summary>Draws a tab's full-width header bar. Returns the new expanded state.</summary>
-        public static bool TabHeader(string title, bool expanded)
+        /// <summary>Draws a small heading above a group of tabs.</summary>
+        public static void GroupHeader(string title)
+        {
+            GUILayout.Space(8f);
+            Rect rect = GUILayoutUtility.GetRect(0f, 18f, GUILayout.ExpandWidth(true));
+            GUI.Label(new Rect(rect.x + 10f, rect.y, rect.width - 20f, rect.height - 3f), title, groupTitle);
+            if (Event.current.type == EventType.Repaint)
+                EditorGUI.DrawRect(new Rect(rect.x + 10f, rect.yMax - 1f, rect.width - 20f, 1f), new Color(Accent.r, Accent.g, Accent.b, 0.35f));
+        }
+
+        /// <summary>
+        /// Draws a tab's full-width header bar, with an optional live status on the right. Returns the new expanded state.
+        /// </summary>
+        public static bool TabHeader(string title, string summary, bool expanded)
         {
             GUILayout.Space(2f);
             Rect rect = GUILayoutUtility.GetRect(0f, 28f, GUILayout.ExpandWidth(true));
@@ -144,8 +178,23 @@ namespace DeadCargo.EditorTools.GodMenu
                     EditorGUI.DrawRect(new Rect(rect.x, rect.y, 3f, rect.height), Accent);
             }
 
-            var foldout = new Rect(rect.x + 10f, rect.y, rect.width - 10f, rect.height);
+            // The summary takes up to half the bar; the title keeps the rest.
+            float summaryWidth = 0f;
+            if (!string.IsNullOrEmpty(summary))
+            {
+                MeasureContent.text = summary;
+                summaryWidth = Mathf.Min(tabSummary.CalcSize(MeasureContent).x, rect.width * 0.5f);
+                GUI.Label(new Rect(rect.xMax - summaryWidth - 10f, rect.y, summaryWidth, rect.height), summary, tabSummary);
+            }
+
+            var foldout = new Rect(rect.x + 10f, rect.y, rect.width - 24f - summaryWidth, rect.height);
             return EditorGUI.Foldout(foldout, expanded, title.ToUpperInvariant(), true, tabTitle);
+        }
+
+        /// <summary>A centred line of muted guidance text.</summary>
+        public static void Hint(string text)
+        {
+            GUILayout.Label(text, hint);
         }
 
         /// <summary>Draws a row of buttons that wraps onto extra lines when the window is too narrow.</summary>
@@ -267,12 +316,6 @@ namespace DeadCargo.EditorTools.GodMenu
 
             rect.xMin += 18f;
             GUI.Label(rect, label);
-        }
-
-        public static void PlayModeNotice()
-        {
-            if (!EditorApplication.isPlaying)
-                EditorGUILayout.HelpBox("Live controls are disabled until you enter Play Mode.", MessageType.Info);
         }
     }
 }

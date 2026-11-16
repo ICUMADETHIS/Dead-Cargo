@@ -11,6 +11,19 @@ namespace DeadCargo.EditorTools.GodMenu
     {
         public const string CratePrefabPath = "Assets/DeadCargo/Prefabs/Cargo/CargoCrate.prefab";
 
+        /// <summary>The pickup prefab for an item: a glowing sphere for dark matter, a crate for everything else.</summary>
+        public static CargoPickup LoadPickupPrefab(CargoItemDefinition item)
+        {
+            if (item != null && item.Slot == CargoSlot.DarkMatter)
+            {
+                var sphere = AssetDatabase.LoadAssetAtPath<CargoPickup>(DarkMatterSetup.PickupPrefabPath);
+                if (sphere != null)
+                    return sphere;
+            }
+
+            return AssetDatabase.LoadAssetAtPath<CargoPickup>(CratePrefabPath);
+        }
+
         private static readonly List<CargoItemDefinition> cargoItems = new List<CargoItemDefinition>();
         private static string[] cargoItemNames = new string[0];
 

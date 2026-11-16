@@ -1,0 +1,40 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b9b9936bac6aef458aecd03857de973, type: 3}
+  m_Name: RockyAsteroid
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Destruction.Voxels.AsteroidDefinition
+  displayName: Rocky Asteroid
+  surfaceMaterial: {fileID: 2100000, guid: 900c367fd8b8140438d90dcbb7993449, type: 2}
+  rock: {fileID: 11400000, guid: 10f0accd8caa0344ab6274498e4140bd, type: 2}
+  voxelSize: 0.5
+  elongation: 0.2
+  bumpiness: 0.18
+  bumpFrequency: 1.6
+  bumpOctaves: 3
+  craterDepth: 0.1
+  craterFrequency: 2.2
+  craterSize: 0.45
+  detail: 0.4
+  detailFrequency: 0.35
+  veins:
+  - material: {fileID: 11400000, guid: 020d8e976715672479657f6885c37f02, type: 2}
+    frequency: 0.07
+    thickness: 0.04
+    minDepth: 2
+  cubicMetresPerDamage: 0.02
+  explosionMultiplier: 1.6
+  minCraterRadius: 0.35
+  maxCraterRadius: 6
+  craterRoughness: 0.6
+  splitSpeed: 2.5
+  splitSpin: 10
+  splitEffect: {fileID: 0}

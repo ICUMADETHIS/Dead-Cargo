@@ -1,4 +1,5 @@
 using DeadCargo.EditorTools.TestRange;
+using DeadCargo.Flow;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -11,19 +12,36 @@ namespace DeadCargo.EditorTools.GodMenu
         private const string DialogTitle = "Test Range";
 
         private static readonly string[] SceneLabels = { "Spawn Everything", "Clear Open Scene" };
-        private static readonly string[] TemplateLabels = { "Save Open Scene As Template" };
+        private static readonly string[] TemplateLabels = { "Save Range As Template" };
 
         private readonly bool[] optionalSpawned = new bool[TestRangeLibrary.OptionalGroups.Length];
         private bool hasTemplate;
         private bool rigSpawned;
         private bool sceneEmpty;
+        private bool appliesToScene = true;
 
         public override string Title => "Range";
-        public override int Order => 5;
+        public override GodMenuGroup Group => GodMenuGroup.Editor;
+        public override int Order => 0;
+
+        // Spawning edits the scene, which is not possible in Play Mode. The range's tools belong to the test range or
+        // a blank scene, never to the mothership or a game sector such as Polaris.
+        public override bool IsAvailable => !EditorApplication.isPlayingOrWillChangePlaymode && appliesToScene;
+
+        public override string Summary => sceneEmpty ? "Blank scene" : rigSpawned ? "Rig in scene" : null;
 
         public override void OnUpdate()
         {
+            // Hidden in Play Mode, so the scene searches are skipped.
+            if (EditorApplication.isPlaying)
+                return;
+
             Scene scene = SceneManager.GetActiveScene();
+            SceneFlowSettings settings = SceneFlow.Settings;
+            bool isMothership = settings != null && !string.IsNullOrEmpty(scene.path) && scene.path == settings.MothershipScene;
+            appliesToScene = !isMothership && !SectorRigSetup.IsInstalled(scene);
+            if (!appliesToScene)
+                return;
 
             hasTemplate = TestRangeLibrary.HasTemplate;
             rigSpawned = TestRangeLibrary.IsSpawned(TestRangeLibrary.PlayerRig, scene);

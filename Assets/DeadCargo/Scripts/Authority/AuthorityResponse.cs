@@ -55,6 +55,7 @@ namespace DeadCargo.Authority
         [SerializeField, Min(0f)] private float heatPerShipDestroyed = 10f;
 
         private readonly List<Unit> units = new List<Unit>();
+        private readonly List<Vehicle> activeShips = new List<Vehicle>();
         private HeatTracker tracker;
         private float nextSpawnTime;
         private float standDownTime = float.PositiveInfinity;
@@ -65,7 +66,13 @@ namespace DeadCargo.Authority
         /// <summary>Raised when a ship is destroyed.</summary>
         public event Action<Vehicle> ShipDestroyed;
 
+        /// <summary>The response for the loaded scene, or null.</summary>
+        public static AuthorityResponse Active { get; private set; }
+
         public int ActiveShipCount => units.Count;
+
+        /// <summary>The ships currently hunting the player. Destroyed ships leave the list at once.</summary>
+        public IReadOnlyList<Vehicle> ActiveShips => activeShips;
 
         /// <summary>The response for the current heat tier.</summary>
         public AuthorityTierResponse CurrentResponse => GetResponse(tracker != null ? tracker.TierIndex : 0);
@@ -98,6 +105,7 @@ namespace DeadCargo.Authority
             unit.Pilot.EnterVehicle(unit.Ship);
             unit.Ship.onDestroyed.AddListener(() => OnShipDestroyed(unit));
             units.Add(unit);
+            activeShips.Add(unit.Ship);
 
             ShipSpawned?.Invoke(unit.Ship);
             return unit.Ship;
@@ -110,6 +118,25 @@ namespace DeadCargo.Authority
                 Release(unit, 0f);
 
             units.Clear();
+            activeShips.Clear();
+        }
+
+        // Statics survive play sessions when domain reload is off.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Active = null;
+        }
+
+        private void OnEnable()
+        {
+            Active = this;
+        }
+
+        private void OnDisable()
+        {
+            if (Active == this)
+                Active = null;
         }
 
         private void Start()
@@ -177,6 +204,7 @@ namespace DeadCargo.Authority
             if (!units.Remove(unit))
                 return;
 
+            activeShips.Remove(unit.Ship);
             Release(unit, wreckLifetime);
 
             if (tracker != null)

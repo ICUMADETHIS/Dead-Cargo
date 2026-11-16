@@ -66,7 +66,8 @@ namespace DeadCargo.UI
 
         private void Update()
         {
-            if (result == null)
+            // An abandoned run leaves straight away, so its report must not appear, or pause the world, mid-load.
+            if (result == null || SceneFlow.IsLoading)
                 return;
 
             // Unscaled, because the world is paused once the report is up.

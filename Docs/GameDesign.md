@@ -36,6 +36,7 @@ The loop is inspired by crime-sandbox extraction games. The setting, name, facti
 | Station heists | Dock, board on foot, crack the vault, carry loot back. | 7 |
 | Mining | Extract ore from asteroids. Slow, heavy, low heat. | 8 |
 | Planetary cargo | Land, collect contract cargo, launch. | 9 |
+| Destruction | Voxel asteroids that weapons carve, crack and split; ore veins inside are what mining digs. Ships, crates and stations follow on the same damage path. | 6.10 |
 | Upgrades and crafting | Ship modules and mothership rooms built from loot. | 10 |
 | Rival syndicates | AI crews that compete for targets and raid the mothership. | 11 |
 | Cycles | Periodic reset to a new star cluster. Rank and cosmetics persist. | 12 |

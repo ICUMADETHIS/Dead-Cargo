@@ -1,0 +1,1200 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+using Unity.Profiling;
+using UnityEngine;
+using UnityEngine.Rendering;
+using Debug = UnityEngine.Debug;
+
+namespace DeadCargo.Destruction.Voxels
+{
+    /// <summary>
+    /// Runs every voxel body's work as batched jobs, once a frame, in a fixed order:
+    /// <list type="number">
+    /// <item>Finished collider cooking goes live, a budget per frame.</item>
+    /// <item>A finished mesh batch is applied; its colliders start cooking at the end of this frame.</item>
+    /// <item>Finished generation queues the new rock's chunks.</item>
+    /// <item>Finished piece moves become free bodies and chips; a finished piece search starts moving its pieces out.</item>
+    /// <item>Released bodies are freed.</item>
+    /// <item>Queued cuts are applied; their chunks are queued urgently and a piece search is queued.</item>
+    /// <item>A piece search, a mesh batch and collider cooking are scheduled, each when the last one is done.</item>
+    /// </list>
+    /// The main thread never waits for a job: work still running is picked up a frame later. Instead, nothing writes a
+    /// grid while a job reads it: a body being meshed, searched or emptied of pieces takes its cuts a frame later, so
+    /// grids need no locks. Cuts usually appear one frame after the hit, and colliders a frame or two after that.
+    /// </summary>
+    internal sealed class VoxelScheduler : IDisposable
+    {
+        /// <summary>Vertices one chunk may hold. Far beyond any rock surface; a chunk that needs more is cut short and reported.</summary>
+        public const int ChunkVertexCapacity = 16384;
+
+        public const int ChunkIndexCapacity = 6 * ChunkVertexCapacity;
+
+        private const byte NotQueued = 0;
+        private const byte QueuedBackground = 1;
+        private const byte QueuedUrgent = 2;
+
+        private const int IslandCapacity = 32;
+        private const float CullInterval = 0.5f;
+
+        // A piece this share of its parent's starting size flies at the type's split speed; smaller ones go faster.
+        private const float ReferencePieceShare = 0.05f;
+
+        private readonly DestructionSystem system;
+        private readonly List<VoxelBody> bodies = new List<VoxelBody>();
+        private readonly List<VoxelBody> snapshot = new List<VoxelBody>();
+        private readonly List<ChunkRef> urgent = new List<ChunkRef>();
+        private readonly List<ChunkRef> background = new List<ChunkRef>();
+        private readonly List<VoxelBody> islandQueue = new List<VoxelBody>();
+        private readonly List<VoxelBody> releases = new List<VoxelBody>();
+        private readonly List<CarveCommand> commands = new List<CarveCommand>();
+        private readonly Stack<Mesh> meshPool = new Stack<Mesh>();
+        private readonly List<Mesh> ownedMeshes = new List<Mesh>();
+
+        private NativeArray<VertexAttributeDescriptor> layout;
+
+        private readonly List<ChunkRef> batch = new List<ChunkRef>();
+        private readonly List<Mesh> batchMeshes = new List<Mesh>();
+        private NativeArray<sbyte> blocks;
+        private NativeArray<byte> blockMaterials;
+        private NativeArray<int> cellVertices;
+        private NativeArray<VoxelVertex> vertices;
+        private NativeArray<ushort> indices;
+        private NativeArray<MeshRequest> requests;
+        private NativeArray<MeshResult> results;
+        private int meshSlots;
+        private Mesh.MeshDataArray meshData;
+        private JobHandle meshHandle;
+        private bool meshInFlight;
+
+        private readonly List<VoxelChunk> pendingBakeChunks = new List<VoxelChunk>();
+        private readonly List<Mesh> pendingBakeMeshes = new List<Mesh>();
+        private readonly List<VoxelChunk> bakingChunks = new List<VoxelChunk>();
+        private readonly List<Mesh> bakingMeshes = new List<Mesh>();
+        private NativeArray<EntityId> bakeIds;
+        private JobHandle bakeHandle;
+        private bool bakeInFlight;
+
+        private NativeArray<ushort> labels;
+        private NativeArray<int> queue;
+        private NativeArray<int> islandVoxels;
+        private NativeArray<int> parent;
+        private NativeArray<int> unionSize;
+        private NativeArray<int> frontier;
+        private NativeArray<IslandInfo> islands;
+        private NativeArray<int3> islandSummary;
+        private VoxelBody islandBody;
+        private int islandVersion;
+        private JobHandle islandHandle;
+        private bool islandInFlight;
+
+        // Pieces a search found are moved out of their body by a job; the body and its new pieces wait until it is done.
+        private readonly List<VoxelBody> extractionPieces = new List<VoxelBody>();
+        private NativeArray<ExtractTarget> extractTargets;
+        private NativeArray<float> extractVolumes;
+        private NativeArray<float4> extractMasses;
+        private VoxelBody extractionBody;
+        private int extractionVersion;
+        private int extractionCount;
+        private JobHandle extractionHandle;
+        private bool extractionInFlight;
+
+        private NativeArray<CarveRequest> carveRequests;
+        private NativeArray<float> carveRemoved;
+        private NativeArray<int3> carveChanged;
+
+        private readonly HashSet<Mesh> meshesInBake = new HashSet<Mesh>();
+        private readonly List<Mesh> releaseAfterBake = new List<Mesh>();
+        private readonly List<VoxelChunk> readyColliderChunks = new List<VoxelChunk>();
+        private readonly List<Mesh> readyColliderMeshes = new List<Mesh>();
+        private readonly List<ChunkRef> deferred = new List<ChunkRef>();
+
+        private float nextCull;
+        private int carveCursor;
+        private bool overflowReported;
+        private bool truncationReported;
+
+        public VoxelScheduler(DestructionSystem system)
+        {
+            this.system = system;
+            layout = VoxelMeshJob.CreateLayout(Allocator.Persistent);
+            islandSummary = new NativeArray<int3>(1, Allocator.Persistent);
+            islands = new NativeArray<IslandInfo>(IslandCapacity, Allocator.Persistent);
+            parent = new NativeArray<int>(IslandBuffers.MaxSeeds + 1, Allocator.Persistent);
+            unionSize = new NativeArray<int>(IslandBuffers.MaxSeeds + 1, Allocator.Persistent);
+            frontier = new NativeArray<int>(IslandBuffers.MaxSeeds + 1, Allocator.Persistent);
+            extractTargets = new NativeArray<ExtractTarget>(IslandCapacity, Allocator.Persistent);
+            extractVolumes = new NativeArray<float>(IslandCapacity * VoxelEncoding.MaterialSlots, Allocator.Persistent);
+            extractMasses = new NativeArray<float4>(IslandCapacity, Allocator.Persistent);
+        }
+
+        public IReadOnlyList<VoxelBody> Bodies => bodies;
+        public int QueuedChunks => urgent.Count + background.Count;
+        public int MeshedLastFrame { get; private set; }
+        public int PieceSearches { get; private set; }
+        public int LastSearchVisited { get; private set; }
+
+        /// <summary>The stages of a frame's work, as timed by <see cref="StageMilliseconds"/>.</summary>
+        public static readonly string[] StageNames = { "Colliders", "Meshes", "Pieces", "Cuts", "Scheduling" };
+
+        private const int StageColliders = 0;
+        private const int StageMeshes = 1;
+        private const int StagePieces = 2;
+        private const int StageCuts = 3;
+        private const int StageScheduling = 4;
+
+        private static readonly ProfilerMarker CollidersMarker = new ProfilerMarker("DeadCargo.Voxels.Colliders");
+        private static readonly ProfilerMarker MeshesMarker = new ProfilerMarker("DeadCargo.Voxels.ApplyMeshes");
+        private static readonly ProfilerMarker PiecesMarker = new ProfilerMarker("DeadCargo.Voxels.Pieces");
+        private static readonly ProfilerMarker CutsMarker = new ProfilerMarker("DeadCargo.Voxels.Cuts");
+        private static readonly ProfilerMarker ScheduleMarker = new ProfilerMarker("DeadCargo.Voxels.Schedule");
+
+        private readonly float[] stageMilliseconds = new float[5];
+        private readonly float[] peakStageMilliseconds = new float[5];
+
+        /// <summary>Memory held by the shared job buffers, in bytes.</summary>
+        public long ScratchBytes =>
+            (long)meshSlots * (SurfaceNets.BlockLength * 2L + SurfaceNets.CellMapLength * 4L + ChunkVertexCapacity * 20L + ChunkIndexCapacity * 2L) +
+            (labels.IsCreated ? labels.Length * 10L : 0L);
+
+        public void Register(VoxelBody body)
+        {
+            if (!bodies.Contains(body))
+                bodies.Add(body);
+        }
+
+        public void Unregister(VoxelBody body)
+        {
+            bodies.Remove(body);
+        }
+
+        /// <summary>Finishes every running job. Results are still applied by the next <see cref="Tick"/>.</summary>
+        public void CompleteJobs()
+        {
+            meshHandle.Complete();
+            bakeHandle.Complete();
+            islandHandle.Complete();
+            extractionHandle.Complete();
+            foreach (VoxelBody body in bodies)
+            {
+                if (body != null)
+                    body.Generation.Complete();
+            }
+        }
+
+        public void Tick()
+        {
+            long time = Stopwatch.GetTimestamp();
+            using (CollidersMarker.Auto())
+                CompleteBakes();
+            Record(StageColliders, ref time);
+
+            using (MeshesMarker.Auto())
+                CompleteMeshes();
+            Record(StageMeshes, ref time);
+
+            using (PiecesMarker.Auto())
+            {
+                CompleteGeneration();
+                FinishExtraction();
+                StartExtraction();
+                ProcessReleases();
+            }
+
+            Record(StagePieces, ref time);
+
+            using (CutsMarker.Auto())
+                ProcessCarves();
+            Record(StageCuts, ref time);
+
+            using (ScheduleMarker.Auto())
+            {
+                CullPieces();
+                ScheduleIslands();
+                ScheduleMeshes();
+                ScheduleBakes();
+                JobHandle.ScheduleBatchedJobs();
+            }
+
+            Record(StageScheduling, ref time);
+        }
+
+        /// <summary>Main-thread time of a stage in the last frame, in milliseconds. See <see cref="StageNames"/>.</summary>
+        public float StageMilliseconds(int stage)
+        {
+            return stageMilliseconds[stage];
+        }
+
+        /// <summary>Worst main-thread time of a stage since <see cref="ResetPeaks"/>, in milliseconds.</summary>
+        public float PeakStageMilliseconds(int stage)
+        {
+            return peakStageMilliseconds[stage];
+        }
+
+        public void ResetPeaks()
+        {
+            Array.Clear(peakStageMilliseconds, 0, peakStageMilliseconds.Length);
+        }
+
+        private void Record(int stage, ref long time)
+        {
+            long now = Stopwatch.GetTimestamp();
+            float milliseconds = (float)((now - time) * 1000.0 / Stopwatch.Frequency);
+            stageMilliseconds[stage] = milliseconds;
+            peakStageMilliseconds[stage] = Mathf.Max(peakStageMilliseconds[stage], milliseconds);
+            time = now;
+        }
+
+        /// <summary>Moves free pieces along their drift. Runs in the physics step.</summary>
+        public void MoveFreeBodies(float deltaTime)
+        {
+            foreach (VoxelBody body in bodies)
+            {
+                if (body == null || !body.IsFree || !body.HasBeenMeshed || body.ReleaseRequested || body.PhysicsBody == null)
+                    continue;
+
+                Rigidbody rigidbody = body.PhysicsBody;
+                rigidbody.MovePosition(rigidbody.position + body.Velocity * deltaTime);
+
+                float spin = body.Spin.magnitude;
+                if (spin > 1e-3f)
+                    rigidbody.MoveRotation(Quaternion.AngleAxis(spin * deltaTime, body.Spin / spin) * rigidbody.rotation);
+            }
+        }
+
+        /// <summary>Starts building an asteroid in a body. Its chunks are meshed once the rock is filled in.</summary>
+        public void Generate(VoxelBody body, AsteroidDefinition definition, float diameter, uint seed)
+        {
+            CompleteJobs();
+            ClearChunks(body);
+
+            AsteroidShape shape = definition.BuildShape(diameter, seed);
+            float voxelSize = definition.VoxelSize;
+            int maxHalf = (VoxelBody.MaxGridSize - 1) / 2;
+            int half = (int)math.ceil(shape.MaxRadius / voxelSize) + VoxelBody.Margin;
+            if (half > maxHalf)
+            {
+                voxelSize = shape.MaxRadius / (maxHalf - VoxelBody.Margin);
+                half = maxHalf;
+            }
+
+            var size = new int3(half * 2 + 1);
+            body.Allocate(definition, size, voxelSize, new float3(-half * voxelSize));
+            body.SliceVolume = new NativeArray<float>(size.z, Allocator.Persistent);
+
+            var job = new VoxelFillJob
+            {
+                Density = body.Density,
+                Material = body.Material,
+                Size = size,
+                Shape = shape,
+                VoxelSize = voxelSize,
+                Origin = body.GridOrigin,
+                SliceVolume = body.SliceVolume
+            };
+
+            body.Generation = job.Schedule(size.z, 1);
+            body.IsGenerating = true;
+            JobHandle.ScheduleBatchedJobs();
+
+            // Searching this rock for pieces needs buffers its size; make them now, while a new rock is expected to
+            // cost something, rather than at its first break.
+            if (!islandInFlight && !extractionInFlight)
+                EnsureIslandCapacity(body.Density.Length);
+        }
+
+        public void QueueRelease(VoxelBody body)
+        {
+            if (body == null || body.ReleaseRequested)
+                return;
+
+            body.ReleaseRequested = true;
+            body.SetVisible(false);
+            releases.Add(body);
+        }
+
+        public void Dispose()
+        {
+            CompleteJobs();
+            if (meshInFlight)
+            {
+                meshData.Dispose();
+                meshInFlight = false;
+            }
+
+            DisposeArray(ref layout);
+            DisposeArray(ref blocks);
+            DisposeArray(ref blockMaterials);
+            DisposeArray(ref cellVertices);
+            DisposeArray(ref vertices);
+            DisposeArray(ref indices);
+            DisposeArray(ref requests);
+            DisposeArray(ref results);
+            DisposeArray(ref bakeIds);
+            DisposeArray(ref labels);
+            DisposeArray(ref queue);
+            DisposeArray(ref islandVoxels);
+            DisposeArray(ref parent);
+            DisposeArray(ref unionSize);
+            DisposeArray(ref frontier);
+            DisposeArray(ref islands);
+            DisposeArray(ref islandSummary);
+            DisposeArray(ref carveRequests);
+            DisposeArray(ref carveRemoved);
+            DisposeArray(ref carveChanged);
+            DisposeArray(ref extractTargets);
+            DisposeArray(ref extractVolumes);
+            DisposeArray(ref extractMasses);
+
+            foreach (Mesh mesh in ownedMeshes)
+            {
+                if (mesh != null)
+                    UnityEngine.Object.Destroy(mesh);
+            }
+
+            ownedMeshes.Clear();
+            meshPool.Clear();
+        }
+
+        // Cooked colliders go live, a budget per frame; the rest wait a frame, still colliding with their previous shape.
+        // Cooking that has not finished is picked up next frame: the main thread never waits for it.
+        private void CompleteBakes()
+        {
+            if (bakeInFlight && bakeHandle.IsCompleted)
+            {
+                bakeHandle.Complete();
+                bakeInFlight = false;
+                readyColliderChunks.AddRange(bakingChunks);
+                readyColliderMeshes.AddRange(bakingMeshes);
+                bakingChunks.Clear();
+                bakingMeshes.Clear();
+                meshesInBake.Clear();
+
+                foreach (Mesh mesh in releaseAfterBake)
+                    ReleaseMesh(mesh);
+                releaseAfterBake.Clear();
+            }
+
+            int assigned = 0;
+            int i = 0;
+            for (; i < readyColliderChunks.Count && assigned < system.CollidersPerFrame; ++i)
+            {
+                VoxelChunk chunk = readyColliderChunks[i];
+                Mesh mesh = readyColliderMeshes[i];
+                if (!chunk.IsAlive || chunk.RenderMesh != mesh)
+                    continue;
+
+                if (chunk.ColliderMesh != null && chunk.ColliderMesh != mesh)
+                    ReleaseMesh(chunk.ColliderMesh);
+
+                // Clearing first makes the collider pick up the new shape from the cooked data.
+                chunk.ColliderMesh = mesh;
+                chunk.Collider.sharedMesh = null;
+                chunk.Collider.sharedMesh = mesh;
+                chunk.Collider.enabled = true;
+                assigned++;
+            }
+
+            readyColliderChunks.RemoveRange(0, i);
+            readyColliderMeshes.RemoveRange(0, i);
+        }
+
+        // A batch still meshing is applied next frame: the main thread never waits for it.
+        private void CompleteMeshes()
+        {
+            MeshedLastFrame = 0;
+            if (!meshInFlight || !meshHandle.IsCompleted)
+                return;
+
+            meshHandle.Complete();
+            meshInFlight = false;
+            Mesh.ApplyAndDisposeWritableMeshData(meshData, batchMeshes, VoxelMeshJob.UpdateFlags);
+            MeshedLastFrame = batch.Count;
+            foreach (ChunkRef entry in batch)
+            {
+                if (entry.Body != null)
+                    entry.Body.InMeshBatch = false;
+            }
+
+            snapshot.Clear();
+            for (int i = 0; i < batch.Count; ++i)
+            {
+                ChunkRef entry = batch[i];
+                Mesh mesh = batchMeshes[i];
+                if (!entry.IsCurrent)
+                {
+                    ReleaseMesh(mesh);
+                    continue;
+                }
+
+                VoxelBody body = entry.Body;
+                body.PendingMeshes--;
+                MeshResult result = results[i];
+                if (result.Overflow && !overflowReported)
+                {
+                    overflowReported = true;
+                    Debug.LogWarning($"A chunk of '{body.name}' needed more than {ChunkVertexCapacity} vertices and was cut short. " +
+                                     "Use larger voxels for this asteroid type.", body);
+                }
+
+                ApplyChunk(body, entry.Index, mesh, result);
+                if (!snapshot.Contains(body))
+                    snapshot.Add(body);
+            }
+
+            batch.Clear();
+            batchMeshes.Clear();
+
+            foreach (VoxelBody body in snapshot)
+            {
+                if (body.PendingMeshes > 0 || body.IsGenerating || body.IsBusy)
+                    continue;
+
+                body.HasBeenMeshed = true;
+                if (body.SurfaceChunks == 0 && body.PendingCarves.Count == 0)
+                {
+                    body.RaiseDepleted();
+                    QueueRelease(body);
+                }
+            }
+        }
+
+        private void ApplyChunk(VoxelBody body, int index, Mesh mesh, in MeshResult result)
+        {
+            if (result.IndexCount == 0)
+            {
+                ReleaseMesh(mesh);
+                ClearChunk(body, index);
+                return;
+            }
+
+            VoxelChunk chunk = body.GetOrCreateChunk(index);
+            mesh.bounds = new Bounds((result.BoundsMin + result.BoundsMax) * 0.5f, result.BoundsMax - result.BoundsMin);
+
+            Mesh old = chunk.RenderMesh;
+            chunk.RenderMesh = mesh;
+            chunk.Filter.sharedMesh = mesh;
+            chunk.Renderer.enabled = true;
+            if (old != null && old != chunk.ColliderMesh)
+                ReleaseMesh(old);
+
+            int triangles = result.IndexCount / 3;
+            if (chunk.Triangles == 0)
+                body.SurfaceChunks++;
+
+            body.TriangleCount += triangles - chunk.Triangles;
+            chunk.Triangles = triangles;
+
+            pendingBakeChunks.Add(chunk);
+            pendingBakeMeshes.Add(mesh);
+        }
+
+        private void ClearChunk(VoxelBody body, int index)
+        {
+            VoxelChunk chunk = body.Chunks[index];
+            if (chunk == null)
+                return;
+
+            if (chunk.Triangles > 0)
+                body.SurfaceChunks--;
+
+            body.TriangleCount -= chunk.Triangles;
+            chunk.Triangles = 0;
+
+            if (chunk.IsAlive)
+            {
+                chunk.Filter.sharedMesh = null;
+                chunk.Renderer.enabled = false;
+                chunk.Collider.sharedMesh = null;
+                chunk.Collider.enabled = false;
+            }
+
+            if (chunk.ColliderMesh != null && chunk.ColliderMesh != chunk.RenderMesh)
+                ReleaseMesh(chunk.ColliderMesh);
+            if (chunk.RenderMesh != null)
+                ReleaseMesh(chunk.RenderMesh);
+
+            chunk.RenderMesh = null;
+            chunk.ColliderMesh = null;
+            body.RetireChunk(index);
+        }
+
+        private void ClearChunks(VoxelBody body)
+        {
+            for (int i = 0; i < body.Chunks.Length; ++i)
+                ClearChunk(body, i);
+        }
+
+        private void CompleteGeneration()
+        {
+            for (int b = 0; b < bodies.Count; ++b)
+            {
+                VoxelBody body = bodies[b];
+                if (body == null || !body.IsGenerating || !body.Generation.IsCompleted)
+                    continue;
+
+                body.Generation.Complete();
+                body.IsGenerating = false;
+
+                float volume = 0f;
+                for (int z = 0; z < body.SliceVolume.Length; ++z)
+                    volume += body.SliceVolume[z];
+                body.SliceVolume.Dispose();
+
+                body.InitialVolume = body.Volume = volume * Cube(body.VoxelSize);
+                for (int i = 0; i < body.Chunks.Length; ++i)
+                    Enqueue(body, i, false);
+            }
+        }
+
+        // A finished search hands its pieces to a job that moves them out of the body. Nothing waits: a search still
+        // running is picked up next frame, and the body takes no cuts until its pieces are out.
+        private void StartExtraction()
+        {
+            // Moving pieces out writes the grid, so it also waits for any meshing of the body to finish.
+            if (!islandInFlight || !islandHandle.IsCompleted || extractionInFlight || islandBody != null && islandBody.InMeshBatch)
+                return;
+
+            islandHandle.Complete();
+            islandInFlight = false;
+            VoxelBody body = islandBody;
+            islandBody = null;
+            if (body == null || !body.IsAllocated || body.ReleaseRequested || body.Version != islandVersion)
+                return;
+
+            int3 summary = islandSummary[0];
+            PieceSearches++;
+            LastSearchVisited = summary.y;
+            if (summary.z != 0 && !truncationReported)
+            {
+                truncationReported = true;
+                Debug.LogWarning($"A cut on '{body.name}' touched more separate surfaces than one search can follow; a piece may not " +
+                                 "have broken away. Smaller cuts avoid this.", body);
+            }
+
+            if (summary.x == 0)
+                return;
+
+            const int margin = VoxelBody.Margin;
+            extractionPieces.Clear();
+            for (int i = 0; i < summary.x; ++i)
+            {
+                IslandInfo island = islands[i];
+                if (island.IsOverflow || island.Count < system.MinPieceVoxels)
+                {
+                    extractTargets[i] = ExtractTarget.Crumble;
+                    extractionPieces.Add(null);
+                    continue;
+                }
+
+                int3 size = island.Max - island.Min + 1 + margin * 2;
+                VoxelBody piece = system.AcquirePiece();
+                piece.Allocate(body.Definition, size, body.VoxelSize, body.GridOrigin + (float3)(island.Min - margin) * body.VoxelSize);
+                piece.IsBusy = true;
+                extractTargets[i] = ExtractTarget.Into(piece.Density, piece.Material, size, new int3(margin));
+                extractionPieces.Add(piece);
+            }
+
+            extractionHandle = new VoxelExtractJob
+            {
+                SourceDensity = body.Density,
+                SourceMaterial = body.Material,
+                SourceSize = body.GridSize,
+                Voxels = islandVoxels,
+                Islands = islands,
+                Targets = extractTargets,
+                Count = summary.x,
+                MaterialVolume = extractVolumes,
+                Mass = extractMasses
+            }.Schedule();
+
+            body.IsBusy = true;
+            body.Extraction = extractionHandle;
+            foreach (VoxelBody piece in extractionPieces)
+            {
+                if (piece != null)
+                    piece.Extraction = extractionHandle;
+            }
+
+            extractionBody = body;
+            extractionVersion = body.Version;
+            extractionCount = summary.x;
+            extractionInFlight = true;
+        }
+
+        private void FinishExtraction()
+        {
+            if (!extractionInFlight || !extractionHandle.IsCompleted)
+                return;
+
+            extractionHandle.Complete();
+            extractionInFlight = false;
+            VoxelBody body = extractionBody;
+            extractionBody = null;
+            bool valid = body != null && body.IsAllocated && !body.ReleaseRequested && body.Version == extractionVersion;
+            if (body != null)
+                body.IsBusy = false;
+
+            for (int i = 0; i < extractionCount; ++i)
+            {
+                VoxelBody piece = extractionPieces[i];
+                if (piece != null)
+                    piece.IsBusy = false;
+
+                if (!valid)
+                {
+                    if (piece != null)
+                        QueueRelease(piece);
+                    continue;
+                }
+
+                if (piece == null)
+                    FinishCrumb(body, i);
+                else if (!piece.ReleaseRequested)
+                    FinishPiece(body, piece, i);
+            }
+
+            extractionPieces.Clear();
+            EnforcePieceBudget();
+        }
+
+        private void FinishCrumb(VoxelBody body, int index)
+        {
+            IslandInfo island = islands[index];
+            float removed = 0f;
+            int dominant = 0;
+            int o = index * VoxelEncoding.MaterialSlots;
+            for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
+            {
+                removed += extractVolumes[o + m];
+                if (extractVolumes[o + m] > extractVolumes[o + dominant])
+                    dominant = m;
+            }
+
+            removed *= Cube(body.VoxelSize);
+            body.Volume -= removed;
+            Vector3 centre = body.GridToWorld((float3)(island.Min + island.Max) * 0.5f);
+            Vector3 outward = (centre - body.transform.position).normalized;
+            float extent = math.cmax(island.Max - island.Min + 1) * body.VoxelSize * 0.5f;
+            system.Debris.Burst(centre, outward, ChipColor(body.Definition, dominant), removed, extent);
+            MarkDirty(body, island.Min, island.Max);
+        }
+
+        private void FinishPiece(VoxelBody body, VoxelBody piece, int index)
+        {
+            IslandInfo island = islands[index];
+            AsteroidDefinition definition = body.Definition;
+            float3 originInBody = piece.GridOrigin;
+
+            // The piece pivots on its own centre of mass, so it tumbles the way a real rock would.
+            float4 measured = extractMasses[index];
+            float pieceVolume = measured.w * Cube(body.VoxelSize);
+            float3 centreInBody = originInBody + measured.xyz * body.VoxelSize;
+            piece.GridOrigin = originInBody - centreInBody;
+            piece.SetTextureOffset(body.TextureOffset + centreInBody);
+            Vector3 worldCentre = body.transform.TransformPoint(centreInBody);
+            piece.transform.SetPositionAndRotation(worldCentre, body.transform.rotation);
+            piece.InitialVolume = piece.Volume = pieceVolume;
+            body.Volume -= pieceVolume;
+
+            Vector3 inherited = Vector3.zero;
+            if (body.IsFree)
+                inherited = body.Velocity + Vector3.Cross(body.Spin * Mathf.Deg2Rad, worldCentre - body.transform.position);
+
+            Vector3 away = worldCentre - body.LastCutPoint;
+            if (away.sqrMagnitude < 1e-4f)
+                away = worldCentre - body.transform.position;
+            away = away.sqrMagnitude > 1e-6f ? away.normalized : UnityEngine.Random.onUnitSphere;
+
+            float reference = Mathf.Max(body.InitialVolume * ReferencePieceShare, 1f);
+            float sizeFactor = Mathf.Clamp(Mathf.Pow(reference / Mathf.Max(pieceVolume, 1e-3f), 1f / 3f), 0.5f, 3f);
+            float speed = (definition != null ? definition.SplitSpeed : 2f) * sizeFactor * UnityEngine.Random.Range(0.8f, 1.2f);
+            float spin = (definition != null ? definition.SplitSpin : 10f) * sizeFactor * UnityEngine.Random.Range(0.6f, 1.2f);
+            piece.MakeFree(inherited + away * speed, UnityEngine.Random.onUnitSphere * spin);
+
+            for (int i = 0; i < piece.Chunks.Length; ++i)
+                Enqueue(piece, i, true);
+            MarkDirty(body, island.Min, island.Max);
+
+            if (definition != null && definition.SplitEffect != null)
+                system.Effects.Play(definition.SplitEffect, body.LastCutPoint, Quaternion.LookRotation(away));
+
+            body.RaiseSplit(piece);
+            system.RaiseBodySplit(body, piece);
+        }
+
+        private void EnforcePieceBudget()
+        {
+            int free = 0;
+            foreach (VoxelBody body in bodies)
+            {
+                if (body != null && body.IsFree && !body.ReleaseRequested)
+                    free++;
+            }
+
+            while (free > system.MaxFreePieces)
+            {
+                VoxelBody smallest = null;
+                foreach (VoxelBody body in bodies)
+                {
+                    if (body != null && body.IsFree && !body.ReleaseRequested && (smallest == null || body.Volume < smallest.Volume))
+                        smallest = body;
+                }
+
+                if (smallest == null)
+                    break;
+
+                Crumble(smallest);
+                free--;
+            }
+        }
+
+        /// <summary>Turns a body into a burst of chips and releases it.</summary>
+        public void Crumble(VoxelBody body)
+        {
+            float radius = Mathf.Max(1f, Mathf.Pow(body.Volume * 0.75f / Mathf.PI, 1f / 3f));
+            system.Debris.Burst(body.transform.position, body.LinearVelocity.sqrMagnitude > 0.01f ? body.LinearVelocity.normalized : Vector3.up,
+                ChipColor(body.Definition, 0), body.Volume, radius);
+            QueueRelease(body);
+        }
+
+        private void ProcessReleases()
+        {
+            if (releases.Count == 0)
+                return;
+
+            foreach (VoxelBody body in releases)
+            {
+                if (body == null)
+                    continue;
+
+                body.Generation.Complete();
+                body.Extraction.Complete();
+                body.IsBusy = false;
+                if (islandInFlight && body == islandBody)
+                    islandHandle.Complete();
+                if (body.InMeshBatch)
+                    meshHandle.Complete();
+
+                ClearChunks(body);
+                body.DisposeGrid();
+                body.Version++;
+                body.PendingCarves.Clear();
+                body.IslandCheckQueued = false;
+                system.RetireBody(body);
+            }
+
+            releases.Clear();
+        }
+
+        // Applies queued cuts, oldest first, up to a budget per frame. Rocks take turns at the front of the line, so
+        // under heavy fire none waits behind the others for long.
+        private void ProcessCarves()
+        {
+            snapshot.Clear();
+            snapshot.AddRange(bodies);
+            int budget = system.CutsPerFrame;
+            int count = snapshot.Count;
+            carveCursor = count > 0 ? (carveCursor + 1) % count : 0;
+
+            for (int n = 0; n < count && budget > 0; ++n)
+            {
+                VoxelBody body = snapshot[(carveCursor + n) % count];
+                if (body == null || body.PendingCarves.Count == 0)
+                    continue;
+
+                if (body.ReleaseRequested || !body.IsAllocated)
+                {
+                    body.PendingCarves.Clear();
+                    continue;
+                }
+
+                // A body being meshed, searched or emptied of pieces is read by a job; its cuts wait a frame.
+                if (body.IsGenerating || body.IsBusy || body.InMeshBatch || islandInFlight && body == islandBody)
+                    continue;
+
+                int take = Mathf.Min(body.PendingCarves.Count, budget);
+                commands.Clear();
+                for (int i = 0; i < take; ++i)
+                    commands.Add(body.PendingCarves[i]);
+
+                body.PendingCarves.RemoveRange(0, take);
+                budget -= take;
+                RunCarves(body);
+            }
+        }
+
+        private void RunCarves(VoxelBody body)
+        {
+            int count = commands.Count;
+            EnsureCarveCapacity(count);
+            for (int i = 0; i < count; ++i)
+                carveRequests[i] = commands[i].Request;
+
+            new VoxelCarveJob
+            {
+                Density = body.Density,
+                Material = body.Material,
+                Size = body.GridSize,
+                Requests = carveRequests,
+                Count = count,
+                Removed = carveRemoved,
+                Changed = carveChanged
+            }.Run();
+
+            float voxelVolume = Cube(body.VoxelSize);
+            for (int r = 0; r < count; ++r)
+            {
+                CarveCommand command = commands[r];
+                int3 min = carveChanged[r * 2];
+                int3 max = carveChanged[r * 2 + 1];
+                if (!math.all(min <= max))
+                    continue;
+
+                int o = r * VoxelEncoding.MaterialSlots;
+                var yield = new VoxelYield(body, command.Kind, command.Point,
+                    carveRemoved[o] * voxelVolume, carveRemoved[o + 1] * voxelVolume, carveRemoved[o + 2] * voxelVolume,
+                    carveRemoved[o + 3] * voxelVolume, carveRemoved[o + 4] * voxelVolume, carveRemoved[o + 5] * voxelVolume,
+                    carveRemoved[o + 6] * voxelVolume, carveRemoved[o + 7] * voxelVolume);
+
+                MarkDirty(body, min, max);
+                body.LastCutPoint = command.Point;
+                if (body.HasSplitRegion)
+                {
+                    body.SplitRegionMin = math.min(body.SplitRegionMin, min - 1);
+                    body.SplitRegionMax = math.max(body.SplitRegionMax, max + 1);
+                }
+                else
+                {
+                    body.SplitRegionMin = min - 1;
+                    body.SplitRegionMax = max + 1;
+                    body.HasSplitRegion = true;
+                }
+
+                float total = yield.Total;
+                if (total <= 0f)
+                    continue;
+
+                body.Volume -= total;
+                system.Debris.Burst(command.Point, command.Normal, ChipColor(body.Definition, yield.DominantSlot), total, command.Radius);
+                body.RaiseMaterialRemoved(yield);
+                system.RecordYield(yield);
+            }
+
+            if (body.HasSplitRegion && !body.IslandCheckQueued)
+            {
+                body.IslandCheckQueued = true;
+                islandQueue.Add(body);
+            }
+        }
+
+        private void CullPieces()
+        {
+            if (Time.time < nextCull)
+                return;
+
+            nextCull = Time.time + CullInterval;
+            Camera camera = Camera.main;
+            if (camera == null)
+                return;
+
+            float rangeSq = system.PieceRange * system.PieceRange;
+            Vector3 view = camera.transform.position;
+            foreach (VoxelBody body in bodies)
+            {
+                if (body != null && body.IsFree && !body.ReleaseRequested && (body.transform.position - view).sqrMagnitude > rangeSq)
+                    QueueRelease(body);
+            }
+        }
+
+        private void ScheduleIslands()
+        {
+            // One search at a time, and none while pieces are moving out: both share the search buffers.
+            if (islandInFlight || extractionInFlight)
+                return;
+
+            VoxelBody body = null;
+            while (body == null && islandQueue.Count > 0)
+            {
+                VoxelBody next = islandQueue[0];
+                islandQueue.RemoveAt(0);
+                if (next == null)
+                    continue;
+
+                next.IslandCheckQueued = false;
+                if (next.IsAllocated && !next.ReleaseRequested && !next.IsGenerating && next.HasSplitRegion)
+                    body = next;
+            }
+
+            if (body == null)
+                return;
+
+            EnsureIslandCapacity(body.Density.Length);
+            var job = new VoxelIslandJob
+            {
+                Density = body.Density,
+                Material = body.Material,
+                Size = body.GridSize,
+                RegionMin = body.SplitRegionMin,
+                RegionMax = body.SplitRegionMax,
+                Labels = labels,
+                Queue = queue,
+                Parent = parent,
+                UnionSize = unionSize,
+                Frontier = frontier,
+                Voxels = islandVoxels,
+                Islands = islands,
+                Summary = islandSummary
+            };
+
+            body.HasSplitRegion = false;
+            islandBody = body;
+            islandVersion = body.Version;
+            islandHandle = job.Schedule();
+            islandInFlight = true;
+        }
+
+        private void ScheduleMeshes()
+        {
+            // One batch at a time: it owns the shared scratch buffers until it is applied.
+            if (meshInFlight)
+                return;
+
+            batch.Clear();
+            Take(urgent, QueuedUrgent, system.UrgentChunksPerFrame);
+            if (batch.Count < system.ChunksPerFrame)
+                Take(background, QueuedBackground, system.ChunksPerFrame - batch.Count);
+
+            if (batch.Count == 0)
+                return;
+
+            EnsureMeshSlots(batch.Count);
+            meshData = Mesh.AllocateWritableMeshData(batch.Count);
+            for (int i = 0; i < batch.Count; ++i)
+            {
+                VoxelBody body = batch[i].Body;
+                requests[i] = MeshRequest.Create(body.Density, body.Material, body.GridSize, body.ChunkMin(batch[i].Index),
+                    body.VoxelSize, body.GridOrigin, body.Palette);
+                body.InMeshBatch = true;
+                batchMeshes.Add(AcquireMesh());
+            }
+
+            var job = new VoxelMeshJob
+            {
+                Requests = requests,
+                Layout = layout,
+                Blocks = blocks,
+                BlockMaterials = blockMaterials,
+                CellVertices = cellVertices,
+                Vertices = vertices,
+                Indices = indices,
+                VertexCapacity = ChunkVertexCapacity,
+                IndexCapacity = ChunkIndexCapacity,
+                Results = results,
+                Output = meshData
+            };
+
+            meshHandle = job.Schedule(batch.Count, 1);
+            meshInFlight = true;
+        }
+
+        // Moves up to max current entries in the given state from the queue into the batch. Stale entries are dropped;
+        // entries of a body whose pieces are moving out stay queued for a later frame.
+        private void Take(List<ChunkRef> source, byte state, int max)
+        {
+            int taken = 0;
+            int i = 0;
+            for (; i < source.Count && taken < max; ++i)
+            {
+                ChunkRef entry = source[i];
+                if (!entry.IsCurrent || entry.Body.IsGenerating || entry.Body.ChunkQueue[entry.Index] != state)
+                    continue;
+
+                if (entry.Body.IsBusy)
+                {
+                    deferred.Add(entry);
+                    continue;
+                }
+
+                entry.Body.ChunkQueue[entry.Index] = NotQueued;
+                batch.Add(entry);
+                taken++;
+            }
+
+            source.RemoveRange(0, i);
+            if (deferred.Count > 0)
+            {
+                source.InsertRange(0, deferred);
+                deferred.Clear();
+            }
+        }
+
+        private void ScheduleBakes()
+        {
+            // One cooking batch at a time; new shapes wait for the next.
+            if (bakeInFlight)
+                return;
+
+            for (int i = 0; i < pendingBakeChunks.Count; ++i)
+            {
+                VoxelChunk chunk = pendingBakeChunks[i];
+                if (chunk.IsAlive && chunk.RenderMesh == pendingBakeMeshes[i])
+                {
+                    bakingChunks.Add(chunk);
+                    bakingMeshes.Add(pendingBakeMeshes[i]);
+                }
+            }
+
+            pendingBakeChunks.Clear();
+            pendingBakeMeshes.Clear();
+            if (bakingChunks.Count == 0)
+                return;
+
+            EnsureCapacity(ref bakeIds, bakingChunks.Count, false);
+            for (int i = 0; i < bakingMeshes.Count; ++i)
+            {
+                bakeIds[i] = bakingMeshes[i].GetEntityId();
+                meshesInBake.Add(bakingMeshes[i]);
+            }
+
+            bakeHandle = new ColliderBakeJob { MeshIds = bakeIds }.Schedule(bakingMeshes.Count, 1);
+            bakeInFlight = true;
+        }
+
+        /// <summary>Queues every chunk whose mesh reads any of the changed samples.</summary>
+        private void MarkDirty(VoxelBody body, int3 changedMin, int3 changedMax)
+        {
+            // A chunk reads two samples beyond its own on every side.
+            int3 lo = math.max(FloorDiv(changedMin - 2, SurfaceNets.ChunkSize), 0);
+            int3 hi = math.min(FloorDiv(changedMax + 2, SurfaceNets.ChunkSize), body.ChunkCount - 1);
+            for (int z = lo.z; z <= hi.z; ++z)
+            {
+                for (int y = lo.y; y <= hi.y; ++y)
+                {
+                    for (int x = lo.x; x <= hi.x; ++x)
+                        Enqueue(body, body.ChunkIndex(new int3(x, y, z)), true);
+                }
+            }
+        }
+
+        private void Enqueue(VoxelBody body, int index, bool isUrgent)
+        {
+            byte state = body.ChunkQueue[index];
+            if (state == QueuedUrgent || state == QueuedBackground && !isUrgent)
+                return;
+
+            if (state == NotQueued)
+                body.PendingMeshes++;
+
+            // A background entry promoted to urgent leaves a stale copy behind, which Take skips.
+            body.ChunkQueue[index] = isUrgent ? QueuedUrgent : QueuedBackground;
+            (isUrgent ? urgent : background).Add(new ChunkRef(body, index));
+        }
+
+        private Mesh AcquireMesh()
+        {
+            if (meshPool.Count > 0)
+                return meshPool.Pop();
+
+            var mesh = new Mesh { name = "Voxel Chunk" };
+            mesh.MarkDynamic();
+            ownedMeshes.Add(mesh);
+            return mesh;
+        }
+
+        // A mesh still being cooked is returned to the pool only once its cooking job is done.
+        private void ReleaseMesh(Mesh mesh)
+        {
+            if (mesh == null)
+                return;
+
+            if (bakeInFlight && meshesInBake.Contains(mesh))
+            {
+                releaseAfterBake.Add(mesh);
+                return;
+            }
+
+            mesh.Clear();
+            meshPool.Push(mesh);
+        }
+
+        private void EnsureMeshSlots(int count)
+        {
+            if (count <= meshSlots)
+                return;
+
+            meshSlots = Mathf.Max(count, system.ChunksPerFrame);
+            Reallocate(ref blocks, meshSlots * SurfaceNets.BlockLength);
+            Reallocate(ref blockMaterials, meshSlots * SurfaceNets.BlockLength);
+            Reallocate(ref cellVertices, meshSlots * SurfaceNets.CellMapLength);
+            Reallocate(ref vertices, meshSlots * ChunkVertexCapacity);
+            Reallocate(ref indices, meshSlots * ChunkIndexCapacity);
+            Reallocate(ref requests, meshSlots);
+            Reallocate(ref results, meshSlots);
+        }
+
+        private void EnsureIslandCapacity(int voxelCount)
+        {
+            if (labels.IsCreated && labels.Length >= voxelCount)
+                return;
+
+            // Labels must start at zero; every search leaves them zero again.
+            DisposeArray(ref labels);
+            labels = new NativeArray<ushort>(voxelCount, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+            Reallocate(ref queue, voxelCount);
+            Reallocate(ref islandVoxels, voxelCount);
+        }
+
+        private void EnsureCarveCapacity(int count)
+        {
+            if (carveRequests.IsCreated && carveRequests.Length >= count)
+                return;
+
+            int capacity = Mathf.Max(count, 32);
+            Reallocate(ref carveRequests, capacity);
+            Reallocate(ref carveRemoved, capacity * VoxelEncoding.MaterialSlots);
+            Reallocate(ref carveChanged, capacity * 2);
+        }
+
+        private static Color ChipColor(AsteroidDefinition definition, int slot)
+        {
+            return definition != null ? definition.ChipColor(slot) : new Color(0.55f, 0.46f, 0.38f);
+        }
+
+        private static float Cube(float value)
+        {
+            return value * value * value;
+        }
+
+        private static int3 FloorDiv(int3 value, int divisor)
+        {
+            return (int3)math.floor((float3)value / divisor);
+        }
+
+        private static void EnsureCapacity<T>(ref NativeArray<T> array, int count, bool clear) where T : struct
+        {
+            if (array.IsCreated && array.Length >= count)
+                return;
+
+            DisposeArray(ref array);
+            array = new NativeArray<T>(Mathf.Max(count, 16), Allocator.Persistent,
+                clear ? NativeArrayOptions.ClearMemory : NativeArrayOptions.UninitializedMemory);
+        }
+
+        private static void Reallocate<T>(ref NativeArray<T> array, int count) where T : struct
+        {
+            DisposeArray(ref array);
+            array = new NativeArray<T>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+        }
+
+        private static void DisposeArray<T>(ref NativeArray<T> array) where T : struct
+        {
+            if (array.IsCreated)
+                array.Dispose();
+            array = default;
+        }
+    }
+}

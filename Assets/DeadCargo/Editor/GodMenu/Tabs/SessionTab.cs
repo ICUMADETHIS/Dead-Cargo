@@ -13,7 +13,11 @@ namespace DeadCargo.EditorTools.GodMenu
         private static readonly string[] SceneLabels = { "Restart Scene", "Save Scene" };
 
         public override string Title => "Session";
+        public override GodMenuGroup Group => GodMenuGroup.Game;
         public override int Order => 0;
+
+        public override string Summary =>
+            EditorApplication.isPlaying && !Mathf.Approximately(Time.timeScale, 1f) ? $"{Time.timeScale:0.##}x speed" : null;
 
         public override void OnGUI()
         {

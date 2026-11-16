@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using DeadCargo.Authority;
 using DeadCargo.Cargo;
 using DeadCargo.Extraction;
 using DeadCargo.Heat;
@@ -9,16 +11,49 @@ using VSX.UniversalVehicleCombat;
 
 namespace DeadCargo.UI
 {
-    /// <summary>Shows run heat, the jump drive and the player's current ship hold using the live gameplay services.</summary>
+    /// <summary>
+    /// The run HUD: heat and hunters, the jump drive, the extraction point, the player's hold, and screen markers
+    /// for the extraction point, Authority ships and nearby pickups.
+    /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler))]
     public sealed class ExtractionHud : MonoBehaviour
     {
         private const KeyCode ManifestKey = KeyCode.I;
         private const float NoticeDuration = 2.7f;
+        private const float DisruptedDisplayTime = 0.6f;
         private const int UiLayer = 5;
         private const int SortingOrder = 10;
 
+        // Jump plate states while spooling. Disrupted outranks held, because a hit is the more urgent news.
+        private const int SpoolingState = 0;
+        private const int HeldState = 1;
+        private const int DisruptedState = 2;
+
+        // Extraction point plate states.
+        private const int PointDormant = 0;
+        private const int PointInRange = 1;
+        private const int PointUplink = 2;
+        private const int PointOpen = 3;
+
+        // Distances are shown in steps, so the text is not rebuilt every frame of flight. In metres.
+        private const int DistanceStep = 10;
+
+        // Pickups beyond this are not marked, in metres. Markers fade towards it, in steps so meshes rarely rebuild.
+        private const float PickupMarkerRange = 800f;
+        private const float PickupFadeSteps = 10f;
+        private const int MarkerCapacity = 48;
+
+        private const string PointMarkerDormant = "EXTRACTION";
+        private const string PointMarkerUplink = "UPLINK";
+        private const string PointMarkerOpen = "OPEN";
+        private const string HunterMarker = "AUTHORITY";
+
+        private static readonly HudMarkerStyle PointMarkerStyle = new HudMarkerStyle(26f, true);
+        private static readonly HudMarkerStyle HunterMarkerStyle = new HudMarkerStyle(20f, true);
+        private static readonly HudMarkerStyle PickupMarkerStyle = new HudMarkerStyle(11f, false);
+
+        private HudMarkerLayer markers;
         private ExtractionHudView view;
         private GameAgentManager agents;
         private Vehicle vehicle;
@@ -28,9 +63,17 @@ namespace DeadCargo.UI
         private JumpDrive jumpDrive;
         private HeatTracker heat;
         private RunTracker run;
+        private AuthorityResponse authority;
+        private int displayedHunters = -1;
         private int displayedHeat = -1;
         private int displayedTier = -1;
         private int displayedJumpSeconds = -1;
+        private int displayedJumpState = -1;
+        private bool heldNoticeShown;
+        private bool hasPointPlate;
+        private int displayedPointState = -1;
+        private int displayedPointValue = -1;
+        private int displayedPointDistance = -1;
         private int manifestPage;
         private bool manifestOpen;
         private float noticeStarted;
@@ -54,6 +97,9 @@ namespace DeadCargo.UI
         private void Awake()
         {
             HudFactory.ConfigureCanvas(gameObject, SortingOrder);
+
+            // Built first, so the markers draw behind the plates.
+            markers = new HudMarkerLayer((RectTransform)transform, MarkerCapacity);
             view = new ExtractionHudView((RectTransform)transform);
         }
 
@@ -79,6 +125,8 @@ namespace DeadCargo.UI
             if (run != null)
                 run.Ended += OnRunEnded;
 
+            authority = AuthorityResponse.Active;
+            ExtractionPoint.StateChanged += OnPointStateChanged;
             Layout();
         }
 
@@ -90,6 +138,7 @@ namespace DeadCargo.UI
                 heat.Changed -= RefreshHeat;
             if (run != null)
                 run.Ended -= OnRunEnded;
+            ExtractionPoint.StateChanged -= OnPointStateChanged;
             UnbindVehicle();
         }
 
@@ -97,6 +146,10 @@ namespace DeadCargo.UI
         {
             if (jumpDrive != null && jumpDrive.IsSpooling)
                 UpdateSpool();
+
+            UpdatePoint();
+            UpdateHunters();
+            UpdateMarkers();
 
             if (hold != null && Time.timeScale > 0f)
             {
@@ -166,6 +219,8 @@ namespace DeadCargo.UI
             {
                 jumpDrive.SpoolStarted += OnSpoolStarted;
                 jumpDrive.SpoolCancelled += OnSpoolCancelled;
+                jumpDrive.HeldChanged += OnSpoolHeldChanged;
+                jumpDrive.FuelShortage += OnFuelShortage;
                 RefreshJumpDrive();
             }
 
@@ -188,6 +243,8 @@ namespace DeadCargo.UI
             {
                 jumpDrive.SpoolStarted -= OnSpoolStarted;
                 jumpDrive.SpoolCancelled -= OnSpoolCancelled;
+                jumpDrive.HeldChanged -= OnSpoolHeldChanged;
+                jumpDrive.FuelShortage -= OnFuelShortage;
             }
 
             vehicle = null;
@@ -231,9 +288,9 @@ namespace DeadCargo.UI
             if (manifestOpen)
                 SetManifestPage(manifestPage);
 
-            // The idle spool time depends on the load.
+            // The idle plate shows fuel or spool time, and both depend on the hold.
             if (jumpDrive != null && !jumpDrive.IsSpooling)
-                view.SetJumpReady(jumpDrive.EstimatedSpoolTime);
+                ShowIdleJumpDrive();
         }
 
         private void RefreshJumpDrive()
@@ -241,25 +298,230 @@ namespace DeadCargo.UI
             if (jumpDrive.IsSpooling)
             {
                 displayedJumpSeconds = -1;
+                displayedJumpState = -1;
                 UpdateSpool();
             }
             else
             {
-                view.SetJumpReady(jumpDrive.EstimatedSpoolTime);
+                ShowIdleJumpDrive();
             }
         }
 
-        // The countdown text only changes once a second, so it is rebuilt only then.
+        private void ShowIdleJumpDrive()
+        {
+            if (jumpDrive.HasFuel)
+                view.SetJumpReady(jumpDrive.EstimatedSpoolTime);
+            else
+                view.SetJumpFuel(jumpDrive.DarkMatterAboard, jumpDrive.DarkMatterPerJump);
+        }
+
+        // The plate text only changes when the whole second or the state changes, so it is rebuilt only then.
         private void UpdateSpool()
         {
+            int state = jumpDrive.TimeSinceKnockback < DisruptedDisplayTime ? DisruptedState
+                : jumpDrive.IsHeld ? HeldState
+                : SpoolingState;
+            Color color = state == SpoolingState ? HudFactory.JumpColor : HudFactory.WarningColor;
+
             int seconds = Mathf.CeilToInt(jumpDrive.SpoolRemaining);
-            if (seconds != displayedJumpSeconds)
+            if (seconds != displayedJumpSeconds || state != displayedJumpState)
             {
                 displayedJumpSeconds = seconds;
-                view.SetJumpCountdown(seconds);
+                displayedJumpState = state;
+                view.SetJumpCountdown(seconds, SpoolStatus(state), color);
             }
 
-            view.SetJumpProgress(jumpDrive.SpoolProgress);
+            view.SetJumpProgress(jumpDrive.SpoolProgress, color);
+        }
+
+        private void UpdateHunters()
+        {
+            int hunters = authority != null ? authority.ActiveShipCount : 0;
+            if (hunters == displayedHunters)
+                return;
+
+            displayedHunters = hunters;
+            view.SetHunters(hunters);
+        }
+
+        // Markers show only while the player flies a ship with a hold. Indexed loops, so no enumerators are allocated.
+        private void UpdateMarkers()
+        {
+            if (hold == null || !markers.Begin(Camera.main))
+            {
+                markers.Hide();
+                return;
+            }
+
+            Vector3 ship = vehicle.transform.position;
+
+            IReadOnlyList<ExtractionPoint> points = ExtractionPoint.All;
+            for (int i = 0; i < points.Count; ++i)
+            {
+                ExtractionPoint point = points[i];
+                markers.Add(point.transform.position, PointMarkerStyle, PointColor(point.State), PointMarkerLabel(point.State),
+                    RoundDistance(point.DistanceTo(ship)));
+            }
+
+            if (authority != null)
+            {
+                IReadOnlyList<Vehicle> hunters = authority.ActiveShips;
+                for (int i = 0; i < hunters.Count; ++i)
+                {
+                    Vehicle hunter = hunters[i];
+                    if (hunter != null && !hunter.Destroyed)
+                        markers.Add(hunter.transform.position, HunterMarkerStyle, HudFactory.WarningColor, HunterMarker,
+                            RoundDistance(Vector3.Distance(hunter.transform.position, ship)));
+                }
+            }
+
+            IReadOnlyList<CargoPickup> pickups = CargoPickup.All;
+            for (int i = 0; i < pickups.Count; ++i)
+            {
+                CargoPickup pickup = pickups[i];
+                if (pickup.Item == null)
+                    continue;
+
+                float distance = Vector3.Distance(pickup.transform.position, ship);
+                if (distance > PickupMarkerRange)
+                    continue;
+
+                float fade = Mathf.Round((1f - 0.6f * distance / PickupMarkerRange) * PickupFadeSteps) / PickupFadeSteps;
+                Color color = pickup.Item.Slot == CargoSlot.DarkMatter ? HudFactory.DarkMatterColor : HudFactory.CargoColor;
+                markers.Add(pickup.transform.position, PickupMarkerStyle, color, null, 0, fade);
+            }
+
+            markers.End();
+        }
+
+        private static int RoundDistance(float metres)
+        {
+            return Mathf.RoundToInt(metres / DistanceStep) * DistanceStep;
+        }
+
+        private static Color PointColor(ExtractionPointState state)
+        {
+            switch (state)
+            {
+                case ExtractionPointState.Uplinking:
+                    return HudFactory.CargoColor;
+                case ExtractionPointState.Open:
+                    return HudFactory.SuccessColor;
+                default:
+                    return HudFactory.JumpColor;
+            }
+        }
+
+        private static string PointMarkerLabel(ExtractionPointState state)
+        {
+            switch (state)
+            {
+                case ExtractionPointState.Uplinking:
+                    return PointMarkerUplink;
+                case ExtractionPointState.Open:
+                    return PointMarkerOpen;
+                default:
+                    return PointMarkerDormant;
+            }
+        }
+
+        // Follows the nearest extraction point while the player flies a ship with a hold.
+        private void UpdatePoint()
+        {
+            ExtractionPoint point = hold != null ? ExtractionPoint.FindNearest(vehicle.transform.position) : null;
+            bool show = point != null;
+            if (show != hasPointPlate)
+            {
+                hasPointPlate = show;
+                displayedPointState = -1;
+                Layout();
+            }
+
+            if (!show)
+                return;
+
+            Vector3 shipPosition = vehicle.transform.position;
+            int distance = Mathf.RoundToInt(point.DistanceTo(shipPosition) / DistanceStep) * DistanceStep;
+            int state;
+            Color color;
+            switch (point.State)
+            {
+                case ExtractionPointState.Uplinking:
+                    state = PointUplink;
+                    color = HudFactory.CargoColor;
+                    break;
+                case ExtractionPointState.Open:
+                    state = PointOpen;
+                    color = HudFactory.SuccessColor;
+                    break;
+                default:
+                    bool inRange = point.IsInActivationRange(shipPosition);
+                    state = inRange ? PointInRange : PointDormant;
+                    color = inRange ? HudFactory.JumpColor : HudFactory.Muted;
+                    break;
+            }
+
+            bool dormant = state == PointDormant || state == PointInRange;
+            int value = dormant ? distance : Mathf.CeilToInt(point.TimeRemaining);
+            if (state != displayedPointState || value != displayedPointValue || distance != displayedPointDistance)
+            {
+                displayedPointState = state;
+                displayedPointValue = value;
+                displayedPointDistance = distance;
+                view.SetPoint(PointStatus(state, distance), color, dormant ? $"{distance} m" : $"{value} s",
+                    dormant, state == PointInRange && point.CanStartUplink);
+            }
+
+            view.SetPointProgress(point.Progress, color);
+        }
+
+        private static string PointStatus(int state, int distance)
+        {
+            switch (state)
+            {
+                case PointUplink:
+                    return $"UPLINK  {distance} m";
+                case PointOpen:
+                    return $"OPEN  {distance} m";
+                case PointInRange:
+                    return "IN RANGE";
+                default:
+                    return "DORMANT";
+            }
+        }
+
+        private void OnPointStateChanged(ExtractionPoint point)
+        {
+            if (hold == null)
+                return;
+
+            displayedPointState = -1;
+            int seconds = Mathf.CeilToInt(point.TimeRemaining);
+            switch (point.State)
+            {
+                case ExtractionPointState.Uplinking:
+                    ShowNotice($"UPLINK STARTED  ·  Opens in {seconds} s  ·  Position broadcast", HudFactory.WarningColor, true);
+                    break;
+                case ExtractionPointState.Open:
+                    ShowNotice($"EXTRACTION POINT OPEN  ·  {seconds} s to fly in", HudFactory.SuccessColor, true);
+                    break;
+                default:
+                    ShowNotice("EXTRACTION POINT CLOSED  ·  Uplink again", HudFactory.WarningColor, true);
+                    break;
+            }
+        }
+
+        private static string SpoolStatus(int state)
+        {
+            switch (state)
+            {
+                case DisruptedState:
+                    return "DISRUPTED";
+                case HeldState:
+                    return "TOO FAST";
+                default:
+                    return "SPOOLING";
+            }
         }
 
         private void SetManifestOpen(bool open)
@@ -279,7 +541,15 @@ namespace DeadCargo.UI
 
         private void OnCargoAdded(CargoItemDefinition item, int count)
         {
-            ShowNotice($"+{count}  {item.DisplayName}   ·   +{item.UnitMass * count:0.#} t", HudFactory.CargoColor, false);
+            if (item.Slot == CargoSlot.DarkMatter)
+                ShowNotice($"+{count}  {item.DisplayName}   ·   {hold.DarkMatterUnits} units aboard", HudFactory.DarkMatterColor, false);
+            else
+                ShowNotice($"+{count}  {item.DisplayName}   ·   +{item.UnitMass * count:0.#} t", HudFactory.CargoColor, false);
+        }
+
+        private void OnFuelShortage()
+        {
+            ShowNotice($"NOT ENOUGH DARK MATTER  ·  {jumpDrive.DarkMatterAboard} / {jumpDrive.DarkMatterPerJump}", HudFactory.WarningColor, true);
         }
 
         private void OnCapacityExceeded(CargoItemDefinition item)
@@ -294,8 +564,19 @@ namespace DeadCargo.UI
 
         private void OnSpoolStarted()
         {
+            heldNoticeShown = false;
             RefreshJumpDrive();
             ShowNotice($"JUMP DRIVE SPOOLING  ·  Survive {Mathf.CeilToInt(jumpDrive.SpoolDuration)} s", HudFactory.JumpColor, true);
+        }
+
+        // Explained once per spool, so speeding around the limit does not repeat it.
+        private void OnSpoolHeldChanged(bool held)
+        {
+            if (!held || heldNoticeShown)
+                return;
+
+            heldNoticeShown = true;
+            ShowNotice($"TOO FAST TO SPOOL  ·  Slow below {jumpDrive.MaxSpoolSpeed:0} m/s", HudFactory.WarningColor, true);
         }
 
         private void OnSpoolCancelled()
@@ -319,7 +600,8 @@ namespace DeadCargo.UI
 
         private void Layout()
         {
-            view.Layout(heat != null, hold != null, jumpDrive != null, manifestOpen, noticeVisible);
+            view.Layout(heat != null, hold != null, jumpDrive != null, hasPointPlate, manifestOpen, noticeVisible);
+            markers.SetCoveredCorner(view.StackSize);
         }
 
         private static float[] GetHeatBoundaries(HeatTracker tracker)

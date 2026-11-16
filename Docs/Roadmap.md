@@ -5,11 +5,21 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | Phase | Name | Delivers | Status |
 |---|---|---|---|
 | 1 | Cargo hold | Cargo items, ship hold, pickups, load-based handling, cargo HUD | Done, tested 2026-11-16 |
-| 2 | Jettison | Dump cargo from the hold as loose crates that can be re-collected | Done, tested 2026-11-16 (see Backlog #1) |
+| 2 | Jettison | Dump cargo from the hold as loose crates that can be re-collected | Done, tested 2026-11-16 (Backlog #1 fixed) |
 | 3 | Heat | Heat meter, tiers, decay, heat from weapons and cargo, heat HUD | Done, tested 2026-11-16 |
 | 4 | Authority response | Authority ships spawn according to the heat tier | Done, tested 2026-11-16 |
 | 5 | Extraction | Jump-drive spool, extraction result, cargo lost on death | Done, tested 2026-11-16 |
-| 6 | Mothership hub | 6a: mothership scene, loading screen, launch and return. 6b: save data, stash, credits, selling | 6a done, tested 2026-11-16. 6b built, awaiting test |
+| 6 | Mothership hub | 6a: mothership scene, loading screen, launch and return. 6b: save data, stash, credits, selling | Done, tested 2026-11-16 |
+| 6.1 | Extraction stakes | Hits and speed hold the spool back; losing the ship costs credits | Done, tested 2026-11-16 |
+| 6.2 | Dark matter | A weightless hold slot; the jump drive burns dark matter; leftovers bank and sell | Done, tested 2026-11-16 |
+| 6.3 | Extraction point | A second way out: a point in the sector, opened by a timed uplink, open for a limited window | Done, tested 2026-11-16 |
+| 6.4 | HUD markers | Hunter count; Dead Cargo's own screen markers for the extraction point, Authority ships and pickups | Done, tested 2026-11-16 |
+| 6.5 | Object pooling | Reuse crates and Authority ships instead of creating and destroying them | Planned |
+| 6.6 | Scene flow performance | Every scene change through one path, load hitches hidden behind the loading screen, load timing | Planned |
+| 6.7 | Polaris sector | The game sector runs launch into, built up from an empty scene. 6.7a: the scene with the star sky. 6.7b: the player starts aboard the ship. 6.7c: pause menu Quit and Restart | Done, tested 2026-11-16 |
+| 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16 |
+| 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test |
+| 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -17,9 +27,13 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 11 | Rival syndicates | AI crews, mothership raids | Planned |
 | 12 | Cycles | Season reset and persistent rank | Planned |
 
-Phases 1 to 6 form the first complete run: launch, loot, escape, bank.
+Phases 1 to 6 form the first complete run: launch, loot, escape, bank. **Milestone reached 2026-11-16.**
+
+Phases 6.1 to 6.6 improve the systems from the first run before phase 7 adds new ones. Phases 6.2 and 6.3 give a run two ways out: burn dark matter to jump anywhere, or reach an extraction point and open it.
 
 Tooling: the **God Menu** (`Dead Cargo > God Menu`) is the editor control panel for testing every phase. It gains a section whenever a phase adds a system.
+
+Setup: **Set Up Sector** in the God Menu **Project** tab runs every phase setup on the open scene in order, and is safe to re-run. The individual phase setups referred to in the test steps below are under `Dead Cargo > Setup`.
 
 ---
 
@@ -98,7 +112,9 @@ The input script sits on a `CargoControls` child of the player's game agent. The
 8. Exit the fighter and press **J** on foot. Nothing happens.
 
 ### Tuning
-On the ship's `CargoJettison` component: `Eject Offset`, `Eject Speed`, `Scatter Speed`, `Recollect Delay`.
+On the ship's `CargoJettison` component: `Eject Offset`, `Eject Speed`, `Scatter Speed`, `Dump Spacing`, `Recollect Delay`.
+
+Each crate leaves at the full scatter speed, at right angles to its exit. Jettison All also fans the crates out around the ejection point, `Dump Spacing` apart, so a dump separates at once (Backlog #1).
 
 ---
 
@@ -321,3 +337,554 @@ Scene paths on `Assets/DeadCargo/Resources/SceneFlowSettings.asset`.
 4. Launch, collect cargo, and lose the ship. Back on the mothership the stash is unchanged and the service record counts one loss.
 5. Stop Play and press Play in the Mothership scene. Credits, stash, record and last run are all still there.
 6. In the God Menu **Mothership** tab, the Profile section shows the same numbers. **+1,000 cr** adds credits, and the hub updates during play. **Reset Profile** asks first, then clears everything. **Open Save Folder** shows `profile.json`.
+
+---
+
+## Phase 6.1: Extraction stakes
+
+### Goal
+Extraction is the tense climax of a run, and losing the ship hurts beyond the hold.
+
+### Design
+- **Hits hold the spool back.** Each hit on the ship's hull or shields sets the spool back 0.5 seconds, at most once every 0.5 seconds. Under constant fire the spool stalls, so the player has to break line of fire or fight back. Hits are read from the kit's damage receivers, gathered when the spool starts, so shield modules count and hits still register with the Invulnerable cheat on.
+- **The spool needs low speed.** It only builds while the ship is below 50 m/s. Above that it holds (it does not cancel) and the jump plate reads TOO FAST, so the player has to commit to sitting still.
+- The jump plate reads DISRUPTED for a moment after each knock-back. A notice explains the speed limit the first time the spool holds for speed.
+- Heat keeps rising while a spool is held, because the drive is still charged.
+- **Losing the ship costs credits.** When the run ship is destroyed, a 500 cr replacement fee is taken from the profile. It never takes credits below zero, so a broke player still gets a basic hull for free. Dying on foot with the ship intact charges nothing.
+- The run report and the hub's last run show the fee, or "Basic hull issued" when the player could not pay.
+- A run lost on foot with the ship intact now reads **RUN LOST** rather than SHIP LOST, on the report and the hub.
+- No blockade: the Authority blockade at HUNTED is parked in the backlog's Later list.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/Extraction/JumpDrive.cs` | Spool time builds only below the speed limit; hits knock it back |
+| `Scripts/Extraction/RunTracker.cs` | Works out the ship-loss fee when the run ends |
+| `Scripts/Extraction/RunResult.cs`, `Scripts/Profile/RunSummary.cs` | Carry whether the ship was lost and the fee paid |
+| `Scripts/Profile/PlayerProfile.cs` | Takes the fee from credits when the run is recorded |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs` | TOO FAST and DISRUPTED states on the jump plate |
+| `Scripts/UI/RunResultView.cs`, `MothershipHubView.cs` | Show the fee |
+| `Editor/GodMenu/Tabs/ExtractionTab.cs` | Shows the held and disrupted states |
+
+### Test steps
+1. Press Play in the range, board the fighter and launch. Fly faster than 50 m/s and press **H**. The jump plate reads TOO FAST, the countdown holds, a notice names the speed limit, and heat still rises.
+2. Slow below 50 m/s. The countdown runs again.
+3. Spawn an Authority ship (Heat tab, or Authority tab **Spawn Ship**) and let it hit you while spooling. The plate flashes DISRUPTED and the countdown climbs back. Under steady fire it stalls.
+4. In the Mothership tab, give yourself **+1,000 cr**. Lose the ship. The report shows SHIP REPLACEMENT −500 cr, and the hub shows 500 cr left and the fee on the last run.
+5. Spend down to 0 cr (or **Reset Profile**) and lose the ship again. The report shows BASIC HULL ISSUED, and credits stay at 0.
+6. Exit the ship on foot and get the player killed while the ship is intact. The report reads RUN LOST and no fee is charged.
+
+### Tuning
+- On the ship's `JumpDrive`: `Max Spool Speed`, `Knockback Per Hit`, `Knockback Interval`.
+- On the `Run Tracker` object: `Ship Replacement Cost`. It moves to the ship's hull data when hulls arrive in phase 10.
+
+---
+
+## Phase 6.2: Dark matter
+
+### Goal
+The jump drive needs fuel, and that fuel is worth money. Jumping out becomes a choice: burn dark matter to leave from anywhere, or keep it to sell and find another way out (phase 6.3).
+
+### Design
+- **Dark Matter** is a cargo item with its own **slot** in the hold, separate from the mass-limited hold. The slot holds up to 200 units.
+- Dark matter is **weightless**. It does not slow the ship, add spool time, use hold mass, or raise heat when collected.
+- It is **part of the hold**. It shows in the manifest, counts towards value at risk, is lost with the ship, banks into the stash on extraction, and sells at the mothership for 15 cr a unit.
+- It **cannot be jettisoned**: the slot is sealed. J and Jettison All only dump ordinary cargo.
+- **The jump drive burns 100 units per jump.** H only starts a spool with at least 100 units aboard. Otherwise a notice reads NOT ENOUGH DARK MATTER with the amount held. The units are burned when the jump completes, so a cancelled spool costs nothing. Whatever is left banks.
+- The jump plate doubles as the fuel gauge. Short of fuel it reads DARK MATTER with "40 / 100" and a violet bar filling towards a jump. With enough fuel it reads READY and the spool time, as before.
+- The phase 6.1 spool rules still apply: hits knock the spool back, and it needs low speed.
+- **Dark matter pickups** are violet glowing spheres worth 25 units each. The sector setup scatters six around the test range (150 units). The World tab can spawn more.
+- A jump burns 100 units, worth 1,500 cr, which makes the jump a real cost.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/Cargo/CargoSlot.cs` | Hold or DarkMatter |
+| `Scripts/Cargo/CargoItemDefinition.cs` | Gains `Slot`; dark matter weighs nothing |
+| `Scripts/Cargo/CargoHold.cs` | Dark matter slot capacity, units, `ConsumeDarkMatter` |
+| `Scripts/Cargo/CargoJettison.cs` | Skips the sealed dark matter slot |
+| `Scripts/Extraction/JumpDrive.cs` | Needs and burns dark matter; raises `FuelShortage` |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs`, `HudFactory.cs` | Fuel gauge on the jump plate, shortage notice, dark matter colour |
+| `Editor/DarkMatterSetup.cs` | Creates the Dark Matter item, its glowing pickup prefab, and the range's pickups. Called by the extraction setup |
+| `Editor/SectorSetup.cs` | The Extraction step also counts as missing until the scene has dark matter pickups |
+| `Editor/GodMenu/Tabs/CargoTab.cs`, `ExtractionTab.cs`, `WorldTab.cs` | Dark matter readouts, and spawning it as its sphere |
+
+The God Menu's **Jump Now** still forces a jump without fuel, for testing.
+
+### Test steps
+1. Open the range. The God Menu **Project** tab reads "Not a complete sector: Missing Extraction". Press **Set Up Sector**. A Dark Matter item appears in `Data/Cargo`, and six violet spheres appear in the range among the cargo pickups.
+2. Press Play, board and launch. The jump plate reads DARK MATTER 0 / 100. Press **H**: a notice says there is not enough.
+3. Fly through dark matter spheres. The plate's bar fills, the manifest lists Dark Matter, and handling and hold mass do not change.
+4. Press **J** and **Jettison All**. Dark matter stays aboard.
+5. With 100 or more units, press **H** and complete the jump. The report lists the remaining dark matter as banked cargo. On the mothership it can be sold at 15 cr a unit.
+6. Cancel a spool part-way. No dark matter is burned.
+7. When it passes, save the range as the template from the **Range** tab, so the template has the dark matter pickups.
+
+### Tuning
+- On the ship's `CargoHold`: `Dark Matter Capacity`.
+- On the ship's `JumpDrive`: `Dark Matter Per Jump`.
+- On `Data/Cargo/DarkMatter.asset`: unit value.
+
+---
+
+## Phase 6.3: Extraction point
+
+### Goal
+A second way out that costs no dark matter but has to be earned: reach the point, open it, hold out, and get back to it in time.
+
+### Design
+- An **extraction point** sits in the sector: an upright ring of lights 50 m across, facing the approach, with a beacon at its centre. It starts **dormant**. Entering means coming within 25 m of the centre.
+- Within 150 m of it, in the run ship, press **U** to start the **uplink**. The uplink takes 45 seconds and broadcasts the player's position: +15 heat at once, then +0.5 heat per second while it runs. The player does not have to stay nearby.
+- When the uplink completes, the point is **open** for 60 seconds. A beam rises from it. Flying the run ship into the ring, with the player aboard, extracts the run. No dark matter is burned, and any jump spool in progress is dropped.
+- When the window ends, the point **closes** and goes dormant. It can be uplinked again.
+- The point's colour shows its state: grey-blue dormant, pulsing amber while uplinking, green when open.
+- The HUD gains an **EXTRACTION POINT** plate above the jump plate. It shows the state (DORMANT, IN RANGE, UPLINK, OPEN), the distance or the time left, a progress bar, and the **U** prompt. Notices announce the uplink starting, the point opening, and the point closing.
+- The report says how the run got out: "Jump complete" or "Extraction point reached".
+- Hits and speed still matter only for the jump drive. The extraction point has no spool, so it is the safer route for a damaged ship.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/Extraction/ExtractionPoint.cs` | States, uplink and open timers, uplink heat, extraction on entry, state colours |
+| `Scripts/Extraction/ExtractionPointState.cs` | Dormant, Uplinking, Open |
+| `Scripts/Extraction/ExtractionRoute.cs` | Jump drive or extraction point |
+| `Scripts/Extraction/UplinkInput.cs` | U starts the uplink of the nearest point in range |
+| `Scripts/Extraction/RunTracker.cs`, `RunResult.cs` | Extraction at a point, and the route on the result |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs` | Extraction point plate and notices |
+| `Scripts/UI/RunResultView.cs` | Says which route got the run out |
+| `Editor/ExtractionPointSetup.cs` | Builds the extraction point prefab, places one in the sector, adds the U input |
+| `Editor/SectorSetup.cs`, `Editor/TestRange/TestRangeLibrary.cs` | New setup step; the point is spawnable range content |
+| `Editor/GodMenu/Tabs/ExtractionTab.cs` | Extraction Point section: state, timers, uplink, open, close, fly there |
+
+### Test steps
+1. Open the range. The **Project** tab reads "Missing: Extraction Point". Press **Set Up Sector**. An **Extraction Points** object appears with a grey-blue ring about 700 m ahead of the ship. Move it anywhere you like. The **Range** tab lists it as spawnable content.
+2. Press Play, board and launch. The EXTRACTION POINT plate shows DORMANT and the distance.
+3. Fly within 150 m. The plate reads IN RANGE. Press **U**. The ring pulses amber, the plate counts down 45 s, a notice warns of the broadcast, and heat jumps by 15 then keeps rising.
+4. When the uplink completes, the ring turns green, a beam rises, and the plate counts down 60 s. Fly into the ring. The run ends EXTRACTED, the report says "Extraction point reached", and no dark matter is burned.
+5. Start another run, uplink, and stay away until the window ends. The point closes, a notice says so, and it can be uplinked again.
+6. **Phase 6.1 re-check:** with 100 dark matter, spool the jump drive while an Authority ship shoots you, with **Invulnerable** on. The jump plate flashes DISRUPTED and the countdown climbs back.
+7. In the **Extraction** tab, the Extraction Point section's **Go To Point**, **Start Uplink**, **Open Now** and **Close** buttons work.
+8. When it passes, save the range as the template from the **Range** tab.
+
+### Tuning
+On the extraction point: `Entry Radius`, `Activation Range`, `Uplink Duration`, `Open Duration`, `Uplink Heat Burst`, `Uplink Heat Per Second`.
+
+---
+
+## Phase 6.4: HUD markers
+
+### Goal
+The player can see where to go and what is coming: the way out, the hunters, and loot nearby.
+
+### Design
+- **Dead Cargo draws its own markers** instead of using the kit's radar. The kit's radar, target boxes and target cycling all come from one tracker, so putting crates on it would box every crate and add them to target cycling. Combat targeting stays exactly as it was.
+- **Extraction point:** always marked, at any distance. A diamond in the point's state colour, with its state and distance (EXTRACTION 820 m, UPLINK 820 m, OPEN 340 m). Off-screen, it becomes an arrow on the screen edge pointing the way.
+- **Authority ships:** a red diamond with AUTHORITY and the distance. Off-screen, a red arrow on the edge. The kit's own target boxes and arrows stay as well.
+- **Pickups within 800 m:** small diamonds, violet for dark matter and amber for cargo, shown only while on screen, with no label, so they never clutter the edges. They fade with distance.
+- **Hunter count:** the AUTHORITY HEAT plate's title adds "· 2 HUNTERS" in red while Authority ships are active.
+- Markers show only while the player flies a ship with a hold, and sit behind the HUD plates.
+- Edge arrows keep clear of the plates. Towards the lower right an arrow stays on its bearing from the screen centre and stops just short of the plate stack, so the plates never hide it. This follows the stack as it grows (manifest, notices).
+- Labels only rebuild when a shown number changes, so the markers make no per-frame allocations.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/UI/HudMarkerLayer.cs` | Marker pool: projects world positions, clamps off-screen markers to the edge |
+| `Scripts/UI/HudMarkerGlyph.cs` | Diamond and arrow shapes, drawn as a mesh like the other HUD graphics |
+| `Scripts/UI/HudMarkerStyle.cs` | Size and off-screen behaviour for a kind of marker |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs` | Feed the markers each frame; hunter count on the heat plate |
+| `Scripts/Cargo/CargoPickup.cs` | Keeps a list of active pickups |
+| `Scripts/Authority/AuthorityResponse.cs` | `Active` instance and the list of active ships |
+
+### Test steps
+1. Press Play in the range, board and launch. A marker labelled EXTRACTION with a distance sits over the extraction point. Turn away from it: it becomes an arrow on the screen edge pointing back.
+2. Fly towards the pickups. Violet diamonds mark dark matter and amber ones mark cargo within 800 m. Collected pickups lose their marker.
+3. Uplink the point. Its marker turns amber and reads UPLINK, then green and OPEN when it opens.
+4. Raise heat to WANTED. Red AUTHORITY markers with distances appear over the hunters, and red arrows when they are behind you. The heat plate's title reads "· 2 HUNTERS".
+5. Turn so the extraction point is off-screen to the lower right. Its arrow sits beside or above the HUD plates, never behind them. Press **I** to open the manifest: the arrow moves clear of the taller stack.
+6. Exit the ship on foot. The markers disappear. Board again and they return.
+
+### Tuning
+Constants in `ExtractionHud`: `PickupMarkerRange` (800 m) and the marker styles (sizes, and whether off-screen arrows show). Colours come from `HudFactory`.
+
+---
+
+## Phase 6.7: Polaris sector
+
+### Goal
+The game gets its own sector scene, separate from the Dev Test Range. It is built up in small parts, starting from empty space.
+
+### Design (6.7a)
+- **Polaris** (`Assets/DeadCargo/Scenes/Polaris.unity`) is the first raid location and the game sector: the scene the player spawns into from the mothership. It was first created as "Deep Space" and is renamed automatically.
+- It starts with only the sky: Dead Cargo's star skybox (`Materials/DeepSpaceSkybox.mat`: the kit's plain star texture on all six sides, so there is no bright horizon band), flat ambient light matching the test range, and a sun (a directional light in the `Environment` folder) so ships are lit when they arrive. No floor, no player, no systems.
+- The mothership still launches into the Dev Test Range. Polaris becomes the launch target when it has a player rig and has been set up as a sector.
+- The Dev Test Range stays the place for testing systems.
+
+### Implementation (6.7a)
+| File | Role |
+|---|---|
+| `Editor/SectorSceneSetup.cs` | Creates the Polaris scene the first time, and opens it after that |
+| `Editor/GodMenu/Tabs/MothershipTab.cs` | **Open Polaris** button in the Scene Flow section |
+
+### Test steps (6.7a)
+1. Outside Play Mode, open the God Menu **Mothership** tab and press **Open Polaris** (or run **Dead Cargo > Setup > Open Polaris Scene**). Unity offers to save the open scene first.
+2. `Polaris.unity` appears in `Assets/DeadCargo/Scenes/` and opens. The Scene view shows the star sky. The hierarchy holds only `Environment > Directional Light`.
+3. Press the button again from another scene. The existing Polaris scene opens unchanged.
+4. Open the Mothership scene, press Play and launch. The run still starts in the Dev Test Range.
+
+### Design (6.7b)
+- In Polaris the player **starts the run aboard the ship**. There is no on-foot start, no floor and no boarding step.
+- The player rig (player, ship, cameras, kit scene objects, the run systems and the HUD) comes from the test range template, so it always matches the tested range. The range's own objects are left out: the on-foot character, the floor, the enemy spawn and the dev bootstrap. Polaris keeps its own sky lighting.
+- The ship starts at the origin, in the state its prefab gives it. The kit's landing system is untouched; parked starts become their own system later.
+- With no character aboard, the exit key does nothing in Polaris.
+- Setting up the rig also makes Polaris the sector the mothership launches into, and adds it to the Build Settings. The Dev Test Range is still played by pressing Play in it.
+- Polaris has no cargo, dark matter or extraction point yet, so a run there has no way out. Use the God Menu (**Extraction > Jump Now**, or **Mothership > Go To Mothership**) to leave until content arrives.
+- The pause menu **Quit** and **Restart** buttons are wired up in 6.7c.
+
+### Implementation (6.7b)
+| File | Role |
+|---|---|
+| `Editor/SectorRigSetup.cs` | Spawns the rig from the template, strips the range objects, starts the player aboard the ship, makes the scene the launch target |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | **Spawn Player In Ship** button, shown for a game sector with no player |
+
+### Test steps (6.7b)
+1. Open Polaris (**Mothership** tab, **Open Polaris**). The **Project** tab reads "Game sector: no player yet". Press **Spawn Player In Ship**.
+2. The hierarchy gains `Systems`, `UI`, `Player`, `Fighter`, `SceneObjects` and `VehicleCamera`. There is no `Level`, `FirstPersonCharacter`, `AI Fighter Spawn` or `Dev Test Range` object, and only one `Directional Light`. The **Mothership** tab's Sector field reads Polaris.
+3. Press Play in Polaris. You are in the cockpit at once, flying among the stars, with the HUD up. The dev console does not open.
+4. Stop, open the Mothership scene, press Play and launch. The loading screen reads JUMPING TO SECTOR, POLARIS, and you arrive aboard the ship.
+5. In the God Menu **Extraction** tab press **Jump Now**. The report shows EXTRACTED and **Enter** returns to the mothership.
+6. Open the Dev Test Range and press Play. It still starts on foot, as before.
+
+### Design (6.7c)
+- The kit's pause menu works in a game sector. **Quit** gives up the run and returns to the mothership. **Restart** gives up the run and starts a new one in the same sector.
+- Giving up counts as a **lost run**: the hold is forfeit and the service record counts a loss. The ship is intact, so there is no replacement fee, and the hub's last run reads RUN LOST. This stops quitting being a free way out of a bad run.
+- No report is shown for an abandoned run. The loading screen takes over at once.
+- The run tracker binds the buttons itself when the scene starts, so every sector with a run tracker gets this with no setup step.
+- The Dev Test Range rebinds them afterwards: Quit stops play and Restart reloads the range, and neither counts as a loss.
+
+### Implementation (6.7c)
+| File | Role |
+|---|---|
+| `Scripts/Extraction/RunTracker.cs` | `AbandonToMothership` and `AbandonAndRestart`; binds the kit menus' Quit and Restart buttons to them when the scene starts |
+| `Scripts/UI/RunResultScreen.cs` | Stays hidden while a scene is loading |
+| `DevTest/DevTestRange.cs` | Rebinds both buttons for the range, after the run tracker |
+
+### Test steps (6.7c)
+1. Launch from the mothership, collect nothing, press **Esc** and press **Quit**. The loading screen reads RETURNING TO MOTHERSHIP. The hub's last run reads RUN LOST with no fee, and the record counts one more loss.
+2. Launch again, press **Esc** and press **Restart**. The loading screen reads RESTARTING RUN and a new run starts in Polaris, aboard the ship. The record counts another loss.
+3. In the Dev Test Range, **Esc** then **Quit** still stops play.
+
+---
+
+## Phase 6.8: Sector generation
+
+### Goal
+Polaris, and every later raid location, is generated from a seed: large, dense, and cheap to run. All generation code is Dead Cargo's own.
+
+### Design
+- **Sector definition.** Each raid location has a data asset: seed, size, cell size and regions. Polaris is 40 x 6 x 40 km with 1 km cells.
+- **Deterministic.** Content is computed from the seed and a position. The same seed always gives the same sector, so nothing generated is saved.
+- **Cells.** Space is a grid of cells. Only cells near the ship exist; they load and unload as it flies.
+- **Regions.** Ellipsoids with a kind (asteroid field, debris field, clearing), a density and a soft edge. Where fields overlap the strongest decides the content. A clearing thins every field it overlaps.
+- **Two tiers of object.** Far objects are drawn in GPU-instanced batches with no GameObjects. Near objects become pooled GameObjects with colliders.
+- **Sector space.** Generation works in sector space, converted to and from world space in one place, so a floating origin can be added without touching generators.
+- **Layout.** Polaris keeps one layout so it can be learned. Loot and points of interest vary per run.
+- **Target.** 100,000 visible rocks at 60 fps, under 1 ms a frame spent on streaming, no per-frame allocations.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Foundation | Sector definition, seeded random, cell grid, debug view | Done, tested 2026-11-16 |
+| 2. Asteroid field | Rocks from boulders to kilometre-wide giants, generated per cell in Burst jobs from the seed and regions, drawn GPU-instanced in the comic cel style. Adds Unity's Burst and Mathematics packages | Next; packages added |
+| 3. Far world | A second camera draws a 1:1000 copy of space behind the real one. Planets, giant asteroids, stations and capital ships are seen from hundreds of kilometres away and grow smoothly as you approach, then hand over to the real object up close. Distant parts of the belt show too | Planned |
+| 4. Streaming | Cells load and unload around the ship, spread across frames | Planned |
+| 5. Physical asteroids | Near rocks become pooled objects with colliders and damage. Covers phase 6.5 pooling | Planned |
+| 6. Large-scale precision | Floating origin | Planned |
+| 7. Content placement | Pickups, dark matter, extraction points, points of interest and planets placed by rules | Planned |
+| 8. Optimisation pass | Distance LODs, far impostors, profiling against the target | Planned |
+
+**Why a far world.** The camera draws only 3 km out, so without it a large object appears suddenly at full size instead of growing out of the distance, and planets cannot be shown at all. Perspective does not depend on scale: a 50 km planet 200 km away looks exactly like a 50 m model 200 m away. So distant giants live in a scaled-down copy of space drawn first by a far camera, and the main camera draws the real, near world on top. The far camera can see a thousand times further than the main one, and nothing ever pops in.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/SectorDefinition.cs` | Data asset: seed, size, cell size, regions, density at a position |
+| `Scripts/Sectors/SectorRegion.cs`, `SectorRegionKind.cs` | An ellipsoid region and what it holds |
+| `Scripts/Sectors/SectorHash.cs` | Stable integer hashing; the seed for each cell |
+| `Scripts/Sectors/SectorRandom.cs` | Seeded random number generator, one per cell or job |
+| `Scripts/Sectors/CellCoord.cs`, `SectorGrid.cs` | Cell addresses and the grid maths |
+| `Scripts/Sectors/SectorSpace.cs` | Scene service: definition, seed, grid, world and sector space conversion |
+| `Scripts/Sectors/SectorDebugView.cs` | Draws bounds, regions, cells and sample points with Draw Debug Tools |
+| `Editor/SectorSpaceSetup.cs` | Adds the Sector Space object and creates the scene's sector definition |
+| `Editor/GodMenu/Tabs/SectorTab.cs` | God Menu tab: sector readout, seed, debug view toggles |
+| `Assets/DrawDebugTools/` | Third-party debug drawing (namespace `DDT`). Its calls are compiled out of release builds |
+
+The hashing and random code is plain value maths with no shared state, so it moves into Burst jobs in step 2 unchanged.
+
+Sample points are a preview of generation: each cell tests a fixed number of candidate points and keeps those whose random roll falls under the density there. Real content uses the same rule.
+
+### Test steps (step 1)
+1. Click into Unity and let it import Draw Debug Tools and compile. The Console should be free of errors.
+2. Open Polaris and run **Dead Cargo > Setup > Phase 6.8 - Sector Space (Open Scene)**. A `Sector Space` object appears under `Systems`, and `Assets/DeadCargo/Data/Sectors/Polaris.asset` is created with three starter regions. Save the scene.
+3. Select `Sector Space` outside Play Mode. The Scene view shows the sector bounds and the three regions as gizmos.
+4. Press Play. In the God Menu, the **Sector** tab shows the size, the cell count, the player's cell, and the region and density at the ship.
+5. Press **Show All** in the Debug View section. White and grey boxes mark the cells around the ship, and coloured points appear where content would be generated. Around the arrival point there are few or none, because it is a clearing.
+6. Fly towards the Main Belt (ahead and to the right, a few kilometres out). Amber points appear and thicken as the density bar rises. The cell boxes follow the ship.
+7. Stop and start Play again. The points are in the same places. Press **Random Seed**: they all move. Press **Reset Seed**: they return.
+8. The camera sees 3 km, so in the Game view distant bounds and regions are cut off. Look at the Scene view during Play to see the whole sector.
+
+### Tuning
+On `Data/Sectors/Polaris.asset`: seed, size, cell size, and each region's centre, radii, density and falloff. Restart Play after changing the size or cell size.
+
+### Hardening (step 1)
+Added after step 1 passed its first test, to make the foundation as solid as it can be before content is built on it.
+
+| File | Role |
+|---|---|
+| `Editor/Diagnostics/SectorSelfTest.cs` | 23 checks of the maths: pinned hash values, hash avalanche, even spread, ranges, unique and unrelated cell seeds, grid round trips, region falloff. Also times each operation |
+| `Editor/Diagnostics/SectorDiagnostics.cs` | Runs the self-test, checks the open sector's definition, and estimates how many objects it will generate |
+| `Editor/SectorSpaceEditor.cs` | Edits the definition under the Sector Space inspector, with handles to move and resize regions in the Scene view |
+
+- **Pinned values.** The self-test holds four reference outputs of the hashing. If a change breaks them, every seed would build a different sector, so that check must never be "fixed" by updating the numbers once sectors are in use.
+- **Verified outside Unity.** The same checks were compiled and run on their own: all 23 pass.
+
+### Test steps (hardening)
+1. Run **Dead Cargo > Diagnostics > Sector Self-Test** with Polaris open. The Console shows one line per check, all "pass", then an estimate of the objects Polaris will generate, in total and per region.
+2. Select `Sector Space` outside Play Mode. The definition appears under the component. In the Scene view, drag a region's move handle, and drag the dots on its surface to resize it. **Ctrl+Z** undoes each edit.
+3. Drag a region partly outside the sector bounds and run the self-test again. It fails with "extends past the bounds". Undo.
+4. In Play Mode, the **Sector** tab's Self-Test section runs the same test and shows the result.
+
+---
+
+## Phase 6.9: Space visuals
+
+### Goal
+Space feels like deep space: an endless, dark void. Near objects (ships, rocks, stations) carry the game's comic cel look (lit and shadowed sides, bold ink lines, hatching), while the sky stays muted, soft and far away, so the two read at different depths.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Sky | Procedural deep-space sky: an endless dark void, a soft muted nebula band cut by dust lanes, a far layer and galaxies for depth, sparse stars, cheap shader-only motion. Comic ink and hatching available but off | Built, awaiting test |
+| 2. Sun and light | A stylised sun disc with flat glow rings; the scene light aimed from it, with matching light and shadow colours | Planned |
+| 3. Depth | 3a: space dust streaking past the ship, for speed and scale. 3b: distance fade in colour steps towards the sky colour | 3a built, awaiting test. 3b planned |
+| 4. Comic look | Dead Cargo's comic surface for near objects: two-tone light, ink outlines and hatching on the player ship and rocks | Built, awaiting test |
+| 5. Backdrop bodies | Cel-shaded planets, moons and rings, built on sector generation's far world (6.8 step 3) | Planned |
+| 6. Sector identity | A colour palette per sector, with a tint per region | Planned |
+
+### Design (step 1)
+- **One sky material per sector**, named after the scene (`Materials/Sky/PolarisSky.mat`), using Dead Cargo's own shader `DeadCargo/Space Sky`. It replaces the 6.7a star texture sky. Star and nebula seeds come from the scene name, so each new sector starts with a different sky.
+- **Galactic plane.** The whole sky is organised around one plane. The **Rotation** setting turns it; Polaris has it crossing the starting view diagonally.
+- **Backdrop.** Flat colour bands step from the void up to the plane colour, with edges bent by the nebula's hue field so they are not straight lines.
+- **An endless void.** Most of the sky is near-black. The nebula gathers in a narrow band, like a galaxy's spine seen edge-on.
+- **Nebula.** Muted gas in three steps (faint, mid, core) gathered along the plane, in one of two palettes where the hue field crosses a split: cold blue-grey, or dusty warm brown. **Softness** blends the steps from crisp one-pixel cel bands (0) into soft gas (the default).
+- **Volume.** Each cloud is lit softly from one direction: a lit side, a shadow side tinted towards blue, and a faint highlight on the edges facing the light. **Dust lanes**, dark filaments from the map turned a third way, cut across the gas along the plane and hide the stars behind them. Layering the gas behind dust is what gives it depth.
+- **Depth.** Behind the near nebula sits a far layer (the same map, turned another way, flat and faint), and behind that small distant galaxies. As in a real sky, galaxies are rare along the galactic plane, where dust hides them.
+- **Comic option.** Ink outlines (heavier on the shadow side, with lines between steps and palettes) and hatching anchored to the sky are built in, but off by default: the sky stays far and soft, and the comic look belongs to near objects. Ink Width and Hatching turn them on.
+- **Motion, at almost no cost.** Everything moves from the time value alone, with no CPU work and a few extra instructions per pixel. Cloud edges creep as a slow wave crosses the hue field, while light and shadow hold steady. The far layer drifts slowly against the near clouds, and that difference in motion reads as depth. Stars twinkle on their own beats, and the large stars' glints pulse with them. Each motion has a setting in the **Motion** section, and 0 holds it still.
+- **Being in space.** The strongest sense of moving through endless space comes from things passing the ship. That is step 3's dust streaks.
+- **Stars.** Three layers (small, medium, large) of fixed pixel sizes, so they stay crisp at any resolution and field of view. They are sparse (most of the sky is empty), thicken towards the plane, and dim behind the nebula and dust. Most are white, with a few cool and warm ones; the few large ones get small four-pointed glints aligned to the screen. Each star sits inside its own cell, so one cell lookup per layer draws them with no gaps or cut-off stars.
+- **Cel edges.** Every hard edge is softened over exactly one pixel, using screen-space derivatives, so steps are clean at any resolution with no blur and no stair-stepping.
+- **Cheap at runtime.** The nebula's shape is noise that would be costly per pixel, so it is baked once into a 1024 x 1024 two-channel map (density and hue, 4 MB). The shader thresholds the filtered value, which keeps edges sharp although the map is small. At runtime the sky costs three reads of that one map (near clouds, lighting, far layer) and a little maths per pixel; nothing runs on the CPU.
+- **Seamless.** The map uses an octahedral layout with a one-texel border holding the far side of each fold, so there are no seams anywhere in the sky.
+- **Live editing.** Colours, steps, stars and rotation update instantly. Changing the nebula's shape re-bakes the map on its own a moment after the slider stops (about 0.2 seconds on 16 threads).
+- **New each load.** The `Space Sky` object's randomizer gives every load a new sky: it bakes a fresh nebula from the authored shape with a new seed, places new stars and galaxies, and tilts the galactic band, far layer and dust lanes to new angles. The bake runs while the scene loads, behind the loading screen. The authored material is never changed; the run uses a copy, and the editor always shows the authored sky. Each option can be switched off, and a fixed seed brings back a sky seen before. The sky is cosmetic, so this does not touch Polaris's fixed layout.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Shaders/SpaceSky.shader` | The sky shader |
+| `Scripts/Visuals/NebulaShape.cs` | The settings that need a bake, and their hash |
+| `Scripts/Visuals/NebulaNoise.cs` | Seeded 3D gradient noise |
+| `Scripts/Visuals/NebulaField.cs` | Cloud density and hue at a direction: swirled fractal noise gathered into the band |
+| `Scripts/Visuals/OctahedralMapping.cs` | Direction to map coordinates and back, including the border folds. Matches the shader |
+| `Scripts/Visuals/NebulaBaker.cs` | Bakes the field on every core. No Unity calls, so it can be checked outside the editor |
+| `Scripts/Visuals/NebulaMap.cs` | Turns a bake into the shader's texture, for the editor and at load |
+| `Scripts/Visuals/SpaceSkyRandomizer.cs` | A new nebula, stars and band angle each load, on a copy of the sky material |
+| `Editor/Visuals/SpaceSkyBaker.cs` | Turns a bake into the material's `_Nebula.asset` texture |
+| `Editor/Visuals/SpaceSkyShaderGUI.cs` | The material inspector: grouped settings, labelled sliders, automatic re-bake |
+| `Scripts/Visuals/SpaceSkyProperties.cs` | Shader property names |
+| `Editor/SpaceSkySetup.cs` | Creates and bakes a scene's sky material and makes it the skybox, with undo |
+| `Editor/SectorSceneSetup.cs` | New Polaris scenes start with the space sky |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | **Space** section for game sectors: Apply Space Sky, Edit Sky, or Bake Nebula when the map is out of date |
+
+### Verified outside Unity
+- The shader's vertex and fragment programs compile with the DirectX 11 compiler against Unity's own shader includes.
+- Octahedral mapping round trip, border folds and shader lookups match the baked texels to within a texel.
+- Bakes are identical bit for bit for the same shape, and a new seed changes the shape.
+- The filtered map is as smooth across the folds as anywhere else, so there are no seams.
+- Stars are evenly spread: density varies by under 2% between face centres and edges.
+- Preview renders of Polaris from a line-for-line CPU copy of the shader were used to tune the defaults.
+
+### Test steps (step 1)
+1. Click into Unity and let it compile. The Console should be free of errors, including shader errors.
+2. Open Polaris. In the God Menu **Project** tab, the **Space** section reads "Sky: not the space sky". Press **Apply Space Sky**. `Materials/Sky/PolarisSky.mat` and `PolarisSky_Nebula.asset` appear, the material is selected, and the Scene view shows the new sky. Save the scene. If the section reads "nebula out of date" instead, press **Bake Nebula**; it turns green when the map is current.
+3. **Ctrl+Z** puts the old sky back; **Ctrl+Y** restores the space sky.
+4. A material made earlier keeps its old values. Select it and press **Reset Look to Defaults** at the top of the inspector: everything but the seeds returns to the current defaults, and the nebula re-bakes. **Ctrl+Z** undoes the reset.
+5. Press Play. Look around: mostly near-black void with sparse stars, a soft, muted nebula band crossing the view diagonally, lit on one side, with dark dust lanes across it. Behind it sit a faint far layer and small galaxies. A few large stars glint.
+6. With the material selected, change colours, steps, star settings and **Rotation**. The sky updates at once, in the Scene view and in Play Mode. Set **Softness** to 0 and **Ink Width** to 2 for the crisp comic look; back again for soft gas.
+7. Turn **Light Direction**. The lit and shadowed sides of every cloud move with it.
+8. Watch the sky in Play Mode for half a minute: cloud edges creep slowly, the far layer drifts against the near clouds, and stars shimmer faintly. In the Scene view, motion shows when **Always Refresh** is on in the effects menu. Set every **Motion** setting to 0: the sky holds still.
+9. In **Nebula Shape**, drag **Swirl** or press **New** beside the seed. The inspector shows "Re-baking in a moment", then the clouds change shape.
+10. Change the Game view resolution. Stars keep the same crisp look.
+11. **New each load.** If Polaris already had the space sky, the **Space** section reads "Sky: needs the new-each-load update". Press **Apply Space Sky**: a `Space Sky` object appears under `Environment`, and nothing else changes. Save the scene.
+12. Press Play several times, or launch from the mothership several times. Each run has a different nebula, star field and band angle, after the usual short load. Stop Play: the editor shows the authored sky again, and `PolarisSky.mat` is unchanged.
+13. On the `Space Sky` object, set **Fixed Seed** to any number other than 0. Every run now shows the same sky. Set it back to 0.
+
+### Tuning
+On `Materials/Sky/PolarisSky.mat`: every setting, grouped as Sky, Motion, Backdrop, Depth, Nebula, Comic, Stars and Nebula Shape. Tooltips explain each one. A material keeps the values it was tuned to; **Reset Look to Defaults** picks up the current defaults and keeps the seeds.
+
+### Design (step 3a: space dust)
+- **Why.** A sky never moves as the ship flies, so on its own space feels like the inside of a sphere. Faint motes streaming past are the strongest cue of speed and of the size of the space around you.
+- **An endless field.** Motes fill a cube around the camera, 160 m across by default. The shader repeats the cube through space and draws each mote's copy nearest the camera, so the field never runs out, never needs spawning, and every camera, including the Scene view, gets its own.
+- **Streaks.** A mote smears along the camera's motion, a fixed fraction of a second long, capped in metres and in pixels. Still, it is a round dot; flying, a streak. Motes brighten with speed, so fast feels fast.
+- **No popping.** Motes fade in beyond a few metres, judged by the nearer end of the streak so none sweeps across the screen as it passes, and fade out before the cube's edge, so wrapping is never seen.
+- **A hint of the comic look.** Each mote is a fleck of rock in one of two flat tones: warm sand where it catches the sun (about two thirds of them), cool charcoal where it is in shadow, matching the rocks. A thin ink rim, under a pixel wide, outlines each one. Streaks keep a fixed pixel width with edges softened over one pixel.
+- **Sparse.** The mesh holds 4,000 motes; the material's **Amount** shows a share of them, a fifth by default (about 800, roughly one every 17 m). Amount changes live, with no rebuild. At rest motes are barely visible.
+- **Cost.** One draw of one static mesh. The CPU only measures the camera's velocity each frame. Jumps, such as a scene load or a respawn, draw no streak.
+
+### Implementation (step 3a)
+| File | Role |
+|---|---|
+| `Shaders/SpaceDust.shader` | Wraps, streaks and fades the motes |
+| `Scripts/Visuals/SpaceDust.cs` | Builds the mote mesh once, measures the main camera's velocity, draws for each camera |
+| `Editor/SpaceDustSetup.cs` | Adds a `Space Dust` object to the Environment folder and creates `Materials/SpaceDust.mat` |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | The Sky section becomes **Space**: sky and dust status, with Add Space Dust or Edit Dust |
+| `Editor/SceneHierarchy.cs` | Tidy Hierarchy files visual effects into Environment |
+
+### Verified outside Unity (step 3a)
+- Both shader stages compile with the DirectX 11 compiler against Unity's shader includes, and the scripts compile.
+- The wrap maths: motes always surround the camera, stay still as it moves, and are fully faded at the moment they wrap (20,000 trials, 40 km from the origin).
+
+### Test steps (step 3a)
+1. Open Polaris. In the God Menu **Project** tab, the **Space** section reads "Space dust: none". Press **Add Space Dust**. A `Space Dust` object appears under `Environment`. Save the scene.
+2. In the Scene view, faint dots fill the space around the view.
+3. Press Play and fly. Motes stream past and stretch into streaks with speed, brightening as you go faster. Stop: they shrink back to faint dots.
+4. Turn hard while flying. Streaks follow the motion with no flicker.
+5. Watch the edge of the field, and fly close past motes. Nothing pops in or out, and no streak sweeps across the screen.
+6. Disable the `Space Dust` object while flying, then enable it again, to compare the sense of speed with and without it.
+
+### Tuning (step 3a)
+- Look, on `Materials/SpaceDust.mat`: amount, lit and shadow colours and the lit share, brightness, ink (colour, width, strength), field size, width, streak time and caps, fades, rest visibility and full speed. **Amount** is the quickest way to make the dust sparser or thicker; Ink Width 0 removes the rim.
+- Count and layout, on the `Space Dust` object: mote count, seed, velocity response and jump distance.
+
+### Design (step 4: comic look)
+- **One shader for near objects.** `DeadCargo/Comic Surface` gives ships, rocks and later stations a Borderlands-like look with a hint of cel: the painted texture and its normal map lit in three soft tones (a cool charcoal shadow, a mid tone and the lit colour), a highlight band and a flat glint facing the light, a rim along edges seen side-on, and a bold ink outline round the silhouette. **Cel Softness** sets how soft the tone edges are.
+- **No hand-drawn marks.** Hatching and texture ink (inking the texture's darkest details) are built in but off on every material, by choice after testing: the look is the outline and the tones, not drawn lines.
+- **Depth through ink.** Ink and hatching fade out with distance, so far objects read as flat and far, like the sky. Each material sets its own fade range.
+- **Anchored strokes.** Hatching is drawn in the object's own space, in metres, so it moves with the object and is the same size on any mesh. It fades where strokes would be closer than three pixels.
+- **Outlines.** The object's back faces are pushed out by a fixed pixel width and drawn behind it. On rounded shapes such as rocks, **Ink Gap Fill** pushes out from the centre instead, which closes the gaps hard-edged meshes leave at corners.
+- **Instanced.** The shader supports GPU instancing, so the asteroid field can draw thousands of rocks in a few batches. Each instance gets a small shade variation of its own.
+- **The ship.** Converting the ship copies each of its Flat Kit materials into a comic material, keeping its lit colour, texture and shadow size, and gives the copies to the ship in the open scene. Each copy's shadow colour is its lit colour tinted towards the same cool charcoal as the rocks, so ship and rocks shade alike. Kit files are never changed, and a copy that already exists is reused, so hand-tuned looks are kept. Screens, canopy, shield and effects keep their own shaders.
+- **Rocks.** `Materials/Comic/ComicRock.mat`: dusty warm stone against the cold void, cool charcoal shadows, the kit's rock texture for grit and its normal map for relief. The asteroid field (6.8 step 2) draws with it.
+
+### Implementation (step 4)
+| File | Role |
+|---|---|
+| `Shaders/ComicSurface.shader` | The comic surface: lighting, glint, rim, hatching, ink outline pass, shadow caster |
+| `Editor/ComicLookSetup.cs` | Converts the ship's Flat Kit materials, creates the rock material, places and removes a test rock |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | The Space section becomes **Visuals**: sky, dust and ship status, with Comic Ship and Place Test Rock |
+
+### Verified outside Unity (step 4)
+All three passes compile with the DirectX 11 compiler against Unity's shader includes, plain, GPU-instanced and with shadows, and the scripts compile. Unity has imported the shader without errors.
+
+### Test steps (step 4)
+1. Open Polaris. In the God Menu **Project** tab, the **Visuals** section reads "Ship: Flat Kit look". Press **Comic Ship**. Comic copies of the ship's materials appear in `Materials/Comic`. Save the scene.
+2. Press Play. The ship is lit in three soft tones with a black ink outline and no lines on its surface. Turn the ship against the light: the shading follows.
+3. Back in the editor, press **Place Test Rock**. A comic rock appears ahead of the ship. Fly round it in Play Mode: gritty texture, craters catching the light, violet shadows, outline, rim and highlight. Fly away: past a few hundred metres the outline fades and the rock goes flat.
+4. Select a comic material (**Edit Ship Look**, or `ComicRock.mat`) and adjust colours, the tone edges and Cel Softness, texture and normal strength, and the ink.
+5. **Ctrl+Z** after Comic Ship puts the Flat Kit materials back.
+6. Press **Remove Test Rock** when done.
+
+### Tuning (step 4)
+On each comic material: colours, mid tone, shadow and lit edges, cel softness, texture and normal strength, highlight, glint, rim, and ink (width, gap fill, fade range). Hatching and texture ink stay at 0.
+
+---
+
+## Phase 6.10: Destruction
+
+### Goal
+Rock breaks the way you hit it. Asteroids are made of voxels: guns pit them, missiles blast craters, saw cuts slice them apart, and what breaks away drifts off as a rock of its own. Ore runs through the rock in veins, so mining (phase 8) digs the same voxels. Every kind of destruction shares one damage path, so later steps plug in without changing this one.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Voxel asteroids | Smooth voxel rock built from a seed, carved by every kit weapon, pieces that break away and drift, ore veins and yields by material, rock chips, God Menu tab, self-tests | Built and smoke-tested, awaiting test |
+| 2. Mining tool | A mining beam that cuts precisely and puts what it cuts into the hold, by material. Merges with phase 8 | Planned |
+| 3. Asteroid field | The field's near rocks become voxel asteroids, far rocks stay instanced, cuts last for the run. With 6.8 steps 2 and 5 | Planned |
+| 4. Shatter | Ships, crates and stations break into pre-cut pieces through the same damage path | Planned |
+| 5. Optimisation | Lower-detail meshes for distant voxel rock, giant asteroids streamed in chunks, saw cuts through whole rocks spread over frames (the one remaining spike, 15 ms under extreme stress), profiling against the 6.8 targets | Planned |
+
+### Design (step 1)
+- **Smooth voxel rock.** An asteroid is a grid of samples, each holding the distance to the rock's surface in one byte. The surface is rebuilt from it with Surface Nets: one vertex per cell the surface crosses, with smooth normals from the distance field. It keeps the comic rock look (painted texture, three tones, ink outline); cubes never show.
+- **Built from a seed.** An asteroid type sets the shape (stretch, lumps, craters, roughness), the voxel size and up to four ores. A type, a diameter and a seed build one rock; the same seed always builds the same rock.
+- **Ore veins.** Each ore runs through the rock as thin sheets, only deeper than its minimum depth, and shows as coloured veins drawn in the same three comic tones. Two types ship: **Rocky Asteroid** (bare rock, a trace of iron) and **Ore Asteroid** (iron veins, cobalt crystal deep inside).
+- **Damage carves.** Every kit weapon hit carves a crater sized by its damage, dug in along the shot: 0.02 m³ per point by default, so a gun hit (100) pits about 0.8 m and a missile (2,500) blasts about 2.3 m. Explosions remove 1.6 times as much. Crater edges are ragged. Saw cuts (`Cut`) remove a flat disc.
+- **Breaking apart.** After a cut, a search finds any piece no longer joined to the rock. Large pieces become free rocks that drift and tumble, faster the smaller they are; they are moved kinematically, so they push ships but are never pushed. Pieces under 60 voxels crumble into chips. A piece keeps exactly its place, shape, ore and texture.
+- **Accounting.** Every cut reports what it removed, by material, in cubic metres: on the body (`VoxelBody.MaterialRemoved`) and for the whole scene (`DestructionSystem.MaterialRemoved`). Mining will turn this into cargo. The God Menu shows the running totals in m³ and tonnes.
+- **Chips.** Every cut throws tumbling rock chips in the colour of what was hit, which shrink away. One particle system serves the whole scene.
+- **One damage path.** `IDestructible` and `DamageEvent` are the shared entry point. Kit weapons reach any destructible through `DestructionDamageReceiver` on its colliders; other systems call `ApplyDamage` directly. Ship break-up and shatter (step 4) implement the same interface.
+- **Limits.** At most 24 free pieces at once (past that the smallest crumble), and pieces more than 3 km from the camera are removed.
+
+### Performance
+- All voxel work runs in Burst-compiled jobs: generation in parallel slices, meshing in parallel batches written straight into mesh data, piece searches and moving pieces out of their rock on a worker thread, and collider cooking on worker threads.
+- The main thread never waits for a job. It applies finished results and runs cuts (small Burst jobs); a rock that a job is still meshing, searching or emptying of pieces takes its next cuts a frame later. Buffers and meshes are pooled, with no per-frame allocations.
+- Budgets per frame: 32 cuts (the rest wait, oldest first, rocks taking turns), 48 rebuilt chunks for cuts and 8 for new rock, 16 colliders switched to their new shape (the rest keep their previous shape a frame longer), 96 chips. At most 512 cuts may wait on one rock; only fire far beyond any real fight reaches that, and further hits are dropped.
+- Colliders are cooked on workers with light options (mesh cleaning and the fast midphase, no welding), so switching one costs about 0.01 ms.
+- Saw cuts visit only the thin slab they remove, not the box around it. Ragged crater walls come from three broad waves around the sphere, not noise per voxel.
+- Pieces that break away pivot on their centre of mass and are moved by hand, so Unity never recomputes their mass as their colliders change.
+- Each stage's main-thread cost is timed, shown in the God Menu **Cost** section, and marked for the Unity Profiler (`DeadCargo.Voxels.*`).
+- A piece search starts at the cut and stops as soon as only one part is still growing: a crater that splits nothing visits a few hundred voxels; a split costs about twice the smaller piece.
+- Memory is two bytes per voxel. A 40 m asteroid at 0.5 m voxels takes about 3.5 MB; larger rocks get larger voxels, so no grid passes 192³.
+- Each chunk of 32³ voxels is one renderer and one collider; empty chunks have neither.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/Destruction/Core/` | Assembly `DeadCargo.Destruction.Core`: pure voxel maths and its Burst jobs, with no kit or scene code |
+| `Core/VoxelGrid.cs`, `VoxelEncoding.cs` | The voxel grid and how distance is stored |
+| `Core/AsteroidShape.cs`, `OreLayer.cs`, `VoxelGeneration.cs` | Asteroid shape and ore as a distance field; filling a grid from it |
+| `Core/SurfaceNets.cs`, `MeshBuffers.cs`, `VoxelVertex.cs` | Seamless smooth meshing per chunk, into a 20-byte vertex |
+| `Core/VoxelCarving.cs`, `CarveRequest.cs`, `CarveShape.cs` | Sphere and slab cuts, with what was removed by material |
+| `Core/VoxelIslands.cs`, `IslandBuffers.cs`, `IslandInfo.cs` | Finding pieces that broke away, moving them into their own grid, measuring rock |
+| `Core/Jobs/` | The Burst jobs: fill, mesh, carve, piece search, moving pieces out, collider cooking |
+| `Scripts/Destruction/IDestructible.cs`, `DamageEvent.cs`, `DamageKind.cs` | The shared damage path |
+| `Scripts/Destruction/DestructionDamageReceiver.cs` | Kit weapon hits to `DamageEvent` |
+| `Scripts/Destruction/DestructionSystem.cs` | Scene service: runs the pipeline, pools, chips, events, cost readouts |
+| `Scripts/Destruction/DebrisParticles.cs`, `EffectPool.cs` | Rock chips in one particle system; pooled effect prefabs |
+| `Scripts/Destruction/Voxels/VoxelBody.cs`, `VoxelChunk.cs` | A carvable rock and its chunk objects |
+| `Scripts/Destruction/Voxels/VoxelScheduler.cs` | The once-a-frame job pipeline for every body |
+| `Scripts/Destruction/Voxels/AsteroidDefinition.cs`, `VoxelMaterialDefinition.cs`, `OreVein.cs` | Asteroid types and rock materials |
+| `Scripts/Destruction/Voxels/VoxelAsteroid.cs` | Places an asteroid in a scene |
+| `Scripts/Destruction/Voxels/VoxelYield.cs` | What one cut removed, by material |
+| `Shaders/ComicSurface.shader` | Gains **Triplanar**: projected texture and normal map for voxel rock, and ore veins from vertex colour. Off by default, so existing materials are unchanged |
+| `Editor/Destruction/DestructionSetup.cs` | Setup step: the system and the default asteroid types, materials and looks |
+| `Editor/GodMenu/Tabs/DestructionTab.cs` | God Menu tab |
+| `Editor/Diagnostics/Voxels/` | Assembly `DeadCargo.Destruction.Diagnostics`: the core self-test |
+| `Editor/Diagnostics/DestructionDiagnostics.cs`, `DevTest/DestructionSmokeTest.cs` | Menu entries for the core self-test and the in-game smoke test |
+
+### Verified before handover
+- **Core self-test, 40 checks, run outside Unity** on the same code: sphere volume within 0.1%, surfaces closed across chunk seams, faces outward, surface within 7 mm of a true sphere; cratered rocks closed and within bounds; same seed same rock, also when filled in slices; crater volume within 0.1% of the true overlap and every bit removed accounted for; a bar cut frees exactly the smaller rock with no voxel lost or doubled and both parts closed; a saw cut gives two equal halves; a cut across a whole rock searched in full; ore veins present and reported by material; an oversized mesh cut short with nothing written past its buffers; a rock dug out entirely leaves nothing.
+- **Every Dead Cargo script compiles** with Unity's compiler, both new assemblies included.
+- **The comic shader compiles**: 20 programs (plain, triplanar, shadowed, instanced, ink, shadow caster) with the DirectX compiler against Unity's includes.
+- **Headless Unity run on a copy of the project** (Unity 6000.3.12f1, Burst on, editor safety checks on, no rendering): the core self-test passes in Unity's own runtime (40 of 40); the setup tool builds every asset correctly on a fresh scene and is safe to run twice; the in-game smoke test passes (13 of 13, below); the God Menu tab shows; a stress run logs no errors. The run found and fixed one real bug: the kit's weapon receiver threw on every hit when added from code.
+- **In-game smoke test**: an ore asteroid builds in 0.03 s (26 chunks, 50,680 triangles), every surface chunk collides, a ray reaches its weapon receiver, a kit weapon hit carves a crater whose volume is accounted to the thousandth of a cubic metre and which physics feels (the surface moves back 1.56 m), digging reports ore by material, a saw cut splits it with no rock lost or doubled, the piece drifts away, and a rock dug out entirely is removed.
+- **Stress run**, five asteroids of 30 to 70 m (663,284 triangles, 34 MB of voxels) built in 0.3 s at a worst 0.47 ms of main-thread time a frame. Realistic fire (twin guns and a missile a second): 0.00 ms a frame on average, 0.15 ms at worst. Extreme fire (20 hits a frame up to missile strength, and saw cuts through whole rocks twice a second, about 6,700 hits a second): 1.0 ms on average, 15 ms at worst, with every queue drained afterwards and no negative volumes.
+
+### Test steps (step 1)
+1. Click into Unity and let it compile. The Console should be free of errors.
+2. Open Polaris. In the God Menu **Project** tab the summary shows one step missing; press **Set Up Sector**. A `Destruction System` appears under `Systems`; asteroid types appear in `Data/Destruction`, and `ComicVoxelRock.mat` in `Materials/Comic`. Save the scene.
+3. Run **Dead Cargo > Diagnostics > Destruction Self-Test**. The Console reports 40 checks passed.
+4. Press Play. In the God Menu **Destruction** tab, under **Asteroids**, pick **Ore Asteroid**, 40 m, 120 m and press **Spawn Ahead**. The rock appears within a few frames: comic tones and outline, orange iron veins and, deeper in, teal crystal.
+5. Fly up and shoot it. Every hit pits the rock where it landed and throws chips in the colour of what it hit. Fire a missile: a much bigger crater.
+6. Fly gently into a crater: the ship collides with the new shape.
+7. Keep shooting a thin part, or press **Cut In Two** under **Damage Nearest**. A piece breaks away, drifts and tumbles. Shoot the piece: it carves too, and can split again. Small crumbs burst into chips.
+8. Try **Crater**, **Blast** and **Crumble** too.
+9. Open **Cost**: main-thread time in all and by stage, chunks, memory, and the rock dug out so far by material, in m³ and tonnes.
+10. Under **Self-Test**, press **Smoke Test**. After a few seconds the Console reports its checks; the test asteroid and its sawn-off piece stay in view.
+11. **Remove All** clears every asteroid and piece.
+
+### Tuning
+- Asteroid types, `Data/Destruction/RockyAsteroid.asset` and `OreAsteroid.asset`: voxel size, shape, ore veins (material, spacing, thickness, depth), damage (rock removed per damage point, explosion multiplier, crater limits and roughness), and how pieces leave (speed, spin, optional effect).
+- Materials, `Data/Destruction/Materials/`: vein colour and strength, chip colour, density in tonnes per cubic metre, and the cargo item mining will yield.
+- Look, `Materials/Comic/ComicVoxelRock.mat`: a copy of `ComicRock.mat` with **Triplanar** on; tile size, sharpness and ore shadow under Triplanar. It is created once and then left alone, so retune it by hand.
+- On the `Destruction System`: chunks rebuilt per frame, cuts and colliders per frame, smallest piece, most free pieces, piece range, and chips (material, count, size, per cut and per frame).

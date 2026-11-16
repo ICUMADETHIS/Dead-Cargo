@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace DeadCargo.Cargo
@@ -7,13 +8,35 @@ namespace DeadCargo.Cargo
     [RequireComponent(typeof(Collider))]
     public sealed class CargoPickup : MonoBehaviour
     {
+        private static readonly List<CargoPickup> pickups = new List<CargoPickup>();
+
         [SerializeField] private CargoItemDefinition item;
         [SerializeField, Min(1)] private int quantity = 1;
 
         private Collider trigger;
 
+        /// <summary>Every enabled pickup in the loaded scenes, for HUD markers.</summary>
+        public static IReadOnlyList<CargoPickup> All => pickups;
+
         public CargoItemDefinition Item => item;
         public int Quantity => quantity;
+
+        // Statics survive play sessions when domain reload is off.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            pickups.Clear();
+        }
+
+        private void OnEnable()
+        {
+            pickups.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            pickups.Remove(this);
+        }
 
         public void Initialize(CargoItemDefinition newItem, int newQuantity)
         {

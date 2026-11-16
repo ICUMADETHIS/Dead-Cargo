@@ -41,21 +41,34 @@ namespace DeadCargo.EditorTools
             }
         }
 
+        /// <summary>True when the scene flow is set up and launches into the given scene.</summary>
+        public static bool IsSector(Scene scene)
+        {
+            var settings = AssetDatabase.LoadAssetAtPath<SceneFlowSettings>(SettingsPath);
+            return IsInstalled && !string.IsNullOrEmpty(scene.path) && settings.SectorScene == scene.path;
+        }
+
         [MenuItem(MenuPath, priority = 205)]
         private static void Run()
+        {
+            Apply();
+        }
+
+        /// <summary>Sets up the open scene as the sector. Returns false when it cannot, after a dialog explains why.</summary>
+        internal static bool Apply()
         {
             Scene sector = SceneManager.GetActiveScene();
             if (string.IsNullOrEmpty(sector.path))
             {
                 EditorUtility.DisplayDialog(DialogTitle, "Save the open scene first. It becomes the sector that runs launch into.", "OK");
-                return;
+                return false;
             }
 
             if (SceneSetupUtility.FindInScene<RunTracker>(sector).Count == 0)
             {
                 EditorUtility.DisplayDialog(DialogTitle,
                     "The open scene has no run tracker. Open the sector scene, such as the Dev Test Range, with the Phase 5 setup in it.", "OK");
-                return;
+                return false;
             }
 
             SceneFlowSettings settings = EnsureSettings(sector.path);
@@ -67,6 +80,7 @@ namespace DeadCargo.EditorTools
             Debug.Log($"Phase 6 mothership set up. Sector: '{sector.path}'. Mothership: '{settings.MothershipScene}'" +
                 (sceneCreated ? " (created)" : "") + (buildChanged ? ". Build Settings updated." : ".") +
                 $" Cargo catalog lists {catalog.Items.Count} item(s).", settings);
+            return true;
         }
 
         [MenuItem(MenuPath, true)]

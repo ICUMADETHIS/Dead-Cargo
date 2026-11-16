@@ -10,13 +10,25 @@ namespace DeadCargo.EditorTools.GodMenu
         /// <summary>Name shown on the tab's header bar.</summary>
         public abstract string Title { get; }
 
-        /// <summary>Position in the window. Lower values appear first. Leave gaps so tabs can be inserted later.</summary>
+        /// <summary>The headed group the tab sits in.</summary>
+        public abstract GodMenuGroup Group { get; }
+
+        /// <summary>Position within the group. Lower values appear first. Leave gaps of ten so tabs can be inserted later.</summary>
         public abstract int Order { get; }
 
-        /// <summary>Called about ten times a second while the window is open, whether or not the tab is expanded.</summary>
+        /// <summary>
+        /// Whether the tab applies to the current mode and scene. Hidden tabs are not drawn at all,
+        /// so a tab never shows controls that cannot be used. Read after <see cref="OnUpdate"/>, outside OnGUI.
+        /// </summary>
+        public virtual bool IsAvailable => true;
+
+        /// <summary>A few words of live status shown on the header, so the tab is useful while collapsed. Null for none.</summary>
+        public virtual string Summary => null;
+
+        /// <summary>Called about ten times a second while the window is open, whether or not the tab is shown.</summary>
         public virtual void OnUpdate() { }
 
-        /// <summary>Draws the tab's contents. Only called while the tab is expanded.</summary>
+        /// <summary>Draws the tab's contents. Only called while the tab is available and expanded.</summary>
         public abstract void OnGUI();
     }
 }

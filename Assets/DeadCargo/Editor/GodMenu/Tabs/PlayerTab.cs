@@ -23,7 +23,23 @@ namespace DeadCargo.EditorTools.GodMenu
         private RigidbodyConstraints frozenBodyConstraints;
 
         public override string Title => "Player";
-        public override int Order => 10;
+        public override GodMenuGroup Group => GodMenuGroup.Run;
+        public override int Order => 0;
+
+        public override bool IsAvailable => GodMenuContext.Player != null;
+
+        public override string Summary
+        {
+            get
+            {
+                Vehicle vehicle = GodMenuContext.PlayerVehicle;
+                if (vehicle == null)
+                    return null;
+
+                string flags = (frozen ? "  ·  frozen" : "") + (invulnerable ? "  ·  invulnerable" : "");
+                return vehicle.Label + flags;
+            }
+        }
 
         public override void OnUpdate()
         {

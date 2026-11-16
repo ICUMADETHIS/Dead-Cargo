@@ -53,19 +53,22 @@ namespace DeadCargo.DevTesting
         {
             foreach (var root in gameObject.scene.GetRootGameObjects())
             {
+                // The run tracker binds the kit menus in Awake. The range rebinds them here, afterwards:
+                // Quit stops play and Restart reloads the range, and neither counts as a lost run.
                 foreach (var button in root.GetComponentsInChildren<Button>(true))
                 {
-                    var click = button.onClick;
-                    if (button.name != "QuitButton" || click.GetPersistentEventCount() != 1 ||
-                        !(click.GetPersistentTarget(0) is SceneLoader) ||
-                        click.GetPersistentMethodName(0) != nameof(SceneLoader.LoadScene))
-                        continue;
-
-                    // The range's kit menus originally quit back to the demo main menu.
-                    button.onClick = new Button.ButtonClickedEvent();
-                    button.onClick.AddListener(QuitRange);
+                    if (button.name == "QuitButton")
+                        Rebind(button, QuitRange);
+                    else if (button.name == "RestartButton")
+                        Rebind(button, RestartRange);
                 }
             }
+        }
+
+        private static void Rebind(Button button, UnityEngine.Events.UnityAction action)
+        {
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener(action);
         }
 
         private static void QuitRange()

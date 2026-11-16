@@ -1,44 +1,37 @@
+using System.Collections.Generic;
 using System.IO;
-using DeadCargo.Authority;
-using DeadCargo.Cargo;
-using DeadCargo.Extraction;
-using DeadCargo.Heat;
+using DeadCargo.EditorTools.Visuals;
+using DeadCargo.Flow;
+using DeadCargo.Visuals;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace DeadCargo.EditorTools.GodMenu
 {
-    /// <summary>Phase setup for the open scene, and shortcuts to the project docs.</summary>
+    /// <summary>Sets up and tidies the open scene, and opens the project docs.</summary>
     internal sealed class ProjectTab : GodMenuTab
     {
-        /// <summary>One phase's setup tool and whether the open scene already has it.</summary>
-        private sealed class Phase
-        {
-            public Phase(string label, string menuPath, System.Func<bool> isInstalled)
-            {
-                Label = label;
-                MenuPath = menuPath;
-                IsInstalled = isInstalled;
-            }
+        private const string TidyLabel = "Tidy Hierarchy";
+        private const string SaveLabel = "Save Scene";
 
-            public string Label { get; }
-            public string MenuPath { get; }
-            public System.Func<bool> IsInstalled { get; }
-            public bool Installed { get; set; }
-        }
+        private static readonly string[] MothershipLabels = { SaveLabel, TidyLabel };
+        private const string RigLabel = "Spawn Player In Ship";
 
-        // Add a line here when a new phase ships a setup tool.
-        private readonly Phase[] phases =
-        {
-            new Phase("Phase 1 - Cargo", "Dead Cargo/Setup/Phase 1 - Cargo (Open Scene)", Exists<CargoHold>),
-            new Phase("Phase 2 - Jettison", "Dead Cargo/Setup/Phase 2 - Jettison (Open Scene)", Exists<CargoJettison>),
-            new Phase("Phase 3 - Heat", "Dead Cargo/Setup/Phase 3 - Heat (Open Scene)", Exists<HeatTracker>),
-            new Phase("Phase 4 - Authority", "Dead Cargo/Setup/Phase 4 - Authority (Open Scene)", Exists<AuthorityResponse>),
-            new Phase("Phase 5 - Extraction", "Dead Cargo/Setup/Phase 5 - Extraction (Open Scene)", Exists<RunTracker>),
-            new Phase("Phase 6 - Mothership", MothershipPhaseSetup.MenuPath, () => MothershipPhaseSetup.IsInstalled)
-        };
+        private static readonly string[] MissingSectorLabels = { SaveLabel, "Set Up Sector", TidyLabel };
+        private static readonly string[] NoRigLabels = { SaveLabel, RigLabel, TidyLabel };
+        private static readonly string[] ReadySectorLabels = { SaveLabel, "Re-run Setup", TidyLabel };
 
-        private static readonly string[] HierarchyLabels = { "Tidy Open Scene" };
+        private const string ApplySkyLabel = "Apply Space Sky";
+        private const string BakeNebulaLabel = "Bake Nebula";
+        private const string EditSkyLabel = "Edit Sky";
+        private const string AddDustLabel = "Add Space Dust";
+        private const string EditDustLabel = "Edit Dust";
+        private const string ComicShipLabel = "Comic Ship";
+        private const string EditShipLabel = "Edit Ship Look";
+        private const string PlaceRockLabel = "Place Test Rock";
+        private const string RemoveRockLabel = "Remove Test Rock";
 
         // Matching entries: button label and project-relative path.
         private static readonly string[] DocLabels = { "Game Design", "Roadmap", "Code Standards", "Backlog" };
@@ -47,61 +40,199 @@ namespace DeadCargo.EditorTools.GodMenu
             "Docs/GameDesign.md", "Docs/Roadmap.md", "Docs/CodeStandards.md", "Docs/Backlog.md"
         };
 
+        private readonly List<string> missing = new List<string>();
+        private bool isMothership;
+        private bool isEmpty;
+        private bool isGameSector;
+        private bool needsRig;
+        private bool hasSkyMaterial;
+        private bool hasSpaceSky;
+        private bool skyIsCurrent;
+        private SpaceDust dust;
+        private bool shipIsComic;
+        private GameObject testRock;
+
+        // The Visuals section's buttons, one each for the sky, the dust, the ship and the test rock, chosen in OnUpdate.
+        private readonly string[] visualLabels = new string[4];
+
         public override string Title => "Project";
-        public override int Order => 1000;
+        public override GodMenuGroup Group => GodMenuGroup.Editor;
+        public override int Order => 10;
+
+        // Setup tools edit the scene, which is not possible in Play Mode.
+        public override bool IsAvailable => !EditorApplication.isPlayingOrWillChangePlaymode;
+
+        public override string Summary
+        {
+            get
+            {
+                if (isMothership)
+                    return "Mothership";
+                if (isEmpty)
+                    return "Blank scene";
+
+                return missing.Count == 0 ? "Sector ready" : $"{SectorSetup.Steps.Length - missing.Count} / {SectorSetup.Steps.Length} set up";
+            }
+        }
 
         public override void OnUpdate()
         {
-            foreach (Phase phase in phases)
-                phase.Installed = phase.IsInstalled();
+            // Hidden in Play Mode, so the scene searches are skipped.
+            if (EditorApplication.isPlaying)
+                return;
+
+            Scene scene = SceneManager.GetActiveScene();
+            SceneFlowSettings settings = SceneFlow.Settings;
+            isMothership = settings != null && !string.IsNullOrEmpty(scene.path) && scene.path == settings.MothershipScene;
+            isEmpty = scene.rootCount == 0;
+            SectorSetup.FindMissing(scene, missing);
+
+            // Game sectors get their player from the rig setup. The test range and unsaved scenes use the Range tab.
+            isGameSector = !isMothership && !string.IsNullOrEmpty(scene.path) && !SectorRigSetup.IsTestRange(scene);
+            bool hasPlayer = SceneSetupUtility.FindPlayer(scene) != null;
+            needsRig = isGameSector && !hasPlayer;
+            hasSkyMaterial = SpaceSkySetup.HasSkyMaterial(scene);
+            hasSpaceSky = SpaceSkySetup.IsInstalled(scene);
+            skyIsCurrent = hasSkyMaterial && SpaceSkyBaker.IsCurrent(RenderSettings.skybox);
+            dust = SpaceDustSetup.Find(scene);
+            shipIsComic = hasPlayer && ComicLookSetup.IsShipComic(scene);
+            testRock = ComicLookSetup.FindTestRock(scene);
+            visualLabels[0] = !hasSpaceSky ? ApplySkyLabel : skyIsCurrent ? EditSkyLabel : BakeNebulaLabel;
+            visualLabels[1] = dust == null ? AddDustLabel : EditDustLabel;
+            visualLabels[2] = shipIsComic ? EditShipLabel : ComicShipLabel;
+            visualLabels[3] = testRock == null ? PlaceRockLabel : RemoveRockLabel;
         }
 
         public override void OnGUI()
         {
-            DrawPhases();
-            DrawHierarchy();
+            DrawOpenScene();
+            if (isGameSector)
+                DrawVisuals();
             DrawDocs();
         }
 
-        private static void DrawHierarchy()
+        private void DrawOpenScene()
         {
-            using (var section = new GodMenuGUI.SectionScope("Hierarchy"))
+            using (var section = new GodMenuGUI.SectionScope("Open Scene"))
             {
                 if (!section.Expanded)
                     return;
 
-                GUILayout.Label("Files Dead Cargo objects into the Systems, UI, Cameras and Environment folders. " +
-                    "Kit objects and ships stay at the root.", EditorStyles.wordWrappedMiniLabel);
-
-                using (new EditorGUI.DisabledScope(EditorApplication.isPlayingOrWillChangePlaymode))
+                string[] labels;
+                if (isMothership)
                 {
-                    if (GodMenuGUI.ButtonRow(HierarchyLabels) == 0)
-                        EditorApplication.ExecuteMenuItem(SceneHierarchy.TidyMenuPath);
+                    GodMenuGUI.Status(true, "Mothership: no setup needed");
+                    labels = MothershipLabels;
+                }
+                else if (needsRig)
+                {
+                    GodMenuGUI.Status(false, "Game sector: no player yet");
+                    GUILayout.Label("Spawns the player rig with the player already aboard the ship, and makes this the sector the mothership launches into.",
+                        EditorStyles.wordWrappedMiniLabel);
+                    labels = NoRigLabels;
+                }
+                else if (missing.Count == 0)
+                {
+                    GodMenuGUI.Status(true, "Sector ready: every system is set up");
+                    labels = ReadySectorLabels;
+                }
+                else
+                {
+                    GodMenuGUI.Status(false, isEmpty ? "Blank scene" : "Not a complete sector");
+                    GUILayout.Label(isEmpty
+                        ? "Spawn the player rig from the Range tab, then set it up as a sector."
+                        : "Missing: " + string.Join(", ", missing), EditorStyles.wordWrappedMiniLabel);
+                    labels = MissingSectorLabels;
+                }
+
+                int clicked = GodMenuGUI.ButtonRow(labels);
+                if (clicked < 0)
+                    return;
+
+                // Run after this GUI pass, because setup can open dialogs and rebuild the hierarchy.
+                // An unsaved scene asks where to save it.
+                if (labels[clicked] == SaveLabel)
+                    EditorApplication.delayCall += () => EditorSceneManager.SaveScene(SceneManager.GetActiveScene());
+                else if (labels[clicked] == TidyLabel)
+                    EditorApplication.delayCall += () => EditorApplication.ExecuteMenuItem(SceneHierarchy.TidyMenuPath);
+                else if (labels[clicked] == RigLabel)
+                    EditorApplication.delayCall += () => SectorRigSetup.Apply();
+                else
+                    EditorApplication.delayCall += () => SectorSetup.Apply();
+            }
+        }
+
+        // The sector's sky, space dust and the comic look of near objects.
+        private void DrawVisuals()
+        {
+            using (var section = new GodMenuGUI.SectionScope("Visuals"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                // The flags are refreshed ten times a second, so the skybox, dust and rock are checked again here.
+                Material sky = RenderSettings.skybox;
+                if (!hasSkyMaterial || sky == null)
+                    GodMenuGUI.Status(false, "Sky: not the space sky");
+                else if (!hasSpaceSky)
+                    GodMenuGUI.Status(false, "Sky: needs the new-each-load update");
+                else
+                    GodMenuGUI.Status(skyIsCurrent, skyIsCurrent ? "Sky: " + sky.name : "Sky: nebula out of date");
+
+                bool hasDust = dust != null;
+                GodMenuGUI.Status(hasDust, hasDust ? "Space dust: on" : "Space dust: none");
+                GodMenuGUI.Status(shipIsComic, shipIsComic ? "Ship: comic look" : "Ship: Flat Kit look");
+
+                int clicked = GodMenuGUI.ButtonRow(visualLabels);
+                if (clicked < 0)
+                    return;
+
+                // Setup runs after this GUI pass, because it can open dialogs and change the hierarchy.
+                Scene scene = SceneManager.GetActiveScene();
+                switch (visualLabels[clicked])
+                {
+                    case ComicShipLabel:
+                        EditorApplication.delayCall += () => ComicLookSetup.ApplyToShip();
+                        break;
+                    case EditShipLabel:
+                        Material shipLook = ComicLookSetup.FindShipComicMaterial(scene);
+                        if (shipLook != null)
+                            SelectAndPing(shipLook);
+                        break;
+                    case PlaceRockLabel:
+                        EditorApplication.delayCall += () => ComicLookSetup.PlaceTestRock();
+                        break;
+                    case RemoveRockLabel when testRock != null:
+                        GameObject rock = testRock;
+                        EditorApplication.delayCall += () =>
+                        {
+                            if (rock != null)
+                                Undo.DestroyObjectImmediate(rock);
+                        };
+                        break;
+                    case ApplySkyLabel:
+                        EditorApplication.delayCall += () => SpaceSkySetup.Apply();
+                        break;
+                    case BakeNebulaLabel when sky != null:
+                        EditorApplication.delayCall += () => SpaceSkyBaker.Bake(sky);
+                        break;
+                    case EditSkyLabel when sky != null:
+                        SelectAndPing(sky);
+                        break;
+                    case AddDustLabel:
+                        EditorApplication.delayCall += () => SpaceDustSetup.Apply();
+                        break;
+                    case EditDustLabel when hasDust:
+                        SelectAndPing(dust.gameObject);
+                        break;
                 }
             }
         }
 
-        private void DrawPhases()
+        private static void SelectAndPing(Object target)
         {
-            using (var section = new GodMenuGUI.SectionScope("Open Scene Setup"))
-            {
-                if (!section.Expanded)
-                    return;
-
-                using (new EditorGUI.DisabledScope(EditorApplication.isPlayingOrWillChangePlaymode))
-                {
-                    foreach (Phase phase in phases)
-                    {
-                        EditorGUILayout.BeginHorizontal();
-                        GodMenuGUI.Status(phase.Installed, phase.Label);
-
-                        if (GodMenuGUI.MiniButton(phase.Installed ? "Re-run" : "Set Up", 60f))
-                            EditorApplication.ExecuteMenuItem(phase.MenuPath);
-
-                        EditorGUILayout.EndHorizontal();
-                    }
-                }
-            }
+            Selection.activeObject = target;
+            EditorGUIUtility.PingObject(target);
         }
 
         private static void DrawDocs()
@@ -115,11 +246,6 @@ namespace DeadCargo.EditorTools.GodMenu
                 if (clicked >= 0 && File.Exists(DocPaths[clicked]))
                     EditorUtility.OpenWithDefaultApp(Path.GetFullPath(DocPaths[clicked]));
             }
-        }
-
-        private static bool Exists<T>() where T : Object
-        {
-            return Object.FindFirstObjectByType<T>(FindObjectsInactive.Include) != null;
         }
     }
 }

@@ -169,12 +169,14 @@ namespace DeadCargo.UI
 
             Color accent = run.Extracted ? HudFactory.SuccessColor : HudFactory.WarningColor;
             runPlate.SetAccent(accent);
-            runOutcome.text = run.Extracted ? "EXTRACTED" : "SHIP LOST";
+            runOutcome.text = run.Extracted ? "EXTRACTED" : run.ShipLost ? "SHIP LOST" : "RUN LOST";
             runOutcome.color = accent;
 
             string peak = string.IsNullOrEmpty(run.PeakHeat) ? "n/a" : run.PeakHeat;
             runStats.text = $"Run time {FormatDuration(run.Duration)}   ·   Peak heat {peak}   ·   Authority downed {run.AuthorityShipsDestroyed}";
-            runCargo.text = $"{(run.Extracted ? "Cargo banked" : "Cargo lost")}   {run.CargoValue:N0} cr   ·   {run.CargoMass:0.#} t";
+            string cargo = $"{(run.Extracted ? "Cargo banked" : "Cargo lost")}   {run.CargoValue:N0} cr   ·   {run.CargoMass:0.#} t";
+            string ship = !run.ShipLost ? "" : run.ShipLossFee > 0 ? $"   ·   Ship −{run.ShipLossFee:N0} cr" : "   ·   Basic hull issued";
+            runCargo.text = cargo + ship;
             runCargo.color = run.Extracted ? HudFactory.Ink : HudFactory.WarningColor;
         }
 

@@ -43,7 +43,8 @@ namespace DeadCargo.EditorTools.TestRange
             new RangeGroup("Turrets", "Level/Turrets"),
             new RangeGroup("Targets", "Level/StaticAirTargets", "Level/DynamicAirTargets"),
             new RangeGroup("Crates", "Level/Crates"),
-            new RangeGroup("Cargo Pickups", "Cargo Pickups")
+            new RangeGroup("Cargo Pickups", SceneSetupUtility.CargoPickupsRoot),
+            new RangeGroup("Extraction Point", ExtractionPointSetup.RootName)
         };
 
         public static bool HasTemplate => AssetDatabase.LoadAssetAtPath<SceneAsset>(TemplatePath) != null;

@@ -12,6 +12,9 @@ namespace DeadCargo.EditorTools
         public const int IgnoreRaycastLayer = 2;
         public const int UILayer = 5;
 
+        /// <summary>Root object holding the placed cargo and dark matter pickups. Test range content, kept at the root.</summary>
+        public const string CargoPickupsRoot = "Cargo Pickups";
+
         /// <summary>Returns the selected ship, or the only ship in the scene when nothing valid is selected.</summary>
         public static VehicleEngines3D FindShip(Scene scene)
         {

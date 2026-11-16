@@ -18,12 +18,21 @@ namespace DeadCargo.EditorTools
         [MenuItem(MenuPath, priority = 203)]
         private static void Run()
         {
+            Apply();
+        }
+
+        /// <summary>
+        /// Sets up the open scene. Returns false when it cannot, after a dialog explains why.
+        /// Missing unit prefabs are reported but do not count as a failure, since they can be assigned by hand.
+        /// </summary>
+        internal static bool Apply()
+        {
             Scene scene = SceneManager.GetActiveScene();
 
             if (SceneSetupUtility.FindInScene<HeatTracker>(scene).Count == 0)
             {
                 EditorUtility.DisplayDialog(DialogTitle, "The open scene has no heat tracker. Run the Phase 3 setup first.", "OK");
-                return;
+                return false;
             }
 
             Undo.SetCurrentGroupName("Set Up Phase 4 Authority");
@@ -46,6 +55,8 @@ namespace DeadCargo.EditorTools
                     "No AI spawn point was found to copy the enemy pilot and ship from.\n\n" +
                     "Assign Pilot Prefab and Ship Prefab on the Authority Response object.", "OK");
             }
+
+            return true;
         }
 
         [MenuItem(MenuPath, true)]

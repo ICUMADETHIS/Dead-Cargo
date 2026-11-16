@@ -37,6 +37,8 @@ namespace DeadCargo.EditorTools
 
         private const string KitNamespace = "VSX";
         private const string DeadCargoNamespace = "DeadCargo";
+        private const string VisualsNamespace = "DeadCargo.Visuals";
+        private const string VoxelsNamespace = "DeadCargo.Destruction.Voxels";
 
         [MenuItem(TidyMenuPath, priority = 150)]
         private static void TidyOpenScene()
@@ -134,6 +136,10 @@ namespace DeadCargo.EditorTools
 
             if (root.TryGetComponent(out Canvas _))
                 return UI;
+
+            // Dead Cargo's visual effects and placed asteroids are set dressing, not systems.
+            if (HasComponentFrom(root, VisualsNamespace) || HasComponentFrom(root, VoxelsNamespace))
+                return Environment;
             if (root.TryGetComponent(out EventSystem _) || HasComponentFrom(root, DeadCargoNamespace))
                 return Systems;
             if (root.TryGetComponent(out Camera _))
