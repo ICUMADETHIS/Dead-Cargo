@@ -7,8 +7,9 @@ using Unity.Mathematics;
 namespace DeadCargo.Destruction.Voxels
 {
     /// <summary>
-    /// Applies a body's queued carves in order. For each one, writes the rock removed per material slot and the box of
-    /// samples that changed, so the caller can raise yields and remesh only what moved.
+    /// Applies a body's queued carves in order. For each one, writes the rock removed per material slot and as mass
+    /// moments, and the box of samples that changed, so the caller can raise yields, update the body's mass and remesh
+    /// only what moved.
     /// </summary>
     [BurstCompile]
     public unsafe struct VoxelCarveJob : IJob
@@ -22,6 +23,9 @@ namespace DeadCargo.Destruction.Voxels
 
         /// <summary><see cref="VoxelEncoding.MaterialSlots"/> per request, in voxel volumes.</summary>
         public NativeArray<float> Removed;
+
+        /// <summary>One per request: the rock removed, as mass moments in grid coordinates.</summary>
+        public NativeArray<MassMoments> Moments;
 
         /// <summary>Two per request: lowest and highest changed sample. Min above max when nothing changed.</summary>
         public NativeArray<int3> Changed;
@@ -37,7 +41,9 @@ namespace DeadCargo.Destruction.Voxels
                 for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
                     slots[m] = 0f;
 
-                VoxelCarving.Carve(grid, Requests[r], slots, out int3 min, out int3 max);
+                MassMoments moments = default;
+                VoxelCarving.Carve(grid, Requests[r], slots, ref moments, out int3 min, out int3 max);
+                Moments[r] = moments;
                 Changed[r * 2] = min;
                 Changed[r * 2 + 1] = max;
             }

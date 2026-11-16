@@ -17,9 +17,12 @@ namespace DeadCargo.Destruction.Voxels
         public float4* Palette;
         public int PaletteCount;
 
+        /// <summary>Samples read per cell edge: 1 for full detail, 2 and 4 for the half and quarter detail of distant rock.</summary>
+        public int Stride;
+
         /// <summary>A request for one chunk of a body, built without unsafe code at the call site.</summary>
         public static MeshRequest Create(NativeArray<sbyte> density, NativeArray<byte> material, int3 size, int3 chunkMin,
-            float voxelSize, float3 origin, NativeArray<float4> palette)
+            float voxelSize, float3 origin, NativeArray<float4> palette, int stride = 1)
         {
             return new MeshRequest
             {
@@ -31,7 +34,8 @@ namespace DeadCargo.Destruction.Voxels
                 VoxelSize = voxelSize,
                 Origin = origin,
                 Palette = (float4*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(palette),
-                PaletteCount = palette.Length
+                PaletteCount = palette.Length,
+                Stride = stride
             };
         }
     }

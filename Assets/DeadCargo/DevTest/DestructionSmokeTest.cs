@@ -168,7 +168,7 @@ namespace DeadCargo.DevTesting
                     yield return null;
 
                 bool ready = piece != null && piece.IsReady;
-                Check(ready && piece.IsFree && piece.PhysicsBody != null && piece.PhysicsBody.isKinematic, "The piece drifts free",
+                Check(ready && piece.IsPiece && piece.PhysicsBody != null && piece.PhysicsBody.isKinematic, "The piece drifts free",
                     ready ? $"{piece.Volume:N0} m³, {piece.SurfaceChunks} chunks" : "piece never finished building");
 
                 if (ready)

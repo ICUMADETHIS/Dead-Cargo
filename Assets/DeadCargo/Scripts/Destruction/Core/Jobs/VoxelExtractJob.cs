@@ -25,8 +25,8 @@ namespace DeadCargo.Destruction.Voxels
         /// <summary><see cref="VoxelEncoding.MaterialSlots"/> volumes per piece: contained when kept, removed when erased.</summary>
         public NativeArray<float> MaterialVolume;
 
-        /// <summary>Per piece: centre of mass in its new grid's coordinates, and its volume in voxel volumes.</summary>
-        public NativeArray<float4> Mass;
+        /// <summary>Per piece: the rock it took from the body, as mass moments in the source grid's coordinates.</summary>
+        public NativeArray<MassMoments> Moments;
 
         public void Execute()
         {
@@ -45,14 +45,15 @@ namespace DeadCargo.Destruction.Voxels
                     for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
                         slots[m] = 0f;
 
-                    VoxelIslands.Erase(source, voxels + island.Start, island.Count, slots);
-                    Mass[i] = float4.zero;
+                    MassMoments erased = default;
+                    VoxelIslands.Erase(source, voxels + island.Start, island.Count, slots, ref erased);
+                    Moments[i] = erased;
                     continue;
                 }
 
                 VoxelIslands.Extract(source, voxels + island.Start, island.Count, island.Min, target.Grid, target.Offset);
-                VoxelIslands.Measure(target.Grid, slots, out float volume, out float3 centre, out _);
-                Mass[i] = new float4(centre, volume);
+                VoxelIslands.Measure(target.Grid, slots, out MassMoments moved, out _);
+                Moments[i] = moved.Transformed(1.0, island.Min - target.Offset);
             }
         }
     }

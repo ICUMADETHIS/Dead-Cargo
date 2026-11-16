@@ -32,8 +32,9 @@ namespace DeadCargo.Sectors
         public bool HasSeedOverride => hasSeedOverride;
 
         /// <summary>
-        /// World-space position of the sector's origin. Zero until the floating origin moves the world,
-        /// so always convert through <see cref="WorldToSector"/> and <see cref="SectorToWorld"/>.
+        /// World-space position of the sector's origin. Zero until the floating origin moves the world, which it does not
+        /// yet (see <see cref="DeadCargo.Flow.FloatingOriginGuard"/>), so always convert through
+        /// <see cref="WorldToSector"/> and <see cref="SectorToWorld"/>.
         /// </summary>
         public Vector3 OriginOffset { get; private set; }
 

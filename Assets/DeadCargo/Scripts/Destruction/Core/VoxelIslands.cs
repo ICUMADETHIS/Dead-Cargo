@@ -199,11 +199,20 @@ namespace DeadCargo.Destruction.Voxels
         /// </summary>
         public static void Erase(in VoxelGrid grid, int* voxels, int count, float* removed)
         {
+            MassMoments moments = default;
+            Erase(grid, voxels, count, removed, ref moments);
+        }
+
+        /// <param name="removedMoments">The rock removed, as mass moments in grid coordinates, added to.</param>
+        public static void Erase(in VoxelGrid grid, int* voxels, int count, float* removed, ref MassMoments removedMoments)
+        {
             for (int k = 0; k < count; ++k)
             {
                 int v = voxels[k];
                 int slot = math.min((int)grid.Material[v], VoxelEncoding.MaterialSlots - 1);
-                removed[slot] += VoxelEncoding.Occupancy(grid.Density[v]);
+                float occupancy = VoxelEncoding.Occupancy(grid.Density[v]);
+                removed[slot] += occupancy;
+                removedMoments.Add(occupancy, grid.Coord(v));
                 grid.Density[v] = VoxelEncoding.Empty;
             }
 
@@ -222,7 +231,9 @@ namespace DeadCargo.Destruction.Voxels
                         continue;
 
                     int slot = math.min((int)grid.Material[u], VoxelEncoding.MaterialSlots - 1);
-                    removed[slot] += VoxelEncoding.Occupancy(d);
+                    float occupancy = VoxelEncoding.Occupancy(d);
+                    removed[slot] += occupancy;
+                    removedMoments.Add(occupancy, p);
                     grid.Density[u] = VoxelEncoding.Empty;
                 }
             }
@@ -235,22 +246,32 @@ namespace DeadCargo.Destruction.Voxels
         /// <param name="materialVolume"><see cref="VoxelEncoding.MaterialSlots"/> long; overwritten.</param>
         public static void Measure(in VoxelGrid grid, float* materialVolume, out float volume, out float3 centre, out int solidCount)
         {
-            for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
-                materialVolume[m] = 0f;
+            Measure(grid, materialVolume, out MassMoments moments, out solidCount);
+            volume = (float)moments.Volume;
+            centre = moments.Volume > 0.0 ? (float3)moments.Centre : (float3)grid.Size * 0.5f;
+        }
 
+        /// <summary>
+        /// Rock in a whole grid as mass moments in grid coordinates, and its volume per material in voxel volumes.
+        /// </summary>
+        /// <param name="materialVolume"><see cref="VoxelEncoding.MaterialSlots"/> long; overwritten.</param>
+        public static void Measure(in VoxelGrid grid, float* materialVolume, out MassMoments moments, out int solidCount)
+        {
             // Sums run in double: a large rock adds up millions of small values, and mining totals must not drift.
-            double total = 0.0;
-            double3 moment = double3.zero;
             double* materials = stackalloc double[VoxelEncoding.MaterialSlots];
             for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
                 materials[m] = 0.0;
 
+            moments = default;
             solidCount = 0;
             for (int z = 0; z < grid.Size.z; ++z)
             {
                 for (int y = 0; y < grid.Size.y; ++y)
                 {
                     int row = grid.Index(0, y, z);
+                    double rowVolume = 0.0;
+                    double rowX = 0.0;
+                    double rowXX = 0.0;
                     for (int x = 0; x < grid.Size.x; ++x)
                     {
                         sbyte d = grid.Density[row + x];
@@ -261,20 +282,21 @@ namespace DeadCargo.Destruction.Voxels
                         if (occupancy <= 0f)
                             continue;
 
-                        total += occupancy;
-                        moment += occupancy * new double3(x, y, z);
+                        rowVolume += occupancy;
+                        rowX += (double)occupancy * x;
+                        rowXX += (double)occupancy * x * x;
                         materials[math.min((int)grid.Material[row + x], VoxelEncoding.MaterialSlots - 1)] += occupancy;
                         if (d > 0)
                             ++solidCount;
                     }
+
+                    if (rowVolume > 0.0)
+                        moments.AddRow(rowVolume, rowX, rowXX, y, z);
                 }
             }
 
             for (int m = 0; m < VoxelEncoding.MaterialSlots; ++m)
                 materialVolume[m] = (float)materials[m];
-
-            volume = (float)total;
-            centre = total > 0.0 ? (float3)(moment / total) : (float3)grid.Size * 0.5f;
         }
 
         private static void CollectIslands(in VoxelGrid grid, int labels, int head, int tail, int open, ref IslandBuffers buffers)

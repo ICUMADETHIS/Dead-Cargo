@@ -91,7 +91,7 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 
   | Group | Shown | Tabs |
   |---|---|---|
-  | GAME | Always | Session 0, Mothership 10 |
+  | GAME | Always | Session 0, Mothership 10, Debug Overlay 20 |
   | LIVE RUN | In Play Mode, when the tab's system is in the scene | Player 0, Cargo 10, Heat 20, Authority 30, Extraction 40, World 50, Sector 60, Destruction 70 |
   | EDITOR | Outside Play Mode. Range only in the test range or a blank scene, never the mothership or a game sector | Range 0, Project 10 |
 
@@ -130,8 +130,16 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 - **Deterministic rock.** Asteroid shape and ore follow the sector generation rules: a pure function of type, size and seed. Visual randomness (chips, piece spin) may use `UnityEngine.Random`.
 - **Scale 1.** Voxel bodies are never scaled; cuts and grids work in metres.
 - **Report what is removed.** Every cut raises `MaterialRemoved` with what it took, by material. Systems that care (mining, heat, missions) listen; they never read grids.
+- **The main thread never waits.** Never call `JobHandle.Complete()` on a job that may still be running, except at teardown. Check `IsCompleted` and pick the result up next frame, or defer the work (a released body stays hidden until its jobs finish). When one body must wait, wait only for that body's jobs (`CompleteJobsFor`), never for every job in the scene.
+- **Pay first-time costs at load.** A new path through the pipeline (a new cut shape, a new kind of piece) is also run by `DestructionWarmUp`, so the player's first use of it costs no more than the rest. The warm-up rock (`IsWarmUp`) raises no system events; tools and readouts skip it.
+- **Budgets per second, not per frame**, where the cost or the look must not depend on frame rate (chips). Per-frame budgets are for work that must finish within the frame it was asked for (cuts, meshing).
 - **Tested core.** A change to the voxel core comes with checks in `VoxelSelfTest`. Run **Dead Cargo > Diagnostics > Destruction Self-Test** before handing a change over, and the **Smoke Test** in the God Menu Destruction tab for anything touching the pipeline.
 
-## Debug drawing
+## Debugging
 - Use Draw Debug Tools (`using DDT;`, `DrawDebugTools.DrawLine(...)`) for in-game debug drawing. Its calls are compiled out of release builds.
-- Debug drawing lives in its own component beside the system it shows, switched from the God Menu, and off by default.
+- **On-screen debugging goes through the debug overlay** (`Scripts/Debugging/`, phase 6.11). A system gets debug information by adding to it: a value in `DebugChannel` with its name, description and picker key in `DebugChannels`, a panel in `DebugReadouts`, and world drawing in `DebugWorldDraw`. Do not add separate debug canvases or OnGUI readouts.
+- **Read, never change.** Readouts and world drawing use only public game API and never change game state.
+- **Debug code is never shipped.** Wrap every debug-only file and reference in `#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED`. Game code never refers to debug code; the dependency only runs from debug to game.
+- **No garbage per frame.** Build overlay text with the `DebugText` helpers, refresh it a few times a second, and build world labels at refresh time, moving them every frame.
+- **Off by default**, except the frame rate counter. Channels are switched with F3 and F4 in game, the God Menu **Debug Overlay** tab and the dev console, all through `DebugSettings`.
+- Drawing tied to one system's internals, like `SectorDebugView`, may still live in a component beside that system, switched from its God Menu tab. The overlay's channel can switch it too.

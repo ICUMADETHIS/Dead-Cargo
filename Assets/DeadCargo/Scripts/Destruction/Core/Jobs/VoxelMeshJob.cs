@@ -59,7 +59,7 @@ namespace DeadCargo.Destruction.Voxels
 
             MeshRequest request = Requests[i];
             SurfaceNets.MeshChunk(request.Grid, request.ChunkMin, request.VoxelSize, request.Origin, request.Palette,
-                request.PaletteCount, ref buffers);
+                request.PaletteCount, request.Stride, ref buffers);
 
             Mesh.MeshData data = Output[i];
             data.SetVertexBufferParams(buffers.VertexCount, Layout);

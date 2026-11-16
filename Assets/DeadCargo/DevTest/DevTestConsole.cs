@@ -1,5 +1,8 @@
 using System.Collections.Generic;
 using DeadCargo.Cargo;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
+using DeadCargo.Debugging;
+#endif
 using DeadCargo.Heat;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -20,6 +23,13 @@ namespace DeadCargo.DevTesting
 
         private const KeyCode PanelKey = KeyCode.F6;
         private const KeyCode ResetKey = KeyCode.F7;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
+        private const string KeyHint = "F3  Debug     F6  Dev Test     F7  Reset scene";
+        private const float KeyHintWidth = 330f;
+#else
+        private const string KeyHint = "F6  Dev Test     F7  Reset scene";
+        private const float KeyHintWidth = 248f;
+#endif
 
 #if UNITY_EDITOR
         public const string MobilePath = "Assets/DeadCargo/DevTest/Dev Mobile Controls.unity";
@@ -272,8 +282,8 @@ namespace DeadCargo.DevTesting
 
             if (!panelOpen)
             {
-                var hint = sceneLoad != null ? "Loading scenario…" : $"{PanelKey}  Dev Test     {ResetKey}  Reset scene";
-                GUI.Label(new Rect(12, Screen.height - 34, 248, 23), hint, hintStyle);
+                var hint = sceneLoad != null ? "Loading scenario…" : KeyHint;
+                GUI.Label(new Rect(12, Screen.height - 34, KeyHintWidth, 23), hint, hintStyle);
                 return;
             }
 
@@ -292,6 +302,9 @@ namespace DeadCargo.DevTesting
             GUILayout.Label("Player", GUI.skin.label);
             DrawPlayer(panelPlayer);
             DrawHeat();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
+            DrawDebugOverlay();
+#endif
 
             GUILayout.Space(10);
             GUILayout.BeginHorizontal();
@@ -392,6 +405,29 @@ namespace DeadCargo.DevTesting
             GUILayout.EndHorizontal();
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
+        // The debug overlay's switches, the same ones the God Menu and the F3 and F4 keys change.
+        private void DrawDebugOverlay()
+        {
+            GUILayout.Space(10);
+            GUILayout.Label("Debug overlay", GUI.skin.label);
+            DebugSettings.OverlayVisible = GUILayout.Toggle(DebugSettings.OverlayVisible, $" Show overlay   {DebugOverlay.OverlayKey}");
+            for (int i = 0; i < DebugChannels.Count; i += 2)
+            {
+                GUILayout.BeginHorizontal();
+                ChannelToggle((DebugChannel)i);
+                if (i + 1 < DebugChannels.Count)
+                    ChannelToggle((DebugChannel)(i + 1));
+                GUILayout.EndHorizontal();
+            }
+        }
+
+        private static void ChannelToggle(DebugChannel channel)
+        {
+            DebugSettings.Set(channel, GUILayout.Toggle(DebugSettings.IsOn(channel), " " + DebugChannels.Name(channel), GUILayout.Width(190)));
+        }
+
+#endif
         private static string ScenarioLabel()
         {
             var scene = SceneManager.GetActiveScene();

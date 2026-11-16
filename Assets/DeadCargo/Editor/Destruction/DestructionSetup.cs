@@ -20,6 +20,7 @@ namespace DeadCargo.EditorTools.Destruction
         public const string RockyAsteroidPath = DataFolder + "/RockyAsteroid.asset";
         public const string OreAsteroidPath = DataFolder + "/OreAsteroid.asset";
         public const string VoxelRockMaterialPath = "Assets/DeadCargo/Materials/Comic/ComicVoxelRock.mat";
+        public const string TrailRockMaterialPath = "Assets/DeadCargo/Materials/Comic/ComicTrailRock.mat";
         public const string ChipMaterialPath = "Assets/DeadCargo/Materials/Destruction/RockChips.mat";
 
         private const string MaterialsFolder = DataFolder + "/Materials";
@@ -59,10 +60,13 @@ namespace DeadCargo.EditorTools.Destruction
             var serialized = new SerializedObject(system);
             SerializedProperty chips = serialized.FindProperty("chipMaterial");
             if (chips.objectReferenceValue == null)
-            {
                 chips.objectReferenceValue = AssetDatabase.LoadAssetAtPath<Material>(ChipMaterialPath);
-                serialized.ApplyModifiedProperties();
-            }
+
+            SerializedProperty trail = serialized.FindProperty("trailMaterial");
+            if (trail.objectReferenceValue == null)
+                trail.objectReferenceValue = AssetDatabase.LoadAssetAtPath<Material>(TrailRockMaterialPath);
+
+            serialized.ApplyModifiedProperties();
 
             Undo.CollapseUndoOperations(undoGroup);
             EditorSceneManager.MarkSceneDirty(scene);
@@ -102,6 +106,7 @@ namespace DeadCargo.EditorTools.Destruction
             }
 
             EnsureChipMaterial();
+            EnsureTrailRockMaterial(surface);
             SceneSetupUtility.EnsureFolder(MaterialsFolder);
 
             VoxelMaterialDefinition rock = EnsureVoxelMaterial(RockPath, "Rock", Color.white, 0f, new Color(0.55f, 0.46f, 0.38f), 2.6f);
@@ -158,6 +163,18 @@ namespace DeadCargo.EditorTools.Destruction
             SceneSetupUtility.EnsureFolder("Assets/DeadCargo/Materials/Comic");
             AssetDatabase.CreateAsset(voxel, VoxelRockMaterialPath);
             return voxel;
+        }
+
+        // The voxel rock look for trail rocks, which are drawn instanced. A material of its own with instancing on keeps
+        // that shader variant in builds; a finer texture tile suits rocks a metre across.
+        private static void EnsureTrailRockMaterial(Material voxel)
+        {
+            if (AssetDatabase.LoadAssetAtPath<Material>(TrailRockMaterialPath) != null)
+                return;
+
+            var trail = new Material(voxel) { name = "ComicTrailRock", enableInstancing = true };
+            trail.SetFloat("_TriplanarTile", 2f);
+            AssetDatabase.CreateAsset(trail, TrailRockMaterialPath);
         }
 
         private static void EnsureChipMaterial()

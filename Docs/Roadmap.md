@@ -19,7 +19,8 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.7 | Polaris sector | The game sector runs launch into, built up from an empty scene. 6.7a: the scene with the star sky. 6.7b: the player starts aboard the ship. 6.7c: pause menu Quit and Restart | Done, tested 2026-11-16 |
 | 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16 |
 | 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test |
-| 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test |
+| 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
+| 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -809,17 +810,26 @@ Rock breaks the way you hit it. Asteroids are made of voxels: guns pit them, mis
 | Step | Delivers | Status |
 |---|---|---|
 | 1. Voxel asteroids | Smooth voxel rock built from a seed, carved by every kit weapon, pieces that break away and drift, ore veins and yields by material, rock chips, God Menu tab, self-tests | Built and smoke-tested, awaiting test |
+| 1b. Breaking and motion | Cracks that break a small, medium or large chunk off anywhere, with ragged faces. Every rock drifts and tumbles on its real mass and inertia; both parts of a split push apart; hits push rocks | Built and compile-checked, awaiting test |
+| 1c. Rock trails and speed | Trails of small rocks behind large asteroids that ships collide with and weapons shatter; half-detail meshes for distant rock; cuts across whole rocks made on a worker thread; a God Menu benchmark | Built and compile-checked, awaiting test |
+| 1d. Performance pass | A hidden warm-up at load so the first hit of a run is as cheap as the rest; quarter detail for far rock and closer detail switches; no main-thread waits when rock is spawned or freed; chips budgeted per second so the pool never fills; pools filled at load; a benchmark with percentiles, GPU time, garbage, a steady load and one seed | Built, compile-checked and self-tested, awaiting test |
 | 2. Mining tool | A mining beam that cuts precisely and puts what it cuts into the hold, by material. Merges with phase 8 | Planned |
 | 3. Asteroid field | The field's near rocks become voxel asteroids, far rocks stay instanced, cuts last for the run. With 6.8 steps 2 and 5 | Planned |
 | 4. Shatter | Ships, crates and stations break into pre-cut pieces through the same damage path | Planned |
-| 5. Optimisation | Lower-detail meshes for distant voxel rock, giant asteroids streamed in chunks, saw cuts through whole rocks spread over frames (the one remaining spike, 15 ms under extreme stress), profiling against the 6.8 targets | Planned |
+| 5. Optimisation | Giant asteroids streamed in chunks, voxel memory for distant rock, profiling against the 6.8 targets. Half detail for distant rock and cuts across whole rocks off the main thread came early, in step 1c; quarter detail, the warm-up and the waits removed in step 1d | Planned |
 
 ### Design (step 1)
 - **Smooth voxel rock.** An asteroid is a grid of samples, each holding the distance to the rock's surface in one byte. The surface is rebuilt from it with Surface Nets: one vertex per cell the surface crosses, with smooth normals from the distance field. It keeps the comic rock look (painted texture, three tones, ink outline); cubes never show.
 - **Built from a seed.** An asteroid type sets the shape (stretch, lumps, craters, roughness), the voxel size and up to four ores. A type, a diameter and a seed build one rock; the same seed always builds the same rock.
 - **Ore veins.** Each ore runs through the rock as thin sheets, only deeper than its minimum depth, and shows as coloured veins drawn in the same three comic tones. Two types ship: **Rocky Asteroid** (bare rock, a trace of iron) and **Ore Asteroid** (iron veins, cobalt crystal deep inside).
 - **Damage carves.** Every kit weapon hit carves a crater sized by its damage, dug in along the shot: 0.02 m³ per point by default, so a gun hit (100) pits about 0.8 m and a missile (2,500) blasts about 2.3 m. Explosions remove 1.6 times as much. Crater edges are ragged. Saw cuts (`Cut`) remove a flat disc.
-- **Breaking apart.** After a cut, a search finds any piece no longer joined to the rock. Large pieces become free rocks that drift and tumble, faster the smaller they are; they are moved kinematically, so they push ships but are never pushed. Pieces under 60 voxels crumble into chips. A piece keeps exactly its place, shape, ore and texture.
+- **Breaking apart.** After a cut, a search finds any piece no longer joined to the rock. Large pieces become rocks of their own; pieces under 60 voxels crumble into chips. A piece keeps exactly its place, shape, ore, texture and the motion it had as part of the rock. The piece and the rock then push apart with equal and opposite pushes, so the lighter one moves more: a chip flies off a big asteroid that barely stirs, and two halves part at the same speed. They twist apart the same way.
+- **Cracks (step 1b).** `VoxelBody.Fracture` breaks a chunk off along a ragged crack, the way rock splits. Pick a direction and a share, or a size: **small** (4 to 10% of the rock), **medium** (12 to 25%) or **large** (30 to 50%, up to a clean break in two) in a random direction. The crack is placed so the chunk holds that share of the rock, whatever its shape. Its faces are bumpy (`Crack Roughness`) and its gap is never under 2.5 voxels, so the parts always come apart.
+- **Motion (step 1b).** Every rock drifts and tumbles. Mass, centre of mass and inertia come from the rock's own voxels and follow every crater, crack and lost piece exactly. A rock keeps its angular momentum rather than a fixed spin axis, so a lopsided one wobbles as it tumbles, as real asteroids do. Each type sets a drift and tumble range; smaller rocks turn faster. The same seed always gives the same motion. Rocks are moved kinematically, so they push ships but ships never push them, and rocks pass through each other (see the backlog).
+- **Hits push.** Weapon hits and explosions push a rock where they land, by `Push Per Damage` (0.5 tonne metres per second per point), shared out by real mass: steady gunfire shoves an 8 m rock along, pebble-sized pieces fly off, and a 40 m asteroid barely notices a missile. Off-centre hits set it turning. Mining and scripted cuts never push.
+- **Rock trails (step 1c).** Every asteroid at least 30 m across sheds a trail of small rocks, like a comet's tail of rubble: about 40 behind a 40 m asteroid, up to three times as many behind larger ones, each 0.4 to 1.6 m (bigger behind bigger asteroids), tumbling and uneven so no two look alike. They leave from the asteroid's back and ride along with it, sliding slowly back along the trail (0.3 m/s relative to the asteroid) until they are 2.5 times its diameter behind, then shrink away. Each rock's velocity eases towards its asteroid's own over about four seconds, so the trail follows wherever the asteroid drifts and swings round behind it when it turns or is pushed, like rubble held loosely by the rock's gravity. Rocks that wander wider than the asteroid ease back towards the trail's line. Whenever an asteroid comes into trail range (2.5 km, far beyond sight), its trail is topped up to full, as if it had been shedding all along: the first time it is seen, and again when its trail thinned out while it was out of range. A piece that breaks away starts with none.
+- **Solid near you (step 1c).** Trail rocks within 150 m of the camera are solid: up to 64 at once, nearest first. Each borrows a pooled stand-in with a rigidbody and a ball collider, so your ship hits them and knocks them flying, and they bounce off asteroids and each other. A rock knocked off its trail stays off and flies on. A weapon hit shatters one into chips. Further out, rocks are moved by the job alone. Rock mass follows its size and density, scaled against the kit's ships, which weigh 1: a 1 m rock weighs about 0.006 and a 2 m rock 0.04. On top of that, **Ship Kick** (0.15) softens every hit inside the physics step itself: in a contact between a trail rock and anything else that moves, the other body acts about seven times heavier and harder to turn. The rock still flies off as physics says, but a ship barely moves, even at full speed. Their surface has no friction and little bounce, so a glancing hit does not twist the ship round, and a rock never turns solid while touching something. The kit still deals collision damage by impact speed alone (2.5 per m/s), whatever the rock weighs.
+- **Half detail far away (step 1c).** Rock further than 200 m from the camera (300 m before step 1d, which also adds quarter detail beyond 400 m) (for 0.5 m voxels; larger voxels switch proportionally further) meshes from every other sample: a quarter of the triangles, with lighter colliders. The switch has 10% of slack either side so it never flickers; coming closer remeshes at once, moving away in the background. Each chunk **cross-fades** to its new mesh over half a second (`Detail Fade`): the old mesh stays on a second renderer while the new one takes over pixel by pixel through a fine dither, ink outline and shadow included, so a switch never pops and neighbouring chunks never show a seam. The rock's motion smoothing stays on at every detail. Rock under 16 voxels across always stays at full detail, and a rock that half detail would miss entirely is remeshed at full detail rather than treated as dug out.
 - **Accounting.** Every cut reports what it removed, by material, in cubic metres: on the body (`VoxelBody.MaterialRemoved`) and for the whole scene (`DestructionSystem.MaterialRemoved`). Mining will turn this into cargo. The God Menu shows the running totals in m³ and tonnes.
 - **Chips.** Every cut throws tumbling rock chips in the colour of what was hit, which shrink away. One particle system serves the whole scene.
 - **One damage path.** `IDestructible` and `DamageEvent` are the shared entry point. Kit weapons reach any destructible through `DestructionDamageReceiver` on its colliders; other systems call `ApplyDamage` directly. Ship break-up and shatter (step 4) implement the same interface.
@@ -828,10 +838,22 @@ Rock breaks the way you hit it. Asteroids are made of voxels: guns pit them, mis
 ### Performance
 - All voxel work runs in Burst-compiled jobs: generation in parallel slices, meshing in parallel batches written straight into mesh data, piece searches and moving pieces out of their rock on a worker thread, and collider cooking on worker threads.
 - The main thread never waits for a job. It applies finished results and runs cuts (small Burst jobs); a rock that a job is still meshing, searching or emptying of pieces takes its next cuts a frame later. Buffers and meshes are pooled, with no per-frame allocations.
-- Budgets per frame: 32 cuts (the rest wait, oldest first, rocks taking turns), 48 rebuilt chunks for cuts and 8 for new rock, 16 colliders switched to their new shape (the rest keep their previous shape a frame longer), 96 chips. At most 512 cuts may wait on one rock; only fire far beyond any real fight reaches that, and further hits are dropped.
+- Budgets per frame: 32 cuts (the rest wait, oldest first, rocks taking turns), 48 rebuilt chunks for cuts and 8 for new rock, 16 colliders switched to their new shape (the rest keep their previous shape a frame longer). Chips have a budget per second instead (step 1d). At most 512 cuts may wait on one rock; only fire far beyond any real fight reaches that, and further hits are dropped.
 - Colliders are cooked on workers with light options (mesh cleaning and the fast midphase, no welding), so switching one costs about 0.01 ms.
 - Saw cuts visit only the thin slab they remove, not the box around it. Ragged crater walls come from three broad waves around the sphere, not noise per voxel.
-- Pieces that break away pivot on their centre of mass and are moved by hand, so Unity never recomputes their mass as their colliders change.
+- Rocks are moved by hand from their own mass and inertia, so Unity never recomputes either as colliders change. Mass is tracked as volume moments: every cut, crumb and piece reports exactly the moments it removed, so a rock is never measured twice. Generation measures it in the same parallel pass that fills it.
+- Placing a crack reads at most about 110,000 samples (the largest rock is read every fourth voxel) and walks only the thin slab it removes; its ragged face costs two noise samples per row, not per voxel.
+- **Cuts across whole rocks run on a worker (step 1c).** Cracks, saw cuts and blasts over 24 voxels across are cut by a job on a worker thread and land a frame later; craters stay inline, where they cost well under 0.1 ms. One heavy cut runs at a time, and the rock takes no other cut, mesh or piece search until it is done. This removes the last main-thread spike (15 ms under extreme stress in step 1).
+- **Half detail (step 1c)** quarters the triangles, draw cost and collider size of distant rock. The cross-fade costs a second draw of a chunk for half a second; normal rendering never uses the dither, which is a separate shader variant.
+- **Softer ship hits (step 1c)** cost nothing outside a hit: Unity's contact hook only runs for contacts involving a trail rock's collider, and changes two numbers per contact.
+- **Trail rocks (step 1c)** live in one native array: no object per rock. One Burst job moves them all and writes their matrices; it is started early in the frame and finished in late update, so it runs alongside the game's scripts. All trail rocks draw with GPU instancing, up to 1,023 a draw call, without shadows. Only the solid ones near the camera have physics, at most 64, and the nearest are picked ten times a second. At most 1,536 trail rocks exist at once, and asteroids over 2.5 km away grow none.
+- **Benchmark (step 1c).** The God Menu **Benchmark** builds eight asteroids of 30 to 70 m and for ten seconds fires six hits a frame at them (one in twenty a missile) and cracks a chunk off one every second, then reports frame time and destruction main-thread time (average, worst, per stage, trails) to the Console. Reworked in step 1d, below.
+- **Warm-up at load (step 1d).** The step 1c benchmark ran at 0.48 ms of destruction a frame on average, but its worst frames reached 8 ms, always the same: cuts 6.4 ms, pieces 2.9 ms. That is the cost of code running for the first time (the editor compiling it, job set-up, the first piece and chunk objects), paid by the player's first hit and first break. Now, when a scene builds its first asteroid, the `Destruction System` also builds a 12 m rock 50 km below the play space, craters it, cracks it in two and frees both parts (`DestructionWarmUp`, about half a second). Meanwhile it fills the mesh pool for a full urgent batch and adds four pooled pieces with 16 spare chunk objects each, one a frame. The warm-up rock raises no system events, never counts against the piece budget, and tools and readouts skip it. **Warm Up On Load** on the system turns it off.
+- **Quarter detail (step 1d).** Rock beyond 400 m meshes every fourth sample: a sixteenth of the triangles, with lighter colliders. Half detail now starts at 200 m, not 300 m. Both distances are for 0.5 m voxels and scale with voxel size. At either switch a cell spans about 5 pixels at 1080p; at 300 m a full-detail voxel was under 2 pixels, so most of the far triangles were wasted. The step 1c benchmark field drew 1.69 million triangles, each drawn up to three times (surface, ink outline, shadow). Rock under 32 voxels across never goes below half detail. Switches keep the 10% slack and the cross-fade.
+- **Meshed once, at the right detail (step 1d).** A new asteroid, and a new piece, picks its detail from its distance before it is first meshed. Before, far rock was meshed at full detail, then meshed again at half detail on the next distance check, with a cross-fade it did not need. Fixing that took the benchmark field's build from 1.39 s to 1.19 s. The step 1c figure of 0.55 s is not comparable: back then each spawn finished every other rock's generation on the main thread, so the benchmark's spawn loop built seven of its eight rocks in one stalled frame, before its build timer started. Generation now runs on workers while the game carries on, and the timer counts it. The warm-up also makes the cross-fade material, which a first switch would otherwise make mid-game.
+- **No main-thread waits (step 1d).** Building an asteroid used to finish every running job in the scene first, so each spawn stalled the frame until all meshing, collider cooking, piece searches and heavy cuts were done. Now it waits only for jobs on that rock, and a new rock waits for nothing. Freeing a rock (dug out, crumbled, too far away, removed) used to wait for any job still using its grid. Now it stays hidden and is freed a frame later, once the job is done. Destroying a rock no longer finishes every job in the scene either.
+- **Chips per second (step 1d).** Chips had a budget of 96 a frame, so a fast machine threw more per second than a slow one. Under heavy fire the 2,048-chip pool stayed full, and Unity drops new chips when it is full, so the newest hits threw none. Now chips have a budget per second (750), banked for a tenth of a second through quiet moments, so one big blast still throws its full burst. It is capped below what the pool can hold over a chip's longest life, so the pool never fills. When cuts in a frame want more than the budget, each gets its share and at least one chip. Chips are queued and thrown at the start of the next frame, the same frame the crater's new mesh shows, so chips and crater appear together and the particle system is never changed while its own update job runs.
+- **Benchmark (step 1d).** Waits for the field, the warm-up and three seconds of trail growth, then measures. The load is a steady 800 hits a second whatever the frame rate, at most 64 in a frame. Every choice (rock sizes, rotations, shot sides, crack sizes and directions) comes from one seed, and the engine's own randomness is seeded for the run and restored after. A ninth, 40 m rock sits about 130 m off to the side, so its trail rocks turn solid and their physics is measured too. It reports average, median, p95, p99 and worst for frame time, GPU time (when Unity reports it), destruction time and every stage, trails and chips. It also breaks down the worst frame stage by stage, and reports garbage a frame, collections, and the detail mix.
 - Each stage's main-thread cost is timed, shown in the God Menu **Cost** section, and marked for the Unity Profiler (`DeadCargo.Voxels.*`).
 - A piece search starts at the cut and stops as soon as only one part is still growing: a crater that splits nothing visits a few hundred voxels; a split costs about twice the smaller piece.
 - Memory is two bytes per voxel. A 40 m asteroid at 0.5 m voxels takes about 3.5 MB; larger rocks get larger voxels, so no grid passes 192³.
@@ -843,26 +865,38 @@ Rock breaks the way you hit it. Asteroids are made of voxels: guns pit them, mis
 | `Scripts/Destruction/Core/` | Assembly `DeadCargo.Destruction.Core`: pure voxel maths and its Burst jobs, with no kit or scene code |
 | `Core/VoxelGrid.cs`, `VoxelEncoding.cs` | The voxel grid and how distance is stored |
 | `Core/AsteroidShape.cs`, `OreLayer.cs`, `VoxelGeneration.cs` | Asteroid shape and ore as a distance field; filling a grid from it |
-| `Core/SurfaceNets.cs`, `MeshBuffers.cs`, `VoxelVertex.cs` | Seamless smooth meshing per chunk, into a 20-byte vertex |
+| `Core/SurfaceNets.cs`, `MeshBuffers.cs`, `VoxelVertex.cs` | Seamless smooth meshing per chunk, into a 20-byte vertex; at full, half (step 1c) or quarter detail (step 1d) |
+| `Scripts/Destruction/DestructionWarmUp.cs` | The hidden rock cut once at load, and the pools filled meanwhile (step 1d) |
 | `Core/VoxelCarving.cs`, `CarveRequest.cs`, `CarveShape.cs` | Sphere and slab cuts, with what was removed by material |
 | `Core/VoxelIslands.cs`, `IslandBuffers.cs`, `IslandInfo.cs` | Finding pieces that broke away, moving them into their own grid, measuring rock |
+| `Core/MassMoments.cs` | Volume and its first and second moments: centre of mass and inertia, added and subtracted exactly (step 1b) |
+| `Core/VoxelFracture.cs` | Places a crack so a chosen share of the rock lies beyond it (step 1b) |
+| `Scripts/Destruction/Voxels/FractureSize.cs` | Small, medium and large chunk sizes (step 1b) |
+| `Core/TrailRock.cs`, `Core/TrailOwner.cs`, `Core/Jobs/TrailRockJob.cs` | A trail rock, the asteroid it follows, and the Burst job that moves every trail rock with its asteroid and writes its matrix (step 1c) |
+| `Scripts/Destruction/TrailRocks.cs` | Trails behind large asteroids: emission, the per-frame job, instanced drawing, solid stand-ins near the camera (step 1c) |
+| `Scripts/Destruction/TrailRockProxy.cs` | A pooled stand-in that makes a trail rock solid; weapons shatter it (step 1c) |
+| `Scripts/Destruction/Voxels/CarveBatch.cs` | A batch of cuts and its job buffers: one run inline, one on a worker for heavy cuts (step 1c) |
+| `DevTest/DestructionBenchmark.cs` | The God Menu benchmark (step 1c) |
 | `Core/Jobs/` | The Burst jobs: fill, mesh, carve, piece search, moving pieces out, collider cooking |
 | `Scripts/Destruction/IDestructible.cs`, `DamageEvent.cs`, `DamageKind.cs` | The shared damage path |
 | `Scripts/Destruction/DestructionDamageReceiver.cs` | Kit weapon hits to `DamageEvent` |
 | `Scripts/Destruction/DestructionSystem.cs` | Scene service: runs the pipeline, pools, chips, events, cost readouts |
 | `Scripts/Destruction/DebrisParticles.cs`, `EffectPool.cs` | Rock chips in one particle system; pooled effect prefabs |
-| `Scripts/Destruction/Voxels/VoxelBody.cs`, `VoxelChunk.cs` | A carvable rock and its chunk objects |
+| `Scripts/Destruction/Voxels/VoxelBody.cs`, `VoxelChunk.cs` | A carvable rock and its chunk objects; its mass, drift, tumble, pushes and cracks; a chunk's cross-fade between detail levels |
 | `Scripts/Destruction/Voxels/VoxelScheduler.cs` | The once-a-frame job pipeline for every body |
 | `Scripts/Destruction/Voxels/AsteroidDefinition.cs`, `VoxelMaterialDefinition.cs`, `OreVein.cs` | Asteroid types and rock materials |
 | `Scripts/Destruction/Voxels/VoxelAsteroid.cs` | Places an asteroid in a scene |
 | `Scripts/Destruction/Voxels/VoxelYield.cs` | What one cut removed, by material |
-| `Shaders/ComicSurface.shader` | Gains **Triplanar**: projected texture and normal map for voxel rock, and ore veins from vertex colour. Off by default, so existing materials are unchanged |
+| `Shaders/ComicSurface.shader` | Gains **Triplanar**: projected texture and normal map for voxel rock, and ore veins from vertex colour. Off by default, so existing materials are unchanged. Step 1c adds a dithered cross-fade (`_DITHER_FADE`, set only while a mesh changes detail) to the surface, ink and shadow passes |
 | `Editor/Destruction/DestructionSetup.cs` | Setup step: the system and the default asteroid types, materials and looks |
 | `Editor/GodMenu/Tabs/DestructionTab.cs` | God Menu tab |
 | `Editor/Diagnostics/Voxels/` | Assembly `DeadCargo.Destruction.Diagnostics`: the core self-test |
 | `Editor/Diagnostics/DestructionDiagnostics.cs`, `DevTest/DestructionSmokeTest.cs` | Menu entries for the core self-test and the in-game smoke test |
 
 ### Verified before handover
+- **Step 1d:** every Dead Cargo assembly compiles with Unity's own compiler and settings, with no new warnings. The core self-test, now 46 checks, passes outside Unity. The six new checks: half and quarter detail meshes of a 20 m sphere are closed across chunk seams, face outward, and keep its volume (-0.3% and -1.2%) and surface (within 0.02 m of a 1 m cell and 0.18 m of a 2 m cell). They also carry a quarter (14,940) and a sixteenth (3,660) of the full detail's 60,156 triangles.
+- **Step 1d in Unity (editor, the user's run):** destruction 0.45 ms a frame on average, p99 0.94 ms, worst 2.06 ms (was 8.0 ms). Cuts worst 1.20 ms (was 6.4) and pieces 0.16 ms (was 2.9), confirming the old worst frames were first-run costs. Triangles 0.46 million (was 1.69), GPU 1.4 ms a frame, chips at most 1,458 in the air, up to 10 solid trail rocks. The one remaining spike is a 1.56 ms mesh upload after a crack (p99 0.23 ms). That run led to meshing new rock at the right detail at once.
+- **After that fix (the user's second run):** destruction 0.37 ms a frame on average, p99 0.67 ms, worst 1.72 ms (still a mesh upload after a crack, p99 0.15 ms). Every stage is under 0.1 ms on average. 0.42 million triangles, field built in 1.19 s, garbage 15.3 KB a frame with no collections, no errors or warnings.
 - **Core self-test, 40 checks, run outside Unity** on the same code: sphere volume within 0.1%, surfaces closed across chunk seams, faces outward, surface within 7 mm of a true sphere; cratered rocks closed and within bounds; same seed same rock, also when filled in slices; crater volume within 0.1% of the true overlap and every bit removed accounted for; a bar cut frees exactly the smaller rock with no voxel lost or doubled and both parts closed; a saw cut gives two equal halves; a cut across a whole rock searched in full; ore veins present and reported by material; an oversized mesh cut short with nothing written past its buffers; a rock dug out entirely leaves nothing.
 - **Every Dead Cargo script compiles** with Unity's compiler, both new assemblies included.
 - **The comic shader compiles**: 20 programs (plain, triplanar, shadowed, instanced, ink, shadow caster) with the DirectX compiler against Unity's includes.
@@ -873,18 +907,124 @@ Rock breaks the way you hit it. Asteroids are made of voxels: guns pit them, mis
 ### Test steps (step 1)
 1. Click into Unity and let it compile. The Console should be free of errors.
 2. Open Polaris. In the God Menu **Project** tab the summary shows one step missing; press **Set Up Sector**. A `Destruction System` appears under `Systems`; asteroid types appear in `Data/Destruction`, and `ComicVoxelRock.mat` in `Materials/Comic`. Save the scene.
-3. Run **Dead Cargo > Diagnostics > Destruction Self-Test**. The Console reports 40 checks passed.
+3. Run **Dead Cargo > Diagnostics > Destruction Self-Test**. The Console reports every check passed (46 since step 1d).
 4. Press Play. In the God Menu **Destruction** tab, under **Asteroids**, pick **Ore Asteroid**, 40 m, 120 m and press **Spawn Ahead**. The rock appears within a few frames: comic tones and outline, orange iron veins and, deeper in, teal crystal.
 5. Fly up and shoot it. Every hit pits the rock where it landed and throws chips in the colour of what it hit. Fire a missile: a much bigger crater.
 6. Fly gently into a crater: the ship collides with the new shape.
-7. Keep shooting a thin part, or press **Cut In Two** under **Damage Nearest**. A piece breaks away, drifts and tumbles. Shoot the piece: it carves too, and can split again. Small crumbs burst into chips.
-8. Try **Crater**, **Blast** and **Crumble** too.
+7. Keep shooting a thin part until a piece breaks away. Shoot the piece: it carves too, and can split again. Small crumbs burst into chips.
+8. Under **Target Rock**, try **Crater**, **Blast** and **Crumble** too.
 9. Open **Cost**: main-thread time in all and by stage, chunks, memory, and the rock dug out so far by material, in m³ and tonnes.
 10. Under **Self-Test**, press **Smoke Test**. After a few seconds the Console reports its checks; the test asteroid and its sawn-off piece stay in view.
 11. **Remove All** clears every asteroid and piece.
 
+### Test steps (step 1b)
+1. Click into Unity and let it compile. The Console should be free of errors. No setup is needed: the asteroid types pick up the new settings with their defaults.
+2. Press Play in Polaris and spawn a **Rocky Asteroid**, 40 m, from the **Destruction** tab. Watch it for half a minute: it tumbles slowly (one turn every one to three minutes) and drifts a little. A lopsided rock wobbles as it turns rather than spinning on a fixed axis. **Target Rock** shows its mass in tonnes and its drift and turn speed.
+   - **Which rock the buttons act on:** the rock your ship points at ("in your sights"). Look away and it stays the target, so breaking a chunk off never moves the target onto the chunk. To work on a chunk, point at it. A newly spawned rock becomes the target. With no target yet, the nearest rock by its surface is used.
+3. Press **Small Chunk** several times. Each press cracks a small chunk off a different, random place. Crack faces are bumpy, not flat. The chunk flies off; the rock barely stirs.
+4. Press **Medium Chunk**, then **Large Chunk**. The bigger the chunk, the more the rock recoils. A large chunk can be close to half the rock: then **both** halves drift apart at about the same speed and twist away from each other.
+5. **Random Chunk** picks a size for you. **Shatter** cracks three chunks of random sizes off at once.
+6. Spawn a small rock (**Diameter** 8 m) and hold fire on it: it shoves along, and off-centre hits set it spinning. Pebble-sized pieces fly off when hit. Shoot the 40 m rock: it barely notices.
+7. **Push** shoves the target away from you at 3 m/s; **Spin** sets it turning at 20°/s about a random axis; **Stop** holds it still.
+8. Fly into a drifting rock: it pushes your ship, and your ship never pushes it.
+
+### Test steps (step 1c)
+1. Click into Unity and let it compile. The Console should be free of errors.
+2. Optional, outside Play Mode: press **Set Up Sector** in the God Menu **Project** tab again. It adds `Materials/Comic/ComicTrailRock.mat` (the rock look with instancing on and a finer texture) and hands it to the `Destruction System`, which keeps trail rocks working in builds. Without it, trails use the asteroid's own material. Save the scene.
+3. Press Play in Polaris and spawn a **Rocky Asteroid**, 60 m. A trail of small tumbling rocks streams out behind it, against its drift, about two and a half times its length. Only asteroids 30 m or more across have one: a 20 m rock has none.
+4. Fly into the trail, slowly at first, then at full speed. The rocks are solid: your ship knocks them flying with a light tap, even at full speed, and they tumble off and do not come back to the trail. **Ship Kick** on the `Destruction System` sets how much you feel them. **Cost > Trail rocks** shows how many drift and how many are solid near you.
+5. Shoot a trail rock: it bursts into chips.
+6. Watch the asteroid drift: its trail travels with it and stays behind it. Press **Push** on the asteroid: it moves off at 3 m/s, its trail follows a few seconds behind and swings round to stream behind its new path.
+7. Fly 400 m or more away from a 40 m rock. **Cost > Detail** counts it at half detail, and its triangle count falls by about three quarters. It still looks the same from there: the switch dissolves over half a second, with no pop. Fly back: it dissolves back to full detail, with the same craters, and stays exactly where it was, with no jump.
+8. **Push** an asteroid away, let it drift past 300 m, then chase it. As you close in it switches to full detail without a jump or flash, and its trail is still behind it.
+9. Under **Target Rock**, press **Large Chunk** on a 100 m rock. The crack lands a frame later, and **Cost > Main thread** stays low with no spike. **Heavy cuts** counts it.
+10. Under **Self-Test**, press **Benchmark**. Eight asteroids appear ahead and are shot at for ten seconds. The Console then reports frame time and destruction main-thread time, average and worst, by stage and for trails. The field stays in place; **Remove All** clears it.
+
+### Test steps (step 1d)
+1. Click into Unity and let it compile. The Console should be free of errors. No setup is needed. The `Destruction System` picks up the new settings at their defaults: **Warm Up On Load** on, **Half Detail Start** 200, **Quarter Detail Start** 400, **Max Chips Per Second** 750.
+2. Run **Dead Cargo > Diagnostics > Destruction Self-Test**: 46 checks pass, six of them new, for half and quarter detail.
+3. Press Play in Polaris, fly nowhere, and under **Self-Test** press **Benchmark**. Nine rocks appear, one of them close off to the side with its trail. A few seconds later the shooting starts; ten seconds after that the Console reports. Check:
+   - **Start-up** says *warmed up before the run*.
+   - **Destruction**: worst and p99 well below the old 8 ms worst frame. **Worst frame** shows which stage it was.
+   - **Trails** says some rocks were solid.
+   - **Chips**: the peak in the air stays below 2,048.
+   - **Scene**: the triangle count is well below the old 1.69 million, with rocks at half and quarter detail.
+   - **Field** builds in about 1.2 s, generation included. Far rocks are meshed once, straight at half detail.
+4. Stop and press Play again, then run **Benchmark** twice in a row, in the same Play session. The two reports should be close: the first run no longer pays for code running for the first time.
+5. Spawn a 40 m rock and fly away from it. **Cost > Detail** moves it from full to half at about 220 m, and to quarter at about 440 m (from its surface). Each switch dissolves over half a second with no pop, and the triangle count drops each time. Fly back: it returns to full detail, craters intact.
+6. Hold fire on a rock. Chips fly from every hit, including the latest, however long you keep firing. **Cost > Chips** shows how many are in the air and the per-second cap.
+7. In a fresh Play session, spawn a rock, press **Reset Stats** under **Cost**, then fire the first shot at it and crack the first chunk off. The **Main thread** peak should stay low, with no spike from either.
+8. To compare without the warm-up: turn off **Warm Up On Load** on the `Destruction System` before pressing Play, and run the benchmark. **Start-up** then says there was none, and the worst frame should be back near the old numbers.
+
 ### Tuning
-- Asteroid types, `Data/Destruction/RockyAsteroid.asset` and `OreAsteroid.asset`: voxel size, shape, ore veins (material, spacing, thickness, depth), damage (rock removed per damage point, explosion multiplier, crater limits and roughness), and how pieces leave (speed, spin, optional effect).
+- Asteroid types, `Data/Destruction/RockyAsteroid.asset` and `OreAsteroid.asset`: voxel size, shape, ore veins (material, spacing, thickness, depth), damage (rock removed per damage point, explosion multiplier, crater limits and roughness, push per damage point), motion (drift speed range, tumble range for a 40 m rock), trail (rocks behind a 40 m asteroid, smallest asteroid with a trail, length, drift speed back along the trail, rock size range), and breaking apart (piece speed and twist, crack width and roughness, optional effect).
 - Materials, `Data/Destruction/Materials/`: vein colour and strength, chip colour, density in tonnes per cubic metre, and the cargo item mining will yield.
 - Look, `Materials/Comic/ComicVoxelRock.mat`: a copy of `ComicRock.mat` with **Triplanar** on; tile size, sharpness and ore shadow under Triplanar. It is created once and then left alone, so retune it by hand.
-- On the `Destruction System`: chunks rebuilt per frame, cuts and colliders per frame, smallest piece, most free pieces, piece range, and chips (material, count, size, per cut and per frame).
+- On the `Destruction System`: chunks rebuilt per frame, cuts and colliders per frame, half-detail distance (0 keeps full detail everywhere), detail fade time, smallest piece, most free pieces, piece range, chips (material, count, size, per cut and per frame), and trail rocks (most at once, range, solid range, most solid at once, solid rock mass per tonne, ship kick, material).
+- Trail look, `Materials/Comic/ComicTrailRock.mat`: created once by the setup, then left alone. Instancing must stay on.
+
+---
+
+## Phase 6.11: Debug overlay
+
+### Goal
+See what every system is doing while playing, the way a studio's development builds do: a frame rate counter always on screen, and channels of live readouts and world drawing for each main system, switched on and off in game or from the God Menu. Built on Draw Debug Tools and, like it, compiled out of release builds.
+
+### Design
+- **Frame rate counter.** Always in the corner while the overlay shows: frames per second and frame time, green at 60 fps or better, yellow down to 30, red below. Any error logged this session adds a red error count beside it, so a problem is never missed.
+- **Switching.** **F3** shows or hides the whole overlay. **F4** opens the channel picker; while it is open, keys **1** to **0** and **-** switch the channels. The God Menu **Debug Overlay** tab (GAME group) and the dev console (**F6**, test range) switch the same settings, which are kept between sessions, so channels can be chosen before pressing Play. Only the counter is on by default.
+- **Channels.** Each shows a panel of readouts; most also draw in the world.
+
+  | Key | Channel | Panel | In the world |
+  |---|---|---|---|
+  | 1 | Performance | Frame rate and 1% low, frame time with min and max, CPU main and render thread, GPU, destruction and overlay cost, and a frame time graph with 60 and 30 fps lines | |
+  | 2 | Rendering | Batches, SetPass calls, draw calls, shadow casters, triangles, vertices, resolution, quality, vsync | |
+  | 3 | Memory | Total, managed, graphics and system memory, garbage per frame (any at all shows yellow), collections | |
+  | 4 | Physics | Awake and total dynamic bodies, awake kinematic bodies, contacts, physics step | Every rigidbody within 250 m of the camera: collider bounds in green (awake), grey (asleep) or blue (kinematic), and velocity |
+  | 5 | Camera | Position, facing, speed, field of view, clip planes | |
+  | 6 | Player | Ship, speed, mass, position, each health type, target and range, cargo | Axes, facing, velocity arrow, distance line to the target, label |
+  | 7 | Gameplay | Scene, run clock or outcome, jump drive state and fuel, heat and tier, cargo value, extraction points and the nearest, Authority ships | Extraction points (entry sphere, activation ring, state and range) and cargo pickups (item and quantity) |
+  | 8 | AI | Authority ships against the tier's limit, spawning, each ship's range and speed | Each Authority ship's label, velocity and line to the player |
+  | 9 | Sector | Name, seed, cell, region and density at the player | The sector's own debug view: bounds, regions and cells |
+  | 0 | Destruction | Rocks and pieces, main-thread time and peak, meshing, triangles, memory, chips | Each rock's centre of mass, drift (drawn as ten seconds of travel), spin axis, and mass, speed and spin |
+  | - | Log | Error and warning counts and the latest six messages | |
+
+- **Placement.** Any corner, at 0.75 to 2 times size, from the God Menu. The default, top left, keeps clear of the run HUD on the right. Panels stack away from the corner.
+- **Cheap.** Panel text refreshes five times a second and is built without allocating (numbers are written digit by digit); the frame graph and world drawing run every frame. Engine counters come from Unity's profiler counters, which run without the Profiler window. Labels for world drawing are built at refresh time and moved every frame, so they never lag a fast ship. The overlay times itself and shows it in the Performance panel.
+- **Never in a release build.** Every overlay file sits inside `#if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED`, matching Draw Debug Tools, and game code never refers to it. It starts itself in Play Mode and development builds; there is nothing to place in a scene.
+
+### Implementation
+| File | Role |
+|---|---|
+| `Scripts/Debugging/DebugOverlay.cs` | Starts itself, builds the canvas and panels, keys, refresh and drawing loop |
+| `Scripts/Debugging/DebugChannel.cs` | The channels, with names, descriptions and picker keys |
+| `Scripts/Debugging/DebugSettings.cs` | What shows, kept in PlayerPrefs, shared by the keys, God Menu and dev console |
+| `Scripts/Debugging/DebugFrameStats.cs` | Frame history, frame rate, 1% low, and Unity's profiler counters and frame timing |
+| `Scripts/Debugging/DebugReadouts.cs` | Each channel's panel text |
+| `Scripts/Debugging/DebugWorldDraw.cs` | Each channel's world drawing, through Draw Debug Tools |
+| `Scripts/Debugging/DebugFrameGraph.cs` | The frame time graph |
+| `Scripts/Debugging/DebugContext.cs`, `DebugText.cs`, `DebugLog.cs` | Shared lookups, allocation-free text, warning and error capture |
+| `Editor/GodMenu/Tabs/DebugTab.cs` | God Menu **Debug Overlay** tab |
+| `DevTest/DevTestConsole.cs` | Gains a Debug overlay section and the F3 hint |
+
+### Verified before handover
+- All four assemblies compile with Unity's own compiler settings (its response files from `Library/Bee`), with no warnings in Dead Cargo code.
+- The game code also compiles with release-build defines, which proves the overlay strips out completely and nothing depends on it.
+
+### Test steps
+1. Click into Unity and let it compile. The Console should be free of errors.
+2. Press Play in Polaris. Top left: the frame rate counter, for example **60 FPS 16.7 ms** in green, with a hint line for the first ten seconds.
+3. Press **F3**: the overlay hides. Press it again: it returns.
+4. Press **F4**: the channel picker lists every channel with its key. Press **1**: the Performance panel opens with the frame graph. Press **4**, **6**, **7** and **0** for Physics, Player, Gameplay and Destruction. Press **F4** again to close the picker; the channels stay on.
+5. Fly about with **Player** on: axes on the ship, a facing line, a green velocity arrow and a label. Lock a target: a red line with its range.
+6. With **Gameplay** on, the extraction points show as spheres with an activation ring and a label; cargo pickups show their item and quantity.
+7. With **Destruction** on, spawn an asteroid from the God Menu Destruction tab: a dot at its centre of mass, a green drift arrow, a pink spin axis, and its mass, drift and spin.
+8. With **AI** on, raise heat in the God Menu Heat tab until Authority ships arrive: each gets a label, a velocity arrow and a line to you.
+9. With **Physics** on, boxes appear round every rigidbody near the camera, coloured by state. With **Sector** on, the sector's bounds, regions and cells show.
+10. Open the God Menu **Debug Overlay** tab: the same switches, plus corner and size. Change the corner and size and see the overlay follow. Stop and start Play: the settings are kept.
+11. In the test range, press **F6**: the dev console has a Debug overlay section with the same switches.
+
+### Tuning
+- Corner and size in the God Menu **Debug Overlay** tab.
+- GPU and render-thread times come from Unity's frame timing, which needs **Frame Timing Stats** on (Player Settings > Other Settings). Without it they read n/a; everything else works.
+- Ranges, colours and the refresh rate are constants at the top of `DebugOverlay.cs` and `DebugWorldDraw.cs`.

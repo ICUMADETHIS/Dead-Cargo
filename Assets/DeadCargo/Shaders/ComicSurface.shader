@@ -45,6 +45,10 @@ Shader "DeadCargo/Comic Surface"
         _TriplanarSharpness ("Triplanar Sharpness", Range(1, 16)) = 4
         _OreShadow ("Ore Shadow", Range(0, 1)) = 0.35
         [HideInInspector] _TriplanarOffset ("Triplanar Offset (m)", Vector) = (0, 0, 0, 0)
+
+        // Cross-fade between two meshes of one object, such as voxel rock changing detail. x: share shown, 0 to 1;
+        // y: 1 for the mesh fading in, -1 for the one fading out. Only read with the _DITHER_FADE keyword.
+        [HideInInspector] _DitherFade ("Dither Fade", Vector) = (1, 1, 0, 0)
     }
 
     CGINCLUDE
@@ -54,6 +58,7 @@ Shader "DeadCargo/Comic Surface"
     float _InkWidth;
     float _InkGapFill;
     float4 _InkFade;
+    float4 _DitherFade;
 
     static const float ReferenceHeight = 1080.0;
     static const float MinWidth = 1e-4;
@@ -75,6 +80,17 @@ Shader "DeadCargo/Comic Surface"
     {
         return saturate((value - threshold) / width + 0.5);
     }
+
+    // Dithered cross-fade: the mesh fading in keeps the pixels whose threshold is below the share shown, the mesh fading
+    // out keeps the rest, so the two together cover every pixel exactly once and nothing pops. Interleaved gradient
+    // noise spreads the pattern evenly, too fine to read as a pattern while it lasts.
+    void DitherClip(float2 pixel)
+    {
+    #if defined(_DITHER_FADE)
+        float threshold = frac(52.9829189 * frac(dot(floor(pixel), float2(0.06711056, 0.00583715))));
+        clip((_DitherFade.x - threshold) * _DitherFade.y);
+    #endif
+    }
     ENDCG
 
     SubShader
@@ -93,6 +109,7 @@ Shader "DeadCargo/Comic Surface"
             #pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
             #pragma multi_compile_instancing
             #pragma shader_feature_local _TRIPLANAR
+            #pragma multi_compile_local _ _DITHER_FADE
 
             #include "Lighting.cginc"
             #include "AutoLight.cginc"
@@ -261,6 +278,7 @@ Shader "DeadCargo/Comic Surface"
 
             half4 Fragment(Varyings i) : SV_Target
             {
+                DitherClip(i.pos.xy);
             #if defined(_TRIPLANAR)
                 float3 texel;
                 float3 normal;
@@ -333,6 +351,7 @@ Shader "DeadCargo/Comic Surface"
             #pragma fragment InkFragment
             #pragma target 3.5
             #pragma multi_compile_instancing
+            #pragma multi_compile_local _ _DITHER_FADE
 
             struct InkAttributes
             {
@@ -377,6 +396,7 @@ Shader "DeadCargo/Comic Surface"
 
             half4 InkFragment(InkVaryings i) : SV_Target
             {
+                DitherClip(i.pos.xy);
                 return half4(_InkColor.rgb, 1);
             }
             ENDCG
@@ -393,6 +413,7 @@ Shader "DeadCargo/Comic Surface"
             #pragma target 3.5
             #pragma multi_compile_shadowcaster
             #pragma multi_compile_instancing
+            #pragma multi_compile_local _ _DITHER_FADE
 
             // Position and normal only, so meshes without texture coordinates, such as voxel rock, cast shadows too.
             struct ShadowAttributes
@@ -420,6 +441,7 @@ Shader "DeadCargo/Comic Surface"
 
             float4 ShadowFragment(ShadowVaryings i) : SV_Target
             {
+                DitherClip(i.pos.xy);
                 SHADOW_CASTER_FRAGMENT(i)
             }
             ENDCG

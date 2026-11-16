@@ -44,8 +44,24 @@ namespace DeadCargo.Destruction.Voxels
         public static void MeshChunk(in VoxelGrid grid, int3 chunkMin, float voxelSize, float3 origin,
             float4* palette, int paletteCount, ref MeshBuffers buffers)
         {
+            MeshChunk(grid, chunkMin, voxelSize, origin, palette, paletteCount, 1, ref buffers);
+        }
+
+        /// <summary>
+        /// Meshes a chunk at reduced detail, reading every <paramref name="stride"/>-th sample: 2 gives a quarter of the
+        /// triangles. Neighbouring chunks at the same stride still meet with no seam, since every chunk starts on a
+        /// multiple of <see cref="ChunkSize"/>.
+        /// </summary>
+        /// <param name="stride">1, 2 or 4. Anything else meshes at full detail.</param>
+        public static void MeshChunk(in VoxelGrid grid, int3 chunkMin, float voxelSize, float3 origin,
+            float4* palette, int paletteCount, int stride, ref MeshBuffers buffers)
+        {
             buffers.Reset();
-            if (!Gather(grid, chunkMin, ref buffers))
+            if (stride != 2 && stride != 4)
+                stride = 1;
+
+            int cells = ChunkSize / stride;
+            if (!Gather(grid, chunkMin, stride, cells, ref buffers))
                 return;
 
             for (int i = 0; i < CellMapLength; ++i)
@@ -54,17 +70,18 @@ namespace DeadCargo.Destruction.Voxels
             var context = new Context
             {
                 ChunkMin = chunkMin,
+                Stride = stride,
                 VoxelSize = voxelSize,
                 Origin = origin,
                 Palette = palette,
                 PaletteCount = paletteCount
             };
 
-            for (int z = 0; z < ChunkSize; ++z)
+            for (int z = 0; z < cells; ++z)
             {
-                for (int y = 0; y < ChunkSize; ++y)
+                for (int y = 0; y < cells; ++y)
                 {
-                    for (int x = 0; x < ChunkSize; ++x)
+                    for (int x = 0; x < cells; ++x)
                     {
                         int b = BlockIndex(x + 2, y + 2, z + 2);
                         bool solid = buffers.Block[b] > 0;
@@ -86,6 +103,7 @@ namespace DeadCargo.Destruction.Voxels
         private struct Context
         {
             public int3 ChunkMin;
+            public int Stride;
             public float VoxelSize;
             public float3 Origin;
             public float4* Palette;
@@ -97,26 +115,28 @@ namespace DeadCargo.Destruction.Voxels
             return x + StrideY * y + StrideZ * z;
         }
 
-        // Copies the chunk and its apron out of the grid. Returns false when the block holds no surface.
-        private static bool Gather(in VoxelGrid grid, int3 chunkMin, ref MeshBuffers buffers)
+        // Copies the chunk and its apron out of the grid, every stride-th sample, into the start of the block. Returns
+        // false when the block holds no surface.
+        private static bool Gather(in VoxelGrid grid, int3 chunkMin, int stride, int cells, ref MeshBuffers buffers)
         {
-            int3 start = chunkMin - 2;
+            int3 start = chunkMin - 2 * stride;
+            int span = cells + 4;
             bool anySolid = false;
             bool anyEmpty = false;
-            int b = 0;
 
-            for (int z = 0; z < BlockSize; ++z)
+            for (int z = 0; z < span; ++z)
             {
-                int sz = start.z + z;
-                for (int y = 0; y < BlockSize; ++y)
+                int sz = start.z + z * stride;
+                for (int y = 0; y < span; ++y)
                 {
-                    int sy = start.y + y;
+                    int sy = start.y + y * stride;
                     bool rowInside = sz >= 0 && sz < grid.Size.z && sy >= 0 && sy < grid.Size.y;
                     int rowStart = rowInside ? grid.Index(0, sy, sz) : 0;
+                    int b = BlockIndex(0, y, z);
 
-                    for (int x = 0; x < BlockSize; ++x, ++b)
+                    for (int x = 0; x < span; ++x, ++b)
                     {
-                        int sx = start.x + x;
+                        int sx = start.x + x * stride;
                         sbyte density = VoxelEncoding.Empty;
                         byte material = 0;
                         if (rowInside && sx >= 0 && sx < grid.Size.x)
@@ -241,7 +261,9 @@ namespace DeadCargo.Destruction.Voxels
 
             float gradientLength = math.length(gradient);
             float3 normal = gradientLength > MinGradient ? -gradient / gradientLength : new float3(0f, 1f, 0f);
-            float3 position = context.Origin + ((float3)(context.ChunkMin + cell) + local) * context.VoxelSize;
+            // The whole-voxel part is added in integers, so a vertex shared by two chunks comes out bit-for-bit the same
+            // from both and their surfaces meet with no gap. At full detail this is exactly the original sum.
+            float3 position = context.Origin + ((float3)(context.ChunkMin + cell * context.Stride) + local * context.Stride) * context.VoxelSize;
 
             int index = buffers.VertexCount++;
             buffers.Vertices[index] = new VoxelVertex

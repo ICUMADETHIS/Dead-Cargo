@@ -29,8 +29,9 @@ namespace DeadCargo.Destruction.Voxels.Diagnostics
 
         /// <param name="centre">Body-local point the surface should face away from, for the outward count.</param>
         /// <param name="sphereRadius">When above zero, how far every vertex should be from the centre.</param>
+        /// <param name="stride">Mesh detail: 1 full, 2 half, 4 quarter.</param>
         public static VoxelMeshCheck Run(VoxelTestMemory memory, in VoxelGrid grid, float voxelSize, float3 origin,
-            float4* palette, int paletteCount, float3 centre, float sphereRadius)
+            float4* palette, int paletteCount, float3 centre, float sphereRadius, int stride = 1)
         {
             var check = new VoxelMeshCheck();
             MeshBuffers buffers = memory.MeshBuffers();
@@ -44,7 +45,8 @@ namespace DeadCargo.Destruction.Voxels.Diagnostics
                     for (int x = 0; x < chunks.x; ++x)
                     {
                         timer.Start();
-                        SurfaceNets.MeshChunk(grid, new int3(x, y, z) * SurfaceNets.ChunkSize, voxelSize, origin, palette, paletteCount, ref buffers);
+                        SurfaceNets.MeshChunk(grid, new int3(x, y, z) * SurfaceNets.ChunkSize, voxelSize, origin, palette, paletteCount, stride,
+                            ref buffers);
                         timer.Stop();
                         check.Add(ref buffers, centre, sphereRadius);
                     }

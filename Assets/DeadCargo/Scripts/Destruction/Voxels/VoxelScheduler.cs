@@ -18,13 +18,16 @@ namespace DeadCargo.Destruction.Voxels
     /// <item>A finished mesh batch is applied; its colliders start cooking at the end of this frame.</item>
     /// <item>Finished generation queues the new rock's chunks.</item>
     /// <item>Finished piece moves become free bodies and chips; a finished piece search starts moving its pieces out.</item>
-    /// <item>Released bodies are freed.</item>
-    /// <item>Queued cuts are applied; their chunks are queued urgently and a piece search is queued.</item>
+    /// <item>Released bodies are freed; one a job still uses stays hidden until the job is done.</item>
+    /// <item>A finished heavy cut is applied. Queued cuts are applied: craters inline, a cut across a whole rock on a
+    /// worker. Their chunks are queued urgently and a piece search is queued.</item>
+    /// <item>Twice a second, rock switches mesh detail by distance and far pieces are removed.</item>
     /// <item>A piece search, a mesh batch and collider cooking are scheduled, each when the last one is done.</item>
     /// </list>
     /// The main thread never waits for a job: work still running is picked up a frame later. Instead, nothing writes a
-    /// grid while a job reads it: a body being meshed, searched or emptied of pieces takes its cuts a frame later, so
-    /// grids need no locks. Cuts usually appear one frame after the hit, and colliders a frame or two after that.
+    /// grid while a job reads it: a body being meshed, searched, emptied of pieces or cut on a worker takes its cuts a
+    /// frame later, so grids need no locks. Cuts usually appear one frame after the hit, and colliders a frame or two
+    /// after that. Only rebuilding or destroying a body waits, and only for the jobs that use that body.
     /// </summary>
     internal sealed class VoxelScheduler : IDisposable
     {
@@ -38,7 +41,34 @@ namespace DeadCargo.Destruction.Voxels
         private const byte QueuedUrgent = 2;
 
         private const int IslandCapacity = 32;
-        private const float CullInterval = 0.5f;
+        private const float ReviewInterval = 0.5f;
+
+        // A crater wider than this, in voxels, is cut on a worker like a crack. Smaller ones cost well under 0.1 ms inline.
+        private const float HeavyCraterVoxels = 24f;
+
+        // Voxel size the half-detail distance is set for; rock with larger voxels switches proportionally further out.
+        private const float ReferenceVoxelSize = 0.5f;
+
+        // Share of the half-detail distance either side of it before rock switches back, so it never flickers.
+        private const float DetailHysteresis = 0.1f;
+
+        // Rock narrower than these, in voxels, never meshes at half or quarter detail: the coarser grid could miss it.
+        private const float MinHalfDetailVoxels = 16f;
+        private const float MinQuarterDetailVoxels = 32f;
+
+        private const string DitherFadeKeyword = "_DITHER_FADE";
+
+        private readonly struct FadeRef
+        {
+            public readonly VoxelBody Body;
+            public readonly VoxelChunk Chunk;
+
+            public FadeRef(VoxelBody body, VoxelChunk chunk)
+            {
+                Body = body;
+                Chunk = chunk;
+            }
+        }
 
         // A piece this share of its parent's starting size flies at the type's split speed; smaller ones go faster.
         private const float ReferencePieceShare = 0.05f;
@@ -50,7 +80,8 @@ namespace DeadCargo.Destruction.Voxels
         private readonly List<ChunkRef> background = new List<ChunkRef>();
         private readonly List<VoxelBody> islandQueue = new List<VoxelBody>();
         private readonly List<VoxelBody> releases = new List<VoxelBody>();
-        private readonly List<CarveCommand> commands = new List<CarveCommand>();
+        private readonly CarveBatch inlineCarves = new CarveBatch();
+        private readonly CarveBatch heavyCarves = new CarveBatch();
         private readonly Stack<Mesh> meshPool = new Stack<Mesh>();
         private readonly List<Mesh> ownedMeshes = new List<Mesh>();
 
@@ -95,24 +126,26 @@ namespace DeadCargo.Destruction.Voxels
         private readonly List<VoxelBody> extractionPieces = new List<VoxelBody>();
         private NativeArray<ExtractTarget> extractTargets;
         private NativeArray<float> extractVolumes;
-        private NativeArray<float4> extractMasses;
+        private NativeArray<MassMoments> extractMoments;
         private VoxelBody extractionBody;
         private int extractionVersion;
         private int extractionCount;
         private JobHandle extractionHandle;
         private bool extractionInFlight;
 
-        private NativeArray<CarveRequest> carveRequests;
-        private NativeArray<float> carveRemoved;
-        private NativeArray<int3> carveChanged;
-
         private readonly HashSet<Mesh> meshesInBake = new HashSet<Mesh>();
         private readonly List<Mesh> releaseAfterBake = new List<Mesh>();
+
+        // Detail cross-fades running, the outgoing meshes their ghosts show, and those meshes asked back meanwhile.
+        private readonly List<FadeRef> fading = new List<FadeRef>();
+        private readonly HashSet<Mesh> meshesInFade = new HashSet<Mesh>();
+        private readonly HashSet<Mesh> releaseAfterFade = new HashSet<Mesh>();
+        private readonly Dictionary<Material, Material> fadeMaterials = new Dictionary<Material, Material>();
         private readonly List<VoxelChunk> readyColliderChunks = new List<VoxelChunk>();
         private readonly List<Mesh> readyColliderMeshes = new List<Mesh>();
         private readonly List<ChunkRef> deferred = new List<ChunkRef>();
 
-        private float nextCull;
+        private float nextReview;
         private int carveCursor;
         private bool overflowReported;
         private bool truncationReported;
@@ -128,7 +161,7 @@ namespace DeadCargo.Destruction.Voxels
             frontier = new NativeArray<int>(IslandBuffers.MaxSeeds + 1, Allocator.Persistent);
             extractTargets = new NativeArray<ExtractTarget>(IslandCapacity, Allocator.Persistent);
             extractVolumes = new NativeArray<float>(IslandCapacity * VoxelEncoding.MaterialSlots, Allocator.Persistent);
-            extractMasses = new NativeArray<float4>(IslandCapacity, Allocator.Persistent);
+            extractMoments = new NativeArray<MassMoments>(IslandCapacity, Allocator.Persistent);
         }
 
         public IReadOnlyList<VoxelBody> Bodies => bodies;
@@ -136,6 +169,9 @@ namespace DeadCargo.Destruction.Voxels
         public int MeshedLastFrame { get; private set; }
         public int PieceSearches { get; private set; }
         public int LastSearchVisited { get; private set; }
+
+        /// <summary>Cuts across whole rocks made on a worker since the start.</summary>
+        public int HeavyCuts { get; private set; }
 
         /// <summary>The stages of a frame's work, as timed by <see cref="StageMilliseconds"/>.</summary>
         public static readonly string[] StageNames = { "Colliders", "Meshes", "Pieces", "Cuts", "Scheduling" };
@@ -171,6 +207,33 @@ namespace DeadCargo.Destruction.Voxels
             bodies.Remove(body);
         }
 
+        /// <summary>
+        /// Finishes the running jobs that read or write this body's grid, so it can be rebuilt or freed. Other bodies'
+        /// work carries on. Results are still applied by the next <see cref="Tick"/>.
+        /// </summary>
+        public void CompleteJobsFor(VoxelBody body)
+        {
+            body.Generation.Complete();
+            body.GridJob.Complete();
+            if (body.InMeshBatch)
+                meshHandle.Complete();
+            if (islandInFlight && body == islandBody)
+                islandHandle.Complete();
+        }
+
+        /// <summary>Adds empty meshes to the pool, so a burst of cuts later never has to make them mid-frame.</summary>
+        public void PrewarmMeshes(int count)
+        {
+            for (int i = meshPool.Count; i < count; ++i)
+                meshPool.Push(CreateMesh());
+        }
+
+        /// <summary>Makes a rock material's cross-fade copy now, rather than at its first detail switch.</summary>
+        public void PrewarmFade(Material source)
+        {
+            FadeMaterial(source);
+        }
+
         /// <summary>Finishes every running job. Results are still applied by the next <see cref="Tick"/>.</summary>
         public void CompleteJobs()
         {
@@ -178,6 +241,7 @@ namespace DeadCargo.Destruction.Voxels
             bakeHandle.Complete();
             islandHandle.Complete();
             extractionHandle.Complete();
+            heavyCarves.Handle.Complete();
             foreach (VoxelBody body in bodies)
             {
                 if (body != null)
@@ -193,7 +257,10 @@ namespace DeadCargo.Destruction.Voxels
             Record(StageColliders, ref time);
 
             using (MeshesMarker.Auto())
+            {
                 CompleteMeshes();
+                UpdateFades();
+            }
             Record(StageMeshes, ref time);
 
             using (PiecesMarker.Auto())
@@ -212,7 +279,7 @@ namespace DeadCargo.Destruction.Voxels
 
             using (ScheduleMarker.Auto())
             {
-                CullPieces();
+                ReviewDistances();
                 ScheduleIslands();
                 ScheduleMeshes();
                 ScheduleBakes();
@@ -248,27 +315,21 @@ namespace DeadCargo.Destruction.Voxels
             time = now;
         }
 
-        /// <summary>Moves free pieces along their drift. Runs in the physics step.</summary>
-        public void MoveFreeBodies(float deltaTime)
+        /// <summary>Moves every rock along its drift and tumble. Runs in the physics step.</summary>
+        public void MoveBodies(float deltaTime)
         {
             foreach (VoxelBody body in bodies)
             {
-                if (body == null || !body.IsFree || !body.HasBeenMeshed || body.ReleaseRequested || body.PhysicsBody == null)
-                    continue;
-
-                Rigidbody rigidbody = body.PhysicsBody;
-                rigidbody.MovePosition(rigidbody.position + body.Velocity * deltaTime);
-
-                float spin = body.Spin.magnitude;
-                if (spin > 1e-3f)
-                    rigidbody.MoveRotation(Quaternion.AngleAxis(spin * deltaTime, body.Spin / spin) * rigidbody.rotation);
+                if (body != null && body.IsAllocated && !body.ReleaseRequested)
+                    body.Integrate(deltaTime);
             }
         }
 
         /// <summary>Starts building an asteroid in a body. Its chunks are meshed once the rock is filled in.</summary>
         public void Generate(VoxelBody body, AsteroidDefinition definition, float diameter, uint seed)
         {
-            CompleteJobs();
+            // Only a body being rebuilt can have jobs running on it; a new one starts at once.
+            CompleteJobsFor(body);
             ClearChunks(body);
 
             AsteroidShape shape = definition.BuildShape(diameter, seed);
@@ -283,7 +344,11 @@ namespace DeadCargo.Destruction.Voxels
 
             var size = new int3(half * 2 + 1);
             body.Allocate(definition, size, voxelSize, new float3(-half * voxelSize));
-            body.SliceVolume = new NativeArray<float>(size.z, Allocator.Persistent);
+            body.SliceMoments = new NativeArray<MassMoments>(size.z, Allocator.Persistent);
+
+            // The spin waits for the rock's inertia, known once it is filled in.
+            definition.RollMotion(diameter, seed, out Vector3 drift, out Vector3 tumble);
+            body.SetMotion(drift, tumble);
 
             var job = new VoxelFillJob
             {
@@ -293,7 +358,7 @@ namespace DeadCargo.Destruction.Voxels
                 Shape = shape,
                 VoxelSize = voxelSize,
                 Origin = body.GridOrigin,
-                SliceVolume = body.SliceVolume
+                SliceMoments = body.SliceMoments
             };
 
             body.Generation = job.Schedule(size.z, 1);
@@ -342,12 +407,19 @@ namespace DeadCargo.Destruction.Voxels
             DisposeArray(ref frontier);
             DisposeArray(ref islands);
             DisposeArray(ref islandSummary);
-            DisposeArray(ref carveRequests);
-            DisposeArray(ref carveRemoved);
-            DisposeArray(ref carveChanged);
+            inlineCarves.Dispose();
+            heavyCarves.Dispose();
             DisposeArray(ref extractTargets);
             DisposeArray(ref extractVolumes);
-            DisposeArray(ref extractMasses);
+            DisposeArray(ref extractMoments);
+
+            foreach (Material fade in fadeMaterials.Values)
+            {
+                if (fade != null)
+                    UnityEngine.Object.Destroy(fade);
+            }
+
+            fadeMaterials.Clear();
 
             foreach (Mesh mesh in ownedMeshes)
             {
@@ -440,7 +512,7 @@ namespace DeadCargo.Destruction.Voxels
                                      "Use larger voxels for this asteroid type.", body);
                 }
 
-                ApplyChunk(body, entry.Index, mesh, result);
+                ApplyChunk(body, entry.Index, mesh, result, requests[i].Stride);
                 if (!snapshot.Contains(body))
                     snapshot.Add(body);
             }
@@ -456,13 +528,23 @@ namespace DeadCargo.Destruction.Voxels
                 body.HasBeenMeshed = true;
                 if (body.SurfaceChunks == 0 && body.PendingCarves.Count == 0)
                 {
+                    // Reduced detail can step over a sliver; only an empty mesh at full detail means the rock is gone.
+                    if (body.DetailLevel > 0)
+                    {
+                        body.SetDetailLevel(0);
+                        for (int i = 0; i < body.Chunks.Length; ++i)
+                            Enqueue(body, i, true);
+                        continue;
+                    }
+
                     body.RaiseDepleted();
                     QueueRelease(body);
                 }
             }
         }
 
-        private void ApplyChunk(VoxelBody body, int index, Mesh mesh, in MeshResult result)
+        /// <param name="stride">Detail the mesh was built at: 1 full, 2 half, 4 quarter.</param>
+        private void ApplyChunk(VoxelBody body, int index, Mesh mesh, in MeshResult result, int stride)
         {
             if (result.IndexCount == 0)
             {
@@ -474,11 +556,16 @@ namespace DeadCargo.Destruction.Voxels
             VoxelChunk chunk = body.GetOrCreateChunk(index);
             mesh.bounds = new Bounds((result.BoundsMin + result.BoundsMax) * 0.5f, result.BoundsMax - result.BoundsMin);
 
+            // A new detail level cross-fades in over the old mesh; a cut shows at once.
             Mesh old = chunk.RenderMesh;
+            bool crossFade = old != null && chunk.MeshStride != stride && system.DetailFadeTime > 0f;
             chunk.RenderMesh = mesh;
             chunk.Filter.sharedMesh = mesh;
             chunk.Renderer.enabled = true;
-            if (old != null && old != chunk.ColliderMesh)
+            chunk.MeshStride = stride;
+            if (crossFade)
+                StartFade(body, chunk, old);
+            else if (old != null && old != chunk.ColliderMesh)
                 ReleaseMesh(old);
 
             int triangles = result.IndexCount / 3;
@@ -492,11 +579,93 @@ namespace DeadCargo.Destruction.Voxels
             pendingBakeMeshes.Add(mesh);
         }
 
+        // Shows the outgoing mesh on the chunk's ghost and fades the new one in over it. A fade still running hands its
+        // own outgoing mesh back first.
+        private void StartFade(VoxelBody body, VoxelChunk chunk, Mesh outgoing)
+        {
+            if (chunk.IsFading)
+                FinishFadeMesh(chunk, chunk.EndFade());
+
+            Material fade = FadeMaterial(body.Definition != null ? body.Definition.SurfaceMaterial : null);
+            if (fade == null)
+            {
+                if (outgoing != chunk.ColliderMesh)
+                    ReleaseMesh(outgoing);
+                return;
+            }
+
+            chunk.BeginFade(outgoing, fade, Time.time);
+            meshesInFade.Add(outgoing);
+            fading.Add(new FadeRef(body, chunk));
+            body.ApplyTextureOffset(chunk);
+        }
+
+        // Moves every cross-fade on, and ends those that are done.
+        private void UpdateFades()
+        {
+            float duration = system.DetailFadeTime;
+            float now = Time.time;
+            for (int i = fading.Count - 1; i >= 0; --i)
+            {
+                FadeRef entry = fading[i];
+                VoxelChunk chunk = entry.Chunk;
+                if (entry.Body == null || !chunk.IsAlive || !chunk.IsFading)
+                {
+                    fading.RemoveAt(i);
+                    continue;
+                }
+
+                float progress = duration > 0f ? (now - chunk.FadeStart) / duration : 1f;
+                if (progress >= 1f)
+                {
+                    FinishFadeMesh(chunk, chunk.EndFade());
+                    fading.RemoveAt(i);
+                }
+                else
+                {
+                    chunk.FadeProgress = progress;
+                }
+
+                entry.Body.ApplyTextureOffset(chunk);
+            }
+        }
+
+        // The outgoing mesh of a finished fade goes back to the pool, unless the collider still uses it: the collider
+        // hands it back once its new shape is cooked.
+        private void FinishFadeMesh(VoxelChunk chunk, Mesh outgoing)
+        {
+            if (outgoing == null)
+                return;
+
+            meshesInFade.Remove(outgoing);
+            bool asked = releaseAfterFade.Remove(outgoing);
+            if (asked || outgoing != chunk.ColliderMesh && outgoing != chunk.RenderMesh)
+                ReleaseMesh(outgoing);
+        }
+
+        // The rock's material with the dither fade on, made once per material.
+        private Material FadeMaterial(Material source)
+        {
+            if (source == null)
+                return null;
+
+            if (fadeMaterials.TryGetValue(source, out Material fade))
+                return fade;
+
+            fade = new Material(source) { name = source.name + " (Detail Fade)" };
+            fade.EnableKeyword(DitherFadeKeyword);
+            fadeMaterials.Add(source, fade);
+            return fade;
+        }
+
         private void ClearChunk(VoxelBody body, int index)
         {
             VoxelChunk chunk = body.Chunks[index];
             if (chunk == null)
                 return;
+
+            if (chunk.IsFading)
+                FinishFadeMesh(chunk, chunk.EndFade());
 
             if (chunk.Triangles > 0)
                 body.SurfaceChunks--;
@@ -539,12 +708,23 @@ namespace DeadCargo.Destruction.Voxels
                 body.Generation.Complete();
                 body.IsGenerating = false;
 
-                float volume = 0f;
-                for (int z = 0; z < body.SliceVolume.Length; ++z)
-                    volume += body.SliceVolume[z];
-                body.SliceVolume.Dispose();
+                // Released while it was being built: it is freed this frame, never meshed.
+                if (body.ReleaseRequested)
+                    continue;
 
-                body.InitialVolume = body.Volume = volume * Cube(body.VoxelSize);
+                MassMoments moments = default;
+                for (int z = 0; z < body.SliceMoments.Length; ++z)
+                    moments += body.SliceMoments[z];
+                body.SliceMoments.Dispose();
+
+                body.Moments = moments;
+                body.InitialVolume = body.Volume = (float)moments.Volume * Cube(body.VoxelSize);
+                body.UpdateMassProperties();
+
+                // Far rock is meshed straight at the detail its distance calls for, not at full detail and then again.
+                if (TryGetView(out Vector3 view))
+                    body.SetDetailLevel(WantedDetail(body, view));
+
                 for (int i = 0; i < body.Chunks.Length; ++i)
                     Enqueue(body, i, false);
             }
@@ -608,15 +788,15 @@ namespace DeadCargo.Destruction.Voxels
                 Targets = extractTargets,
                 Count = summary.x,
                 MaterialVolume = extractVolumes,
-                Mass = extractMasses
+                Moments = extractMoments
             }.Schedule();
 
             body.IsBusy = true;
-            body.Extraction = extractionHandle;
+            body.GridJob = extractionHandle;
             foreach (VoxelBody piece in extractionPieces)
             {
                 if (piece != null)
-                    piece.Extraction = extractionHandle;
+                    piece.GridJob = extractionHandle;
             }
 
             extractionBody = body;
@@ -676,8 +856,13 @@ namespace DeadCargo.Destruction.Voxels
 
             removed *= Cube(body.VoxelSize);
             body.Volume -= removed;
-            Vector3 centre = body.GridToWorld((float3)(island.Min + island.Max) * 0.5f);
-            Vector3 outward = (centre - body.transform.position).normalized;
+            MassMoments crumb = extractMoments[index];
+            body.Moments -= crumb;
+            body.UpdateMassProperties();
+
+            float3 middle = crumb.Volume > 0.0 ? (float3)crumb.Centre : (float3)(island.Min + island.Max) * 0.5f;
+            Vector3 centre = body.GridToWorld(middle);
+            Vector3 outward = (centre - body.CentreOfMass).normalized;
             float extent = math.cmax(island.Max - island.Min + 1) * body.VoxelSize * 0.5f;
             system.Debris.Burst(centre, outward, ChipColor(body.Definition, dominant), removed, extent);
             MarkDirty(body, island.Min, island.Max);
@@ -687,33 +872,53 @@ namespace DeadCargo.Destruction.Voxels
         {
             IslandInfo island = islands[index];
             AsteroidDefinition definition = body.Definition;
-            float3 originInBody = piece.GridOrigin;
+            MassMoments moments = extractMoments[index];
+
+            // How the rock moved just before it lost the piece: the piece carries on with that motion.
+            Vector3 bodyVelocity = body.LinearVelocity;
+            Vector3 bodySpin = body.AngularVelocity;
+            Vector3 bodyCentre = body.CentreOfMass;
 
             // The piece pivots on its own centre of mass, so it tumbles the way a real rock would.
-            float4 measured = extractMasses[index];
-            float pieceVolume = measured.w * Cube(body.VoxelSize);
-            float3 centreInBody = originInBody + measured.xyz * body.VoxelSize;
-            piece.GridOrigin = originInBody - centreInBody;
+            float3 centreInBody = body.GridOrigin + (float3)moments.Centre * body.VoxelSize;
+            piece.GridOrigin -= centreInBody;
             piece.SetTextureOffset(body.TextureOffset + centreInBody);
-            Vector3 worldCentre = body.transform.TransformPoint(centreInBody);
-            piece.transform.SetPositionAndRotation(worldCentre, body.transform.rotation);
+            Vector3 worldCentre = body.LocalToWorld(centreInBody);
+            piece.PlaceAt(worldCentre, body.WorldRotation);
+
+            float pieceVolume = (float)moments.Volume * Cube(body.VoxelSize);
             piece.InitialVolume = piece.Volume = pieceVolume;
+            piece.Moments = moments.Transformed(1.0, new int3(VoxelBody.Margin) - island.Min);
+            piece.UpdateMassProperties();
+            piece.MarkAsPiece(body.IsWarmUp);
+
             body.Volume -= pieceVolume;
+            body.Moments -= moments;
+            body.UpdateMassProperties();
 
-            Vector3 inherited = Vector3.zero;
-            if (body.IsFree)
-                inherited = body.Velocity + Vector3.Cross(body.Spin * Mathf.Deg2Rad, worldCentre - body.transform.position);
+            piece.SetMotion(bodyVelocity + Vector3.Cross(bodySpin, worldCentre - bodyCentre), bodySpin);
 
-            Vector3 away = worldCentre - body.LastCutPoint;
-            if (away.sqrMagnitude < 1e-4f)
-                away = worldCentre - body.transform.position;
+            // The two push apart along the line between their centres with equal and opposite pushes, so the lighter
+            // one moves more: a chip flies off a big rock that barely stirs, and two halves part at the same speed.
+            Vector3 away = worldCentre - body.CentreOfMass;
             away = away.sqrMagnitude > 1e-6f ? away.normalized : UnityEngine.Random.onUnitSphere;
 
             float reference = Mathf.Max(body.InitialVolume * ReferencePieceShare, 1f);
             float sizeFactor = Mathf.Clamp(Mathf.Pow(reference / Mathf.Max(pieceVolume, 1e-3f), 1f / 3f), 0.5f, 3f);
             float speed = (definition != null ? definition.SplitSpeed : 2f) * sizeFactor * UnityEngine.Random.Range(0.8f, 1.2f);
-            float spin = (definition != null ? definition.SplitSpin : 10f) * sizeFactor * UnityEngine.Random.Range(0.6f, 1.2f);
-            piece.MakeFree(inherited + away * speed, UnityEngine.Random.onUnitSphere * spin);
+            Vector3 push = away * (speed * piece.Mass);
+            piece.AddImpulse(push, piece.CentreOfMass);
+            body.AddImpulse(-push, body.CentreOfMass);
+
+            // They twist apart the same way: equal and opposite.
+            float twist = (definition != null ? definition.SplitSpin : 10f) * Mathf.Deg2Rad * sizeFactor * UnityEngine.Random.Range(0.6f, 1.2f);
+            Vector3 twistMomentum = piece.AngularMomentumFor(UnityEngine.Random.onUnitSphere * twist);
+            piece.AddAngularImpulse(twistMomentum);
+            body.AddAngularImpulse(-twistMomentum);
+
+            // A piece starts at the detail its own size and distance call for, so a far one is not meshed twice.
+            if (TryGetView(out Vector3 view))
+                piece.SetDetailLevel(WantedDetail(piece, view));
 
             for (int i = 0; i < piece.Chunks.Length; ++i)
                 Enqueue(piece, i, true);
@@ -722,8 +927,10 @@ namespace DeadCargo.Destruction.Voxels
             if (definition != null && definition.SplitEffect != null)
                 system.Effects.Play(definition.SplitEffect, body.LastCutPoint, Quaternion.LookRotation(away));
 
+            // The warm-up rock tells only its own listener; the rest of the game never hears of it.
             body.RaiseSplit(piece);
-            system.RaiseBodySplit(body, piece);
+            if (!body.IsWarmUp)
+                system.RaiseBodySplit(body, piece);
         }
 
         private void EnforcePieceBudget()
@@ -731,7 +938,7 @@ namespace DeadCargo.Destruction.Voxels
             int free = 0;
             foreach (VoxelBody body in bodies)
             {
-                if (body != null && body.IsFree && !body.ReleaseRequested)
+                if (CountsAsFreePiece(body))
                     free++;
             }
 
@@ -740,7 +947,7 @@ namespace DeadCargo.Destruction.Voxels
                 VoxelBody smallest = null;
                 foreach (VoxelBody body in bodies)
                 {
-                    if (body != null && body.IsFree && !body.ReleaseRequested && (smallest == null || body.Volume < smallest.Volume))
+                    if (CountsAsFreePiece(body) && (smallest == null || body.Volume < smallest.Volume))
                         smallest = body;
                 }
 
@@ -752,6 +959,11 @@ namespace DeadCargo.Destruction.Voxels
             }
         }
 
+        private static bool CountsAsFreePiece(VoxelBody body)
+        {
+            return body != null && body.IsPiece && !body.IsWarmUp && !body.ReleaseRequested;
+        }
+
         /// <summary>Turns a body into a burst of chips and releases it.</summary>
         public void Crumble(VoxelBody body)
         {
@@ -761,24 +973,29 @@ namespace DeadCargo.Destruction.Voxels
             QueueRelease(body);
         }
 
+        // Frees released bodies. One whose grid a job still reads or writes is already hidden; it waits for the job
+        // rather than the main thread waiting on it.
         private void ProcessReleases()
         {
             if (releases.Count == 0)
                 return;
 
-            foreach (VoxelBody body in releases)
+            int waiting = 0;
+            for (int i = 0; i < releases.Count; ++i)
             {
+                VoxelBody body = releases[i];
                 if (body == null)
                     continue;
 
-                body.Generation.Complete();
-                body.Extraction.Complete();
-                body.IsBusy = false;
-                if (islandInFlight && body == islandBody)
-                    islandHandle.Complete();
-                if (body.InMeshBatch)
-                    meshHandle.Complete();
+                if (IsGridInUse(body))
+                {
+                    releases[waiting++] = body;
+                    continue;
+                }
 
+                // Every job on the grid has finished; completing them only releases their hold on its buffers.
+                CompleteJobsFor(body);
+                body.IsBusy = false;
                 ClearChunks(body);
                 body.DisposeGrid();
                 body.Version++;
@@ -787,13 +1004,25 @@ namespace DeadCargo.Destruction.Voxels
                 system.RetireBody(body);
             }
 
-            releases.Clear();
+            releases.RemoveRange(waiting, releases.Count - waiting);
+        }
+
+        // A job is still running on the body's grid: building it, meshing it, searching it, or moving pieces or a heavy
+        // cut through it. A mesh batch counts until it is applied, as its requests point straight at the grid.
+        private bool IsGridInUse(VoxelBody body)
+        {
+            return !body.Generation.IsCompleted || !body.GridJob.IsCompleted || body.InMeshBatch ||
+                   islandInFlight && body == islandBody && !islandHandle.IsCompleted;
         }
 
         // Applies queued cuts, oldest first, up to a budget per frame. Rocks take turns at the front of the line, so
-        // under heavy fire none waits behind the others for long.
+        // under heavy fire none waits behind the others for long. Craters are cut inline, as small Burst jobs; a cut
+        // across a whole rock (a crack, a saw cut, a huge blast) goes to a worker and lands next frame, so it never
+        // stalls the frame.
         private void ProcessCarves()
         {
+            FinishHeavyCarve();
+
             snapshot.Clear();
             snapshot.AddRange(bodies);
             int budget = system.CutsPerFrame;
@@ -812,53 +1041,106 @@ namespace DeadCargo.Destruction.Voxels
                     continue;
                 }
 
-                // A body being meshed, searched or emptied of pieces is read by a job; its cuts wait a frame.
+                // A body being meshed, searched, emptied of pieces or cut on a worker is used by a job; its cuts wait.
                 if (body.IsGenerating || body.IsBusy || body.InMeshBatch || islandInFlight && body == islandBody)
                     continue;
 
                 int take = Mathf.Min(body.PendingCarves.Count, budget);
-                commands.Clear();
-                for (int i = 0; i < take; ++i)
-                    commands.Add(body.PendingCarves[i]);
+                int heavy = FirstHeavyCut(body.PendingCarves, take);
+                if (heavy == 0)
+                {
+                    // One heavy cut at a time; the next waits for the worker.
+                    if (heavyCarves.InFlight)
+                        continue;
 
-                body.PendingCarves.RemoveRange(0, take);
+                    heavyCarves.Take(body, take);
+                    budget -= take;
+                    StartHeavyCarve(body);
+                    continue;
+                }
+
+                // Cuts before a heavy one go now, in order; the heavy one starts next frame.
+                if (heavy > 0)
+                    take = heavy;
+
+                inlineCarves.Take(body, take);
                 budget -= take;
-                RunCarves(body);
+                inlineCarves.CreateJob(body).Run();
+                ApplyCarveResults(body, inlineCarves);
             }
         }
 
-        private void RunCarves(VoxelBody body)
+        private static int FirstHeavyCut(List<CarveCommand> pending, int count)
         {
-            int count = commands.Count;
-            EnsureCarveCapacity(count);
             for (int i = 0; i < count; ++i)
-                carveRequests[i] = commands[i].Request;
-
-            new VoxelCarveJob
             {
-                Density = body.Density,
-                Material = body.Material,
-                Size = body.GridSize,
-                Requests = carveRequests,
-                Count = count,
-                Removed = carveRemoved,
-                Changed = carveChanged
-            }.Run();
+                CarveRequest request = pending[i].Request;
+                if (request.Shape != CarveShape.Sphere || request.Radius > HeavyCraterVoxels)
+                    return i;
+            }
 
+            return -1;
+        }
+
+        private void StartHeavyCarve(VoxelBody body)
+        {
+            heavyCarves.Handle = heavyCarves.CreateJob(body).Schedule();
+            heavyCarves.Body = body;
+            heavyCarves.Version = body.Version;
+            heavyCarves.InFlight = true;
+            body.IsBusy = true;
+            body.GridJob = heavyCarves.Handle;
+            HeavyCuts++;
+        }
+
+        // A heavy cut still running is picked up next frame: the main thread never waits for it.
+        private void FinishHeavyCarve()
+        {
+            if (!heavyCarves.InFlight || !heavyCarves.Handle.IsCompleted)
+                return;
+
+            heavyCarves.Handle.Complete();
+            heavyCarves.InFlight = false;
+            VoxelBody body = heavyCarves.Body;
+            heavyCarves.Body = null;
+            if (body == null)
+                return;
+
+            body.IsBusy = false;
+            if (body.IsAllocated && !body.ReleaseRequested && body.Version == heavyCarves.Version)
+                ApplyCarveResults(body, heavyCarves);
+        }
+
+        // Books what a finished batch of cuts did: mass, yields, chips, chunks to remesh and where to look for pieces.
+        private void ApplyCarveResults(VoxelBody body, CarveBatch carves)
+        {
+            int count = carves.Commands.Count;
             float voxelVolume = Cube(body.VoxelSize);
+            bool massChanged = false;
             for (int r = 0; r < count; ++r)
             {
-                CarveCommand command = commands[r];
-                int3 min = carveChanged[r * 2];
-                int3 max = carveChanged[r * 2 + 1];
+                CarveCommand command = carves.Commands[r];
+                int3 min = carves.Changed[r * 2];
+                int3 max = carves.Changed[r * 2 + 1];
                 if (!math.all(min <= max))
                     continue;
 
+                body.Moments -= carves.Moments[r];
+                massChanged = true;
+
+                // The job placed the crack; chips and the split effect go where it landed.
+                if (command.Request.Shape == CarveShape.Fracture)
+                {
+                    command.Point = body.GridToWorld((float3)(min + max) * 0.5f);
+                    command.Radius = math.cmax(max - min) * body.VoxelSize * 0.25f;
+                }
+
                 int o = r * VoxelEncoding.MaterialSlots;
+                NativeArray<float> removed = carves.Removed;
                 var yield = new VoxelYield(body, command.Kind, command.Point,
-                    carveRemoved[o] * voxelVolume, carveRemoved[o + 1] * voxelVolume, carveRemoved[o + 2] * voxelVolume,
-                    carveRemoved[o + 3] * voxelVolume, carveRemoved[o + 4] * voxelVolume, carveRemoved[o + 5] * voxelVolume,
-                    carveRemoved[o + 6] * voxelVolume, carveRemoved[o + 7] * voxelVolume);
+                    removed[o] * voxelVolume, removed[o + 1] * voxelVolume, removed[o + 2] * voxelVolume,
+                    removed[o + 3] * voxelVolume, removed[o + 4] * voxelVolume, removed[o + 5] * voxelVolume,
+                    removed[o + 6] * voxelVolume, removed[o + 7] * voxelVolume);
 
                 MarkDirty(body, min, max);
                 body.LastCutPoint = command.Point;
@@ -881,8 +1163,12 @@ namespace DeadCargo.Destruction.Voxels
                 body.Volume -= total;
                 system.Debris.Burst(command.Point, command.Normal, ChipColor(body.Definition, yield.DominantSlot), total, command.Radius);
                 body.RaiseMaterialRemoved(yield);
-                system.RecordYield(yield);
+                if (!body.IsWarmUp)
+                    system.RecordYield(yield);
             }
+
+            if (massChanged)
+                body.UpdateMassProperties();
 
             if (body.HasSplitRegion && !body.IslandCheckQueued)
             {
@@ -891,23 +1177,78 @@ namespace DeadCargo.Destruction.Voxels
             }
         }
 
-        private void CullPieces()
+        // Twice a second: pieces far from the camera are removed, and rock switches mesh detail by distance.
+        private void ReviewDistances()
         {
-            if (Time.time < nextCull)
+            if (Time.time < nextReview)
                 return;
 
-            nextCull = Time.time + CullInterval;
-            Camera camera = Camera.main;
-            if (camera == null)
+            nextReview = Time.time + ReviewInterval;
+            if (!TryGetView(out Vector3 view))
                 return;
 
             float rangeSq = system.PieceRange * system.PieceRange;
-            Vector3 view = camera.transform.position;
             foreach (VoxelBody body in bodies)
             {
-                if (body != null && body.IsFree && !body.ReleaseRequested && (body.transform.position - view).sqrMagnitude > rangeSq)
+                if (body == null || body.ReleaseRequested)
+                    continue;
+
+                if (body.IsPiece && (body.transform.position - view).sqrMagnitude > rangeSq)
+                {
                     QueueRelease(body);
+                    continue;
+                }
+
+                UpdateDetail(body, view);
             }
+        }
+
+        // Switches meshed rock to the detail its distance now calls for; its chunks remesh and cross-fade.
+        private void UpdateDetail(VoxelBody body, Vector3 view)
+        {
+            if (!body.HasBeenMeshed || body.IsGenerating || !body.IsAllocated)
+                return;
+
+            int current = body.DetailLevel;
+            int wanted = WantedDetail(body, view);
+            if (wanted == current)
+                return;
+
+            // Coming closer must look right at once; moving away can take its time in the background.
+            body.SetDetailLevel(wanted);
+            bool isUrgent = wanted < current;
+            for (int i = 0; i < body.Chunks.Length; ++i)
+                Enqueue(body, i, isUrgent);
+        }
+
+        // Distant rock meshes at reduced detail, with colliders to match: half detail has a quarter of the triangles and
+        // quarter detail a sixteenth. The distances scale with voxel size, so a cell covers about the same share of the
+        // screen whenever rock switches.
+        private int WantedDetail(VoxelBody body, Vector3 view)
+        {
+            float scale = body.VoxelSize / ReferenceVoxelSize;
+            float voxelsAcross = body.EquivalentDiameter / body.VoxelSize;
+            float distance = Vector3.Distance(view, body.CentreOfMass) - body.EquivalentDiameter * 0.5f;
+            int current = body.DetailLevel;
+            if (voxelsAcross < MinHalfDetailVoxels || !IsBeyond(distance, system.HalfDetailStart * scale, current >= 1))
+                return 0;
+
+            bool hasQuarter = voxelsAcross >= MinQuarterDetailVoxels && system.QuarterDetailStart > system.HalfDetailStart;
+            return hasQuarter && IsBeyond(distance, system.QuarterDetailStart * scale, current >= 2) ? 2 : 1;
+        }
+
+        private static bool TryGetView(out Vector3 view)
+        {
+            Camera camera = Camera.main;
+            view = camera != null ? camera.transform.position : Vector3.zero;
+            return camera != null;
+        }
+
+        // Whether rock this far away is past a switch distance. Rock already past it must come a margin closer to switch
+        // back, so it never flickers between details at the line.
+        private static bool IsBeyond(float distance, float start, bool isPast)
+        {
+            return start > 0f && distance > start * (isPast ? 1f - DetailHysteresis : 1f + DetailHysteresis);
         }
 
         private void ScheduleIslands()
@@ -917,10 +1258,13 @@ namespace DeadCargo.Destruction.Voxels
                 return;
 
             VoxelBody body = null;
-            while (body == null && islandQueue.Count > 0)
+            for (int i = 0; i < islandQueue.Count && body == null; ++i)
             {
-                VoxelBody next = islandQueue[0];
-                islandQueue.RemoveAt(0);
+                VoxelBody next = islandQueue[i];
+                if (next != null && next.IsBusy && !next.ReleaseRequested)
+                    continue; // A heavy cut is still writing its grid; it stays in line.
+
+                islandQueue.RemoveAt(i--);
                 if (next == null)
                     continue;
 
@@ -977,7 +1321,7 @@ namespace DeadCargo.Destruction.Voxels
             {
                 VoxelBody body = batch[i].Body;
                 requests[i] = MeshRequest.Create(body.Density, body.Material, body.GridSize, body.ChunkMin(batch[i].Index),
-                    body.VoxelSize, body.GridOrigin, body.Palette);
+                    body.VoxelSize, body.GridOrigin, body.Palette, 1 << body.DetailLevel);
                 body.InMeshBatch = true;
                 batchMeshes.Add(AcquireMesh());
             }
@@ -1096,16 +1440,19 @@ namespace DeadCargo.Destruction.Voxels
 
         private Mesh AcquireMesh()
         {
-            if (meshPool.Count > 0)
-                return meshPool.Pop();
+            return meshPool.Count > 0 ? meshPool.Pop() : CreateMesh();
+        }
 
+        private Mesh CreateMesh()
+        {
             var mesh = new Mesh { name = "Voxel Chunk" };
             mesh.MarkDynamic();
             ownedMeshes.Add(mesh);
             return mesh;
         }
 
-        // A mesh still being cooked is returned to the pool only once its cooking job is done.
+        // A mesh still being cooked is returned to the pool only once its cooking job is done, and one a ghost still shows
+        // only once its fade is over.
         private void ReleaseMesh(Mesh mesh)
         {
             if (mesh == null)
@@ -1114,6 +1461,12 @@ namespace DeadCargo.Destruction.Voxels
             if (bakeInFlight && meshesInBake.Contains(mesh))
             {
                 releaseAfterBake.Add(mesh);
+                return;
+            }
+
+            if (meshesInFade.Contains(mesh))
+            {
+                releaseAfterFade.Add(mesh);
                 return;
             }
 
@@ -1146,17 +1499,6 @@ namespace DeadCargo.Destruction.Voxels
             labels = new NativeArray<ushort>(voxelCount, Allocator.Persistent, NativeArrayOptions.ClearMemory);
             Reallocate(ref queue, voxelCount);
             Reallocate(ref islandVoxels, voxelCount);
-        }
-
-        private void EnsureCarveCapacity(int count)
-        {
-            if (carveRequests.IsCreated && carveRequests.Length >= count)
-                return;
-
-            int capacity = Mathf.Max(count, 32);
-            Reallocate(ref carveRequests, capacity);
-            Reallocate(ref carveRemoved, capacity * VoxelEncoding.MaterialSlots);
-            Reallocate(ref carveChanged, capacity * 2);
         }
 
         private static Color ChipColor(AsteroidDefinition definition, int slot)

@@ -7,6 +7,9 @@ namespace DeadCargo.Destruction.Voxels
         Sphere,
 
         /// <summary>A thin disc: saws and cutting beams that slice a rock apart.</summary>
-        Slab
+        Slab,
+
+        /// <summary>A ragged crack right through the rock, placed so a set share of it lies beyond: rock breaking apart.</summary>
+        Fracture
     }
 }

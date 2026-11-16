@@ -50,6 +50,7 @@ namespace DeadCargo.Destruction.Voxels.Diagnostics
 
                 Run(result, "Encoding", () => CheckEncoding(result));
                 Run(result, "Sphere", () => CheckSphere(result, memory, palette));
+                Run(result, "Reduced detail", () => CheckReducedDetail(result, memory, palette));
                 Run(result, "Asteroid", () => CheckAsteroid(result, memory, palette));
                 Run(result, "Determinism", () => CheckDeterminism(result, memory));
                 Run(result, "Carving", () => CheckCarving(result, memory, palette));
@@ -115,6 +116,31 @@ namespace DeadCargo.Destruction.Voxels.Diagnostics
             result.Check(mesh.MaxRadiusError < VoxelSize * 0.6f, "Surface position", $"max error {mesh.MaxRadiusError:0.000} m");
             result.Check(mesh.OutwardTriangles == mesh.Triangles, "Faces point out", $"{mesh.OutwardTriangles:N0} of {mesh.Triangles:N0}");
             result.Note("Timing", $"{grid.Count:N0} voxels generated in {generateMs:0} ms, meshed in {mesh.MeshMilliseconds:0} ms (plain C#; Burst in game)");
+        }
+
+        // Distant rock meshes every second or fourth sample: far fewer triangles, but still closed and still the same rock.
+        private static void CheckReducedDetail(Result result, VoxelTestMemory memory, float4* palette)
+        {
+            const float radius = 20f;
+            VoxelGrid grid = GridFor(memory, radius, out float3 origin);
+            VoxelGeneration.Fill(grid, new AsteroidShape { Radii = new float3(radius) }, VoxelSize, origin, 0, grid.Size.z);
+            float expected = 4f / 3f * math.PI * radius * radius * radius;
+            VoxelMeshCheck full = VoxelMeshCheck.Run(memory, grid, VoxelSize, origin, palette, 2, float3.zero, radius);
+
+            for (int stride = 2; stride <= 4; stride *= 2)
+            {
+                string name = stride == 2 ? "Half detail" : "Quarter detail";
+                float tolerance = stride == 2 ? 0.04f : 0.1f;
+                float cell = VoxelSize * stride;
+                VoxelMeshCheck mesh = VoxelMeshCheck.Run(memory, grid, VoxelSize, origin, palette, 2, float3.zero, radius, stride);
+
+                result.Check(mesh.IsClosed && mesh.BadValues == 0 && !mesh.Overflow, name + " is closed",
+                    $"{mesh.Triangles:N0} triangles, {mesh.OpenEdges} open edges, {mesh.BadValues} bad vertices");
+                result.Check(Within((float)mesh.Volume, expected, tolerance) && mesh.MaxRadiusError < cell * 0.75f, name + " keeps the shape",
+                    $"volume {Error((float)mesh.Volume, expected)}, surface within {mesh.MaxRadiusError:0.00} m of a {cell:0.0} m cell");
+                result.Check(mesh.Triangles * stride * stride < full.Triangles * 1.5f && mesh.OutwardTriangles == mesh.Triangles,
+                    name + " is lighter", $"{mesh.Triangles:N0} of {full.Triangles:N0} triangles, all facing out");
+            }
         }
 
         private static void CheckAsteroid(Result result, VoxelTestMemory memory, float4* palette)

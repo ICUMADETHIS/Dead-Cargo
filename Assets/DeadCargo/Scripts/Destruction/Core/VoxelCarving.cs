@@ -2,11 +2,20 @@ using Unity.Mathematics;
 
 namespace DeadCargo.Destruction.Voxels
 {
-    /// <summary>Removes rock from a voxel grid and accounts for every bit removed, by material.</summary>
+    /// <summary>
+    /// Removes rock from a voxel grid and accounts for every bit removed: by material, and as mass moments so the body
+    /// knows how its centre of mass and inertia changed.
+    /// </summary>
     public static unsafe class VoxelCarving
     {
         // How far a fully rough crater's wall strays from its radius, as a share of the radius.
         private const float RoughnessAmplitude = 0.35f;
+
+        // Height of a fully rough crack's bumps, as a share of the rock's size.
+        private const float CrackReliefShare = 0.06f;
+
+        // Bump height over bump width on a ragged face. Kept low so the gap a crack opens never pinches shut.
+        private const float ReliefSlope = 0.2f;
 
         /// <summary>
         /// Subtracts a sphere from the grid. Positions and sizes are in voxels, in grid coordinates.
@@ -19,6 +28,14 @@ namespace DeadCargo.Destruction.Voxels
         /// <returns>True when any sample changed.</returns>
         public static bool CarveSphere(in VoxelGrid grid, float3 centre, float radius, float roughness, float3 noiseOffset,
             float* removed, out int3 changedMin, out int3 changedMax)
+        {
+            MassMoments moments = default;
+            return CarveSphere(grid, centre, radius, roughness, noiseOffset, removed, ref moments, out changedMin, out changedMax);
+        }
+
+        /// <param name="removedMoments">The rock removed, as mass moments in grid coordinates, added to.</param>
+        public static bool CarveSphere(in VoxelGrid grid, float3 centre, float radius, float roughness, float3 noiseOffset,
+            float* removed, ref MassMoments removedMoments, out int3 changedMin, out int3 changedMax)
         {
             changedMin = new int3(int.MaxValue);
             changedMax = new int3(int.MinValue);
@@ -78,10 +95,7 @@ namespace DeadCargo.Destruction.Voxels
                         if (limit >= old)
                             continue;
 
-                        int slot = math.min((int)grid.Material[i], VoxelEncoding.MaterialSlots - 1);
-                        removed[slot] += VoxelEncoding.Occupancy(old) - VoxelEncoding.Occupancy(limit);
-                        grid.Density[i] = limit;
-
+                        Take(grid, i, new int3(x, y, z), old, limit, removed, ref removedMoments);
                         var s = new int3(x, y, z);
                         changedMin = math.min(changedMin, s);
                         changedMax = math.max(changedMax, s);
@@ -101,8 +115,33 @@ namespace DeadCargo.Destruction.Voxels
         public static bool CarveSlab(in VoxelGrid grid, float3 centre, float3 normal, float halfThickness, float radius,
             float* removed, out int3 changedMin, out int3 changedMax)
         {
+            var request = new CarveRequest
+            {
+                Shape = CarveShape.Slab,
+                Centre = centre,
+                Normal = normal,
+                HalfThickness = halfThickness,
+                Radius = radius
+            };
+
+            MassMoments moments = default;
+            return CarveSlab(grid, request, removed, ref moments, out changedMin, out changedMax);
+        }
+
+        /// <summary>
+        /// Removes a disc of rock like the plain slab cut, with ragged faces when the request has
+        /// <see cref="CarveRequest.Relief"/>.
+        /// </summary>
+        public static bool CarveSlab(in VoxelGrid grid, in CarveRequest request, float* removed, ref MassMoments removedMoments,
+            out int3 changedMin, out int3 changedMax)
+        {
             changedMin = new int3(int.MaxValue);
             changedMax = new int3(int.MinValue);
+            float3 centre = request.Centre;
+            float3 normal = request.Normal;
+            float halfThickness = request.HalfThickness;
+            float radius = request.Radius;
+            float relief = math.max(0f, request.Relief);
             if (!(halfThickness > 0f) || !(radius > 0f) || !(math.lengthsq(normal) > 0.5f))
                 return false;
 
@@ -119,13 +158,31 @@ namespace DeadCargo.Destruction.Voxels
             int c = (a + 2) % 3;
             float reachAcross = halfThickness + VoxelEncoding.BandVoxels;
 
+            // A ragged face is the plane pushed along its normal by noise over the face. The push is worked out once
+            // per row, where the row meets the plane: rows cross the cut steeply, so it barely changes along one.
+            float3 tangent = math.normalize(math.cross(normal, facing.x < 0.9f ? new float3(1f, 0f, 0f) : new float3(0f, 1f, 0f)));
+            float3 bitangent = math.cross(normal, tangent);
+            float frequency = relief > 0f ? ReliefSlope / relief : 0f;
+            float2 phase = request.NoiseOffset.xy;
+
             for (int v = lo[c]; v <= hi[c]; ++v)
             {
                 for (int u = lo[b]; u <= hi[b]; ++u)
                 {
                     float rest = normal[b] * (u - centre[b]) + normal[c] * (v - centre[c]);
-                    float t0 = centre[a] + (-reachAcross - rest) / normal[a];
-                    float t1 = centre[a] + (reachAcross - rest) / normal[a];
+                    float shift = 0f;
+                    if (relief > 0f)
+                    {
+                        float3 onPlane = default;
+                        onPlane[a] = centre[a] - rest / normal[a];
+                        onPlane[b] = u;
+                        onPlane[c] = v;
+                        float3 along = onPlane - centre;
+                        shift = relief * FaceNoise(new float2(math.dot(along, tangent), math.dot(along, bitangent)) * frequency + phase);
+                    }
+
+                    float t0 = centre[a] + (shift - reachAcross - rest) / normal[a];
+                    float t1 = centre[a] + (shift + reachAcross - rest) / normal[a];
                     int start = math.max(lo[a], (int)math.floor(math.min(t0, t1)));
                     int end = math.min(hi[a], (int)math.ceil(math.max(t0, t1)));
 
@@ -136,11 +193,11 @@ namespace DeadCargo.Destruction.Voxels
                         s[b] = u;
                         s[c] = v;
                         float3 offset = (float3)s - centre;
-                        float across = math.dot(offset, normal);
-                        float lateral = math.length(offset - across * normal);
+                        float flat = math.dot(offset, normal);
+                        float lateral = math.length(offset - flat * normal);
 
                         // Outside the disc in either direction: past its faces or beyond its rim.
-                        float outside = math.max(math.abs(across) - halfThickness, lateral - radius);
+                        float outside = math.max(math.abs(flat - shift) - halfThickness, lateral - radius);
                         if (outside >= VoxelEncoding.BandVoxels)
                             continue;
 
@@ -150,9 +207,7 @@ namespace DeadCargo.Destruction.Voxels
                         if (limit >= old)
                             continue;
 
-                        int slot = math.min((int)grid.Material[i], VoxelEncoding.MaterialSlots - 1);
-                        removed[slot] += VoxelEncoding.Occupancy(old) - VoxelEncoding.Occupancy(limit);
-                        grid.Density[i] = limit;
+                        Take(grid, i, s, old, limit, removed, ref removedMoments);
                         changedMin = math.min(changedMin, s);
                         changedMax = math.max(changedMax, s);
                         changed = true;
@@ -163,12 +218,68 @@ namespace DeadCargo.Destruction.Voxels
             return changed;
         }
 
-        /// <summary>Applies one request of either shape. See <see cref="CarveSphere"/> and <see cref="CarveSlab"/>.</summary>
+        /// <summary>
+        /// Cracks the rock right through along a ragged face, placed so <see cref="CarveRequest.Share"/> of it lies on
+        /// the side <see cref="CarveRequest.Normal"/> faces. The gap is <see cref="CarveRequest.HalfThickness"/> × 2 wide,
+        /// so the parts come apart.
+        /// </summary>
+        public static bool CarveFracture(in VoxelGrid grid, in CarveRequest request, float* removed, ref MassMoments removedMoments,
+            out int3 changedMin, out int3 changedMax)
+        {
+            if (!(math.lengthsq(request.Normal) > 0.5f) ||
+                !VoxelFracture.Locate(grid, request.Normal, request.Share, out float3 point, out float size))
+            {
+                changedMin = new int3(int.MaxValue);
+                changedMax = new int3(int.MinValue);
+                return false;
+            }
+
+            CarveRequest crack = request;
+            crack.Shape = CarveShape.Slab;
+            crack.Centre = point;
+            crack.Radius = math.length((float3)grid.Size);
+            crack.Relief = math.saturate(request.Roughness) * CrackReliefShare * size;
+            return CarveSlab(grid, crack, removed, ref removedMoments, out changedMin, out changedMax);
+        }
+
+        /// <summary>Applies one request of any shape.</summary>
         public static bool Carve(in VoxelGrid grid, in CarveRequest request, float* removed, out int3 changedMin, out int3 changedMax)
         {
-            return request.Shape == CarveShape.Slab
-                ? CarveSlab(grid, request.Centre, request.Normal, request.HalfThickness, request.Radius, removed, out changedMin, out changedMax)
-                : CarveSphere(grid, request.Centre, request.Radius, request.Roughness, request.NoiseOffset, removed, out changedMin, out changedMax);
+            MassMoments moments = default;
+            return Carve(grid, request, removed, ref moments, out changedMin, out changedMax);
+        }
+
+        /// <param name="removedMoments">The rock removed, as mass moments in grid coordinates, added to.</param>
+        public static bool Carve(in VoxelGrid grid, in CarveRequest request, float* removed, ref MassMoments removedMoments,
+            out int3 changedMin, out int3 changedMax)
+        {
+            switch (request.Shape)
+            {
+                case CarveShape.Slab:
+                    return CarveSlab(grid, request, removed, ref removedMoments, out changedMin, out changedMax);
+                case CarveShape.Fracture:
+                    return CarveFracture(grid, request, removed, ref removedMoments, out changedMin, out changedMax);
+                default:
+                    return CarveSphere(grid, request.Centre, request.Radius, request.Roughness, request.NoiseOffset, removed,
+                        ref removedMoments, out changedMin, out changedMax);
+            }
+        }
+
+        // Lowers one sample to the given limit and books what it lost, by material and as mass.
+        private static void Take(in VoxelGrid grid, int index, int3 sample, sbyte old, sbyte limit, float* removed,
+            ref MassMoments removedMoments)
+        {
+            float taken = VoxelEncoding.Occupancy(old) - VoxelEncoding.Occupancy(limit);
+            int slot = math.min((int)grid.Material[index], VoxelEncoding.MaterialSlots - 1);
+            removed[slot] += taken;
+            removedMoments.Add(taken, sample);
+            grid.Density[index] = limit;
+        }
+
+        // Two octaves of smooth noise, from -1 to 1.
+        private static float FaceNoise(float2 p)
+        {
+            return (noise.snoise(p) + 0.5f * noise.snoise(p * 2f + 17.3f)) * (1f / 1.5f);
         }
     }
 }
