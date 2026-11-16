@@ -1,6 +1,5 @@
 # Dead Cargo - Unity 6 project .gitattributes
 # Requires: Force Text serialization + Visible Meta Files (Project Settings > Editor).
-# Requires: Git LFS (bundled with Git for Windows; run `git lfs install` once per machine).
 #
 # Line endings: git stores text with LF inside the repository. Files on disk are
 # only written by git on checkout/restore, using the endings Unity and the IDE
@@ -8,6 +7,7 @@
 
 # --- Default: let git detect text and store it with LF in the repo -----------
 * text=auto
+
 # --- Code and plain text (working-tree line endings follow the OS) -----------
 *.cs        text diff=csharp
 *.shader    text
@@ -24,6 +24,7 @@
 *.yaml      text
 *.md        text
 *.txt       text
+
 # --- Unity YAML: always text, always LF (Unity writes LF on every platform) --
 # merge=unityyamlmerge uses Unity's Smart Merge (configured in .git/config);
 # without it, git falls back to its normal text merge.
@@ -52,55 +53,63 @@
 *.shadergraph       text eol=lf
 *.shadersubgraph    text eol=lf
 *.inputactions      text eol=lf
+
 # .asset is YAML *most* of the time, but Unity always writes some of them as
 # binary even in Force Text mode (LightingData, TerrainData, NavMesh data).
 # text=auto lets git detect those and store them byte-for-byte instead of
 # corrupting them with line-ending conversion.
 *.asset             text=auto eol=lf merge=unityyamlmerge
+
 # Known binary .asset files: never convert, diff or merge.
 LightingData.asset  binary
 *Terrain.asset      binary
 NavMesh*.asset      binary
 # Huge generated YAML: store as text but never try to merge it.
 OcclusionCullingData.asset -merge
-# --- Git LFS: large binaries -------------------------------------------------
+
+# --- Binary project assets -------------------------------------------------
 # Bracket patterns keep matches case-insensitive on every OS (e.g. FONT.TTF).
+
 # Images / textures
-*.[pP][nN][gG]       filter=lfs diff=lfs merge=lfs -text
-*.[jJ][pP][gG]       filter=lfs diff=lfs merge=lfs -text
-*.[jJ][pP][eE][gG]   filter=lfs diff=lfs merge=lfs -text
-*.[pP][sS][dD]       filter=lfs diff=lfs merge=lfs -text
-*.[tT][gG][aA]       filter=lfs diff=lfs merge=lfs -text
-*.[tT][iI][fF]       filter=lfs diff=lfs merge=lfs -text
-*.[tT][iI][fF][fF]   filter=lfs diff=lfs merge=lfs -text
-*.[eE][xX][rR]       filter=lfs diff=lfs merge=lfs -text
-*.[hH][dD][rR]       filter=lfs diff=lfs merge=lfs -text
-*.[bB][mM][pP]       filter=lfs diff=lfs merge=lfs -text
-*.[gG][iI][fF]       filter=lfs diff=lfs merge=lfs -text
+*.[pP][nN][gG]       binary
+*.[jJ][pP][gG]       binary
+*.[jJ][pP][eE][gG]   binary
+*.[pP][sS][dD]       binary
+*.[tT][gG][aA]       binary
+*.[tT][iI][fF]       binary
+*.[tT][iI][fF][fF]   binary
+*.[eE][xX][rR]       binary
+*.[hH][dD][rR]       binary
+*.[bB][mM][pP]       binary
+*.[gG][iI][fF]       binary
+
 # 3D models
-*.[fF][bB][xX]       filter=lfs diff=lfs merge=lfs -text
-*.[oO][bB][jJ]       filter=lfs diff=lfs merge=lfs -text
-*.[bB][lL][eE][nN][dD] filter=lfs diff=lfs merge=lfs -text
-*.[dD][aA][eE]       filter=lfs diff=lfs merge=lfs -text
-*.3[dD][sS]          filter=lfs diff=lfs merge=lfs -text
+*.[fF][bB][xX]       binary
+*.[oO][bB][jJ]       binary
+*.[bB][lL][eE][nN][dD] binary
+*.[dD][aA][eE]       binary
+*.3[dD][sS]          binary
+
 # Audio
-*.[wW][aA][vV]       filter=lfs diff=lfs merge=lfs -text
-*.[mM][pP]3          filter=lfs diff=lfs merge=lfs -text
-*.[oO][gG][gG]       filter=lfs diff=lfs merge=lfs -text
-*.[aA][iI][fF]       filter=lfs diff=lfs merge=lfs -text
-*.[aA][iI][fF][fF]   filter=lfs diff=lfs merge=lfs -text
-*.[fF][lL][aA][cC]   filter=lfs diff=lfs merge=lfs -text
+*.[wW][aA][vV]       binary
+*.[mM][pP]3          binary
+*.[oO][gG][gG]       binary
+*.[aA][iI][fF]       binary
+*.[aA][iI][fF][fF]   binary
+*.[fF][lL][aA][cC]   binary
+
 # Fonts
-*.[tT][tT][fF]       filter=lfs diff=lfs merge=lfs -text
-*.[oO][tT][fF]       filter=lfs diff=lfs merge=lfs -text
+*.[tT][tT][fF]       binary
+*.[oO][tT][fF]       binary
+
 # Video
-*.[mM][pP]4          filter=lfs diff=lfs merge=lfs -text
-*.[mM][oO][vV]       filter=lfs diff=lfs merge=lfs -text
-*.[wW][eE][bB][mM]   filter=lfs diff=lfs merge=lfs -text
+*.[mM][pP]4          binary
+*.[mM][oO][vV]       binary
+*.[wW][eE][bB][mM]   binary
+
 # Documents, archives, native plugins
-*.[pP][dD][fF]       filter=lfs diff=lfs merge=lfs -text
-*.[zZ][iI][pP]       filter=lfs diff=lfs merge=lfs -text
-*.7[zZ]              filter=lfs diff=lfs merge=lfs -text
-*.[dD][lL][lL]       filter=lfs diff=lfs merge=lfs -text
-*.[sS][oO]           filter=lfs diff=lfs merge=lfs -text
-* !text !filter !merge !diff
+*.[pP][dD][fF]       binary
+*.[zZ][iI][pP]       binary
+*.7[zZ]              binary
+*.[dD][lL][lL]       binary
+*.[sS][oO]           binary
