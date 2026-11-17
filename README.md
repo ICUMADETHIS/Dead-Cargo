@@ -4,6 +4,3 @@ A single-player space extraction game. Fly into a sector, salvage cargo, stay ah
 
 **Status:** in development.
 
-## Opening the project
-
-Open the folder in Unity 6000.3, then open the `Polaris` scene and press Play.
