@@ -3773,6 +3773,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2067685831}
   - component: {fileID: 2067685830}
+  - component: {fileID: 2067685832}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -3860,6 +3861,26 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1068206315}
   m_LocalEulerAnglesHint: {x: 50, y: -73.03, z: 0}
+--- !u!114 &2067685832
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2067685829}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 731b8cbf42d4c50459a840900900f06c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Visuals.SpaceLighting
+  newDirectionEachLoad: 1
+  clearOfStartView: 70
+  furthestFromStartView: 125
+  maxElevation: 50
+  shadowDarkening: 0.8
+  rimDimming: 0.8
+  skyDarkening: 0.6
+  ambientDarkening: 0.85
 --- !u!114 &2086760153
 MonoBehaviour:
   m_ObjectHideFlags: 0

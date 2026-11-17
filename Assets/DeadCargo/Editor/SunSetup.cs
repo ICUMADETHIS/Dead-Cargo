@@ -34,12 +34,15 @@ namespace DeadCargo.EditorTools
             return brightest;
         }
 
-        /// <summary>True when the scene's sun is its Sun Source, has no lens flare, and carries Space Lighting.</summary>
+        /// <summary>
+        /// True when the scene's sun has no lens flare and carries Space Lighting. Whether it is also the Sun Source is not
+        /// checked: without one, Unity, the sky and <c>SceneSun</c> all take the brightest directional light, so the same
+        /// light is the sun either way, and a Sun Source set from code has not always been kept when the scene is saved.
+        /// </summary>
         public static bool IsInstalled(Scene scene)
         {
             Light sun = Find(scene);
-            return sun != null && sun.flare == null && sun.GetComponent<SpaceLighting>() != null &&
-                   scene == SceneManager.GetActiveScene() && RenderSettings.sun == sun;
+            return sun != null && sun.flare == null && sun.GetComponent<SpaceLighting>() != null;
         }
 
         /// <summary>Sets up the open scene. Returns false when it has no directional light, after a dialog says so.</summary>
