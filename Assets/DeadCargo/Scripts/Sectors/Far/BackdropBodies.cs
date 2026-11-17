@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DeadCargo.Visuals;
+using SpaceGraphicsToolkit.Sky;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -112,6 +113,7 @@ namespace DeadCargo.Sectors.Far
         private readonly List<BackdropPlan> plans = new List<BackdropPlan>();
         private readonly List<Body> bodies = new List<Body>();
         private readonly List<Transform> instances = new List<Transform>();
+        private readonly List<double> airHeights = new List<double>();
 
         private FarSpace far;
         private SectorSpace space;
@@ -196,6 +198,12 @@ namespace DeadCargo.Sectors.Far
         {
             PlanetEntry entry = EntryOf(index);
             return entry != null && far != null ? (double)entry.Radius * far.Scale : 0.0;
+        }
+
+        /// <summary>Height of the body's atmosphere above its surface, in metres. 0 for a body with no air.</summary>
+        public double AtmosphereHeightOf(int index)
+        {
+            return IsBuilt(index) && index < airHeights.Count ? airHeights[index] : 0.0;
         }
 
         /// <summary>The body's copy in the far world, for screen markers. Null when it was not built.</summary>
@@ -313,6 +321,7 @@ namespace DeadCargo.Sectors.Far
                 PlanetEntry entry = catalog.Entries[plan.Entry];
                 GameObject prefab = PlanetCatalog.Load(entry);
                 instances.Add(null);
+                airHeights.Add(0.0);
                 if (prefab == null)
                     continue;
 
@@ -324,6 +333,7 @@ namespace DeadCargo.Sectors.Far
                 far.Adopt(instance);
 
                 instances[i] = instance.transform;
+                airHeights[i] = AtmosphereHeight(instance, entry.Radius);
                 bodies.Add(new Body(instance.transform, tilt, plan.SpinPhase, plan.SpinSpeed));
                 furthest = Mathf.Max(furthest, distance + entry.Radius * ReachMargin);
             }
@@ -346,7 +356,19 @@ namespace DeadCargo.Sectors.Far
 
             bodies.Clear();
             instances.Clear();
+            airHeights.Clear();
             plans.Clear();
+        }
+
+        // The top of the planet's sky above its surface, in true metres.
+        private double AtmosphereHeight(GameObject instance, float radius)
+        {
+            SgtSky sky = instance.GetComponentInChildren<SgtSky>(true);
+            if (sky == null)
+                return 0.0;
+
+            double top = (sky.InnerMeshRadius + sky.Height) * (double)sky.transform.lossyScale.x;
+            return Math.Max(0.0, (top - radius) * far.Scale);
         }
 
         // Each body's turn comes from a clock that runs from the build, so it never drifts, and stops while spin is held.

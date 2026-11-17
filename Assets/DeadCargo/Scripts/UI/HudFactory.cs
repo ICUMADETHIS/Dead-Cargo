@@ -22,6 +22,8 @@ namespace DeadCargo.UI
 
         private const string HeadingFontPath = "HUD/BarlowCondensed-SemiBold";
         private const string NumericFontPath = "HUD/IBMPlexMono-Regular";
+        private const string FigureFontPath = "HUD/SairaCondensed-ExtraBold";
+        private const string StickerFontPath = "HUD/ChakraPetch-Bold";
         private const string FallbackFontName = "LegacyRuntime.ttf";
         private const float KeySize = 18f;
 
@@ -41,6 +43,30 @@ namespace DeadCargo.UI
 
         private static Font headingFont;
         private static Font numericFont;
+        private static Font figureFont;
+        private static Font stickerFont;
+
+        /// <summary>The comic HUD's big figures: Saira Condensed ExtraBold.</summary>
+        internal static Font FigureFont
+        {
+            get
+            {
+                if (figureFont == null)
+                    figureFont = LoadFont(FigureFontPath);
+                return figureFont;
+            }
+        }
+
+        /// <summary>The comic HUD's labels on stickers: Chakra Petch Bold.</summary>
+        internal static Font StickerFont
+        {
+            get
+            {
+                if (stickerFont == null)
+                    stickerFont = LoadFont(StickerFontPath);
+                return stickerFont;
+            }
+        }
 
         private static Font HeadingFont
         {

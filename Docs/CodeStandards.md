@@ -59,7 +59,7 @@ Every scene follows one layout, so it stays readable as the game grows.
 | Root | Holds |
 |---|---|
 | `Systems` | Dead Cargo scene services and managers: Heat Tracker, Authority Response, Run Tracker, EventSystem, dev bootstrap |
-| `UI` | Canvases and screens: Extraction HUD, Run Result Screen, Mothership Hub |
+| `UI` | Canvases and screens: Extraction HUD, Status Strip, Run Result Screen, Mothership Hub |
 | `Cameras` | Cameras that are not part of the kit's camera rig |
 | `Environment` | Lights, probes, set dressing and visual effects (Space Dust) |
 | Kit objects | `SceneObjects`, `VehicleCamera`, `Player`, ships and characters stay **at the root** |
@@ -138,6 +138,10 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 - **Planet Forge sees one camera.** Planet Forge reads `Camera.main` for detail, atmospheres and oceans, so the far camera always stands where the main camera is. Never give the far camera a position of its own, and never tag it MainCamera.
 - **A planet is drawn once.** Its far copy draws it at every height, down to the ground. Anything physical about a planet (colliders, gravity, the sea surface) lives on its invisible ground copy (`PlanetGround`), on the Planet Ground layer, which no camera draws. Never draw a second copy of a planet in the near world: two pictures of one planet will not line up.
 - **Planets load by name.** Planet prefabs live in `Resources/Planets/` and the catalogue names them, so only the run's planets are loaded. Never reference planet prefabs directly from a scene or a loaded asset.
+- **The autopilot has the ship while it flies.** From the moment the cruise drive charges until cruise ends (`CruiseDrive.State` is not `Ready`), it steers the ship and holds the kit's engine controls. Nothing else may steer, push or throttle the player's ship then. Flight rules the self-test should check belong in `CruiseAutopilot` or `CruiseMath`, as pure functions in system space.
+- **Near a planet the air shapes the ship.** Out of cruise, `AtmosphereFlight` owns the player's ship's drag and adds thrust beside the kit's engines; nothing else sets the ship's drag. Anything that changes how fast the ship goes near a planet goes through it, and the planet's pull lives there too, not on the ground.
+- **Level is the planet's horizon.** Anything that levels the ship, the camera or the HUD uses `AtmosphereFlight.Up`: away from the planet's centre within its reach, the sector's up in open space. Never `Vector3.up`, which over a planet is tilted against the ground. The kit's auto roll is off on the player for this reason; `LevelFlightInput` does its job.
+- **The HUD is the comic Status Strip (phase 6.13).** New on-screen UI follows the chosen concept: leaning ink-outlined stickers with hard ink shadows (`HudSticker`), flat fills, big leaning figures, the centre kept clear, and things that matter only now shown only now. The kit's HUD parts it replaces are hidden with a CanvasGroup at zero alpha by Set Up Sector, never edited or deleted.
 - **Depth through Space Depth.** Distance fade and the dissolve at the draw distance come from the `Space Depth` object's shader globals (`_SpaceDepth`, `_SpaceDepthColor`, `_SpaceDepthDissolve`). A new shader for near objects calls the comic surface's `DepthFade` and `DepthDissolve` the same way, so everything fades and dissolves alike and nothing pops at the edge of sight.
 - **Sizes in pixels where crispness matters.** Stars and similar points are sized in pixels at 1080p and scale with screen height, never in world or angle units that blur or vanish.
 - **Bake what is costly and fixed.** Noise that does not change at runtime is baked in the editor, and the shader thresholds the filtered value. Colours and thresholds stay live material settings.

@@ -63,6 +63,9 @@ namespace DeadCargo.UI
         private const int CruiseAltitude = 1;
         private const int CruiseCharging = 2;
         private const int CruiseCruising = 3;
+        private const int CruiseAligning = 4;
+        private const int CruiseBlocked = 5;
+        private const int CruiseAltitudeReady = 6;
         private const double MetresPerKilometre = 1000.0;
         private const double AltitudeStep = 10.0;
 
@@ -135,7 +138,6 @@ namespace DeadCargo.UI
             heat = HeatTracker.Active;
             if (heat != null)
             {
-                view.SetHeatBoundaries(GetHeatBoundaries(heat));
                 heat.Changed += RefreshHeat;
                 RefreshHeat();
             }
@@ -173,6 +175,10 @@ namespace DeadCargo.UI
 
             UpdatePoint();
             UpdateHunters();
+
+            StatusStrip strip = StatusStrip.Active;
+            view.Tick(Time.unscaledDeltaTime, strip != null ? strip.CoveredHeight : 0f);
+            markers.SetCoveredCorner(view.StackSize);
             UpdateMarkers();
 
             if (hold != null && Time.timeScale > 0f)
@@ -189,19 +195,10 @@ namespace DeadCargo.UI
                 }
             }
 
-            if (!noticeVisible)
-                return;
-
-            float elapsed = Time.unscaledTime - noticeStarted;
-            if (elapsed >= NoticeDuration)
+            if (noticeVisible && Time.unscaledTime - noticeStarted >= NoticeDuration)
             {
                 noticeVisible = false;
                 Layout();
-            }
-            else
-            {
-                float fade = Mathf.Min(elapsed / .13f, (NoticeDuration - elapsed) / .25f);
-                view.SetNoticeOpacity(Mathf.Clamp01(fade));
             }
         }
 
@@ -252,6 +249,8 @@ namespace DeadCargo.UI
             if (cruise != null)
             {
                 cruise.ChargeCancelled += OnCruiseCancelled;
+                cruise.Refused += OnCruiseRefused;
+                cruise.Engaged += OnCruiseEngaged;
                 cruise.Dropped += OnCruiseDropped;
                 displayedCruiseState = -1;
                 UpdateCruise();
@@ -282,6 +281,8 @@ namespace DeadCargo.UI
             if (cruise != null)
             {
                 cruise.ChargeCancelled -= OnCruiseCancelled;
+                cruise.Refused -= OnCruiseRefused;
+                cruise.Engaged -= OnCruiseEngaged;
                 cruise.Dropped -= OnCruiseDropped;
             }
 
@@ -386,6 +387,8 @@ namespace DeadCargo.UI
         // Markers show only while the player flies a ship with a hold. Indexed loops, so no enumerators are allocated.
         private void UpdateMarkers()
         {
+            StatusStrip strip = StatusStrip.Active;
+            markers.SetCoveredBottom(strip != null ? strip.CoveredHeight : 0f);
             if (hold == null || !markers.Begin(Camera.main))
             {
                 markers.Hide();
@@ -444,7 +447,7 @@ namespace DeadCargo.UI
                 return;
 
             double3 position = space.WorldToSystem(ship);
-            int heading = cruise != null ? cruise.HeadingIndex : CruiseDrive.NoHeading;
+            int heading = MarkedDestination();
 
             BackdropBodies bodies = BackdropBodies.Active;
             if (bodies != null)
@@ -499,8 +502,8 @@ namespace DeadCargo.UI
             switch (cruise.State)
             {
                 case CruiseState.Charging:
-                    state = CruiseCharging;
-                    figure = Mathf.CeilToInt(cruise.ChargeRemaining);
+                    state = cruise.IsAligning ? CruiseAligning : CruiseCharging;
+                    figure = state == CruiseAligning ? cruise.Destination : Mathf.CeilToInt(cruise.ChargeRemaining);
                     fraction = cruise.ChargeProgress;
                     break;
                 case CruiseState.Cruising:
@@ -509,13 +512,23 @@ namespace DeadCargo.UI
                     fraction = SpeedFraction(cruise.Speed, cruise.Settings);
                     break;
                 default:
-                    state = cruise.IsBelowFloor ? CruiseAltitude : CruiseReady;
-                    figure = state == CruiseAltitude ? AltitudeFigure() : cruise.HeadingIndex;
-                    fraction = state == CruiseAltitude ? Mathf.Clamp01((float)(figure / cruise.Settings.DropHeight)) : 0f;
+                    if (cruise.IsLow)
+                    {
+                        state = cruise.CanEngage ? CruiseAltitudeReady : CruiseAltitude;
+                        figure = AltitudeFigure();
+                        fraction = cruise.NearestArrivalHeight > 0.0 ? Mathf.Clamp01((float)(figure / cruise.NearestArrivalHeight)) : 0f;
+                    }
+                    else
+                    {
+                        state = cruise.Block == CruiseBlock.Field ? CruiseBlocked : CruiseReady;
+                        figure = cruise.HeadingIndex;
+                        fraction = 0f;
+                    }
+
                     break;
             }
 
-            Color color = HudFactory.CruiseColor;
+            Color color = state == CruiseBlocked ? HudFactory.WarningColor : HudFactory.CruiseColor;
             if (state == displayedCruiseState && figure == displayedCruiseFigure)
             {
                 view.SetCruiseProgress(fraction, color);
@@ -524,21 +537,42 @@ namespace DeadCargo.UI
 
             displayedCruiseState = state;
             displayedCruiseFigure = figure;
+
+            // Ready with nothing ahead, the tag goes; anything else about the drive is worth a glance.
+            bool wanted = state != CruiseReady || figure != CruiseDrive.NoHeading;
             switch (state)
             {
                 case CruiseCharging:
-                    view.SetCruise("CHARGING", color, $"{figure} s", "CANCEL", fraction);
+                    view.SetCruise(wanted, "CHARGING", color, $"{figure} S", "CANCEL", fraction);
+                    break;
+                case CruiseAligning:
+                    view.SetCruise(wanted, "ALIGNING", color, DestinationLabel(figure), "CANCEL", fraction);
                     break;
                 case CruiseCruising:
-                    view.SetCruise("CRUISE", color, $"{figure:N0} km/s", "DROP", fraction);
+                    view.SetCruise(wanted, "AUTOPILOT", color, DestinationLabel(cruise.Destination), "DROP", fraction);
                     break;
                 case CruiseAltitude:
-                    view.SetCruise("ALTITUDE", color, $"{figure:N0} m", "CLIMB", fraction);
+                    view.SetCruise(wanted, "ALTITUDE", color, $"{figure:N0} M", "", fraction);
+                    break;
+                case CruiseAltitudeReady:
+                    view.SetCruise(wanted, "ALTITUDE", color, $"{figure:N0} M", "ENGAGE", fraction);
+                    break;
+                case CruiseBlocked:
+                    view.SetCruise(wanted, "FIELD ON ROUTE", color, "", "", fraction);
                     break;
                 default:
-                    view.SetCruise("READY", color, HeadingLabel(), "ENGAGE", fraction);
+                    view.SetCruise(wanted, "READY", color, DestinationLabel(figure), "ENGAGE", fraction);
                     break;
             }
+        }
+
+        // The destination to highlight: the one the autopilot is flying to, or while ready the one ahead.
+        private int MarkedDestination()
+        {
+            if (cruise == null)
+                return CruiseDrive.NoHeading;
+
+            return cruise.State == CruiseState.Ready ? cruise.HeadingIndex : cruise.Destination;
         }
 
         // Height above the ground below, in steps of 10 m so the text is not rebuilt every frame: by the planet's ground
@@ -553,14 +587,13 @@ namespace DeadCargo.UI
             return (int)(Math.Round(Math.Max(0.0, metres) / AltitudeStep) * AltitudeStep);
         }
 
-        private string HeadingLabel()
+        private string DestinationLabel(int destination)
         {
-            int heading = cruise.HeadingIndex;
-            if (heading == CruiseDrive.HomeHeading)
+            if (destination == CruiseDrive.HomeHeading)
                 return homeLabel ?? "HOME";
 
             BackdropBodies bodies = BackdropBodies.Active;
-            return heading >= 0 && bodies != null ? bodies.NameOf(heading).ToUpperInvariant() : "";
+            return destination >= 0 && bodies != null ? bodies.NameOf(destination).ToUpperInvariant() : "";
         }
 
         // Speed on a log scale between the drive's slowest and fastest, so the meter moves through the whole trip.
@@ -575,17 +608,35 @@ namespace DeadCargo.UI
             ShowNotice("CRUISE CANCELLED", HudFactory.WarningColor, false);
         }
 
+        private void OnCruiseRefused(CruiseBlock block)
+        {
+            switch (block)
+            {
+                case CruiseBlock.Field:
+                    ShowNotice("FIELD ON ROUTE", HudFactory.WarningColor, false);
+                    break;
+                case CruiseBlock.AlreadyThere:
+                    ShowNotice($"ALREADY AT  {DestinationLabel(cruise.HeadingIndex)}", HudFactory.Muted, false);
+                    break;
+                default:
+                    ShowNotice("NO DESTINATION AHEAD", HudFactory.Muted, false);
+                    break;
+            }
+        }
+
+        private void OnCruiseEngaged()
+        {
+            ShowNotice($"AUTOPILOT  {DestinationLabel(cruise.Destination)}", HudFactory.CruiseColor, false);
+        }
+
+        // The destination is still set while cruise ends.
         private void OnCruiseDropped(CruiseExit exit)
         {
             switch (exit)
             {
                 case CruiseExit.Planet:
-                    BackdropBodies bodies = BackdropBodies.Active;
-                    string planet = bodies != null && cruise.NearestPlanet >= 0 ? bodies.NameOf(cruise.NearestPlanet).ToUpperInvariant() : "";
-                    ShowNotice($"ARRIVED  {planet}", HudFactory.CruiseColor, false);
-                    break;
                 case CruiseExit.Home:
-                    ShowNotice($"ARRIVED  {homeLabel ?? "HOME"}", HudFactory.CruiseColor, false);
+                    ShowNotice($"ARRIVED  {DestinationLabel(cruise.Destination)}", HudFactory.CruiseColor, false);
                     break;
                 case CruiseExit.Collision:
                     ShowNotice("CRUISE INTERRUPTED", HudFactory.WarningColor, true);
@@ -663,6 +714,7 @@ namespace DeadCargo.UI
                     break;
             }
 
+            // Far and dormant, the point's marker says enough; in range or in use, its tag shows what to do and how long.
             bool dormant = state == PointDormant || state == PointInRange;
             int value = dormant ? distance : Mathf.CeilToInt(point.TimeRemaining);
             if (state != displayedPointState || value != displayedPointValue || distance != displayedPointDistance)
@@ -670,23 +722,25 @@ namespace DeadCargo.UI
                 displayedPointState = state;
                 displayedPointValue = value;
                 displayedPointDistance = distance;
-                view.SetPoint(PointStatus(state, distance), color, dormant ? $"{distance} m" : $"{value} s",
-                    dormant, state == PointInRange && point.CanStartUplink);
+                bool canUplink = state == PointInRange && point.CanStartUplink;
+                view.SetPoint(state != PointDormant, PointStatus(state, canUplink), dormant ? $"{distance:N0} M" : $"{value} S", color,
+                    canUplink, dormant ? -1f : point.Progress);
             }
 
-            view.SetPointProgress(point.Progress, color);
+            if (!dormant)
+                view.SetPointProgress(point.Progress);
         }
 
-        private static string PointStatus(int state, int distance)
+        private static string PointStatus(int state, bool canUplink)
         {
             switch (state)
             {
                 case PointUplink:
-                    return $"UPLINK  {distance} m";
+                    return "UPLINKING";
                 case PointOpen:
-                    return $"OPEN  {distance} m";
+                    return "OPEN  ·  FLY IN";
                 case PointInRange:
-                    return "IN RANGE";
+                    return canUplink ? "UPLINK READY" : "IN RANGE";
                 default:
                     return "DORMANT";
             }
@@ -741,12 +795,13 @@ namespace DeadCargo.UI
             Layout();
         }
 
+        // Pickups pulse their own tag rather than raising a notice: dark matter the jump drive's, cargo the hold's.
         private void OnCargoAdded(CargoItemDefinition item, int count)
         {
             if (item.Slot == CargoSlot.DarkMatter)
-                ShowNotice($"+{count}  {item.DisplayName}   ·   {hold.DarkMatterUnits} units aboard", HudFactory.DarkMatterColor, false);
+                view.PulseJump($"+{count}  {item.DisplayName.ToUpperInvariant()}");
             else
-                ShowNotice($"+{count}  {item.DisplayName}   ·   +{item.UnitMass * count:0.#} t", HudFactory.CargoColor, false);
+                view.PulseCargo($"+{count}  {item.DisplayName.ToUpperInvariant()}  ·  +{item.UnitMass * count:0.#} T");
         }
 
         private void OnFuelShortage()
@@ -761,7 +816,7 @@ namespace DeadCargo.UI
 
         private void OnJettisoned(CargoStack stack)
         {
-            ShowNotice($"JETTISONED  ·  {stack.Mass:0.#} t released", HudFactory.CargoColor, false);
+            view.PulseCargo($"JETTISONED  ·  {stack.Mass:0.#} T RELEASED");
         }
 
         private void OnSpoolStarted()
@@ -796,29 +851,12 @@ namespace DeadCargo.UI
             noticeUrgent = urgent;
             noticeStarted = Time.unscaledTime;
             view.SetNotice(message, color);
-            view.SetNoticeOpacity(0f);
             Layout();
         }
 
         private void Layout()
         {
             view.Layout(heat != null, hold != null, jumpDrive != null, cruise != null, hasPointPlate, manifestOpen, noticeVisible);
-            markers.SetCoveredCorner(view.StackSize);
-        }
-
-        private static float[] GetHeatBoundaries(HeatTracker tracker)
-        {
-            var boundaries = new float[tracker.Tiers.Count + 2];
-            int count = 1;
-            for (int i = 0; i < tracker.Tiers.Count; i++)
-            {
-                float threshold = tracker.Tiers[i].Threshold / tracker.MaxHeat;
-                if (threshold > boundaries[count - 1] && threshold < 1f)
-                    boundaries[count++] = threshold;
-            }
-            boundaries[count++] = 1f;
-            Array.Resize(ref boundaries, count);
-            return boundaries;
         }
     }
 }

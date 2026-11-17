@@ -89,6 +89,11 @@ namespace DeadCargo.Sectors
             if (definition == null)
                 return;
 
+            // While the player is away the sector sleeps, and the world's origin, where its outlines would be drawn, holds the ship.
+            Flight.SectorPresence presence = Flight.SectorPresence.Active;
+            if (presence != null && presence.IsAsleep)
+                return;
+
             if (showBounds)
                 DrawDebugTools.DrawBox(space.SectorToWorld(Vector3.zero), Quaternion.identity, space.Grid.Size, BoundsColor);
 

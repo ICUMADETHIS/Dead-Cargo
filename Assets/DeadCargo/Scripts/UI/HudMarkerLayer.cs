@@ -42,6 +42,7 @@ namespace DeadCargo.UI
         private Camera viewCamera;
         private Vector2 canvasSize;
         private Vector2 coveredCorner;
+        private float coveredBottom;
         private int used;
 
         internal HudMarkerLayer(RectTransform parent, int capacity)
@@ -59,6 +60,15 @@ namespace DeadCargo.UI
         internal void SetCoveredCorner(Vector2 size)
         {
             coveredCorner = size;
+        }
+
+        /// <summary>
+        /// Sets the height of the band along the screen's bottom covered by the status strip, in reference pixels. Edge
+        /// arrows stay above it. Zero when nothing is covered.
+        /// </summary>
+        internal void SetCoveredBottom(float height)
+        {
+            coveredBottom = Mathf.Max(0f, height);
         }
 
         /// <summary>Starts a frame of markers. Returns false, and shows nothing, when there is no camera.</summary>
@@ -135,19 +145,22 @@ namespace DeadCargo.UI
             End();
         }
 
-        // How far along its bearing from the screen centre an edge arrow sits. It stops at the screen border or,
-        // towards the lower right, short of the plates. The clear area is two overlapping rectangles: everything
-        // left of the plates, and everything above them. The arrow goes to the farther of the two exits.
+        // How far along its bearing from the screen centre an edge arrow sits. It stops at the screen border, above the
+        // status strip or, towards the lower right, short of the plates. The clear area is two overlapping rectangles:
+        // everything left of the plates, and everything above them. The arrow goes to the farther of the two exits.
         private float EdgeScale(Vector2 direction)
         {
             Vector2 half = canvasSize * 0.5f - new Vector2(EdgeInset, EdgeInset);
+            float floor = coveredBottom > 0f
+                ? Mathf.Min(-MinClearExtent, Mathf.Max(-half.y, coveredBottom + PlateClearance - canvasSize.y * 0.5f))
+                : -half.y;
             if (coveredCorner.x <= 0f || coveredCorner.y <= 0f)
-                return ExitScale(direction, -half.x, half.x, -half.y, half.y);
+                return ExitScale(direction, -half.x, half.x, floor, half.y);
 
             float right = Mathf.Clamp(canvasSize.x * 0.5f - coveredCorner.x - PlateClearance, MinClearExtent, half.x);
-            float bottom = Mathf.Clamp(coveredCorner.y + PlateClearance - canvasSize.y * 0.5f, -half.y, -MinClearExtent);
+            float bottom = Mathf.Clamp(coveredCorner.y + PlateClearance - canvasSize.y * 0.5f, floor, -MinClearExtent);
             return Mathf.Max(
-                ExitScale(direction, -half.x, right, -half.y, half.y),
+                ExitScale(direction, -half.x, right, floor, half.y),
                 ExitScale(direction, -half.x, half.x, bottom, half.y));
         }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DeadCargo.Controls;
 using DeadCargo.Flight;
 using DeadCargo.Sectors;
 using DeadCargo.Sectors.Far;
@@ -11,10 +12,11 @@ using VSX.UniversalVehicleCombat;
 namespace DeadCargo.EditorTools
 {
     /// <summary>
-    /// Adds planet flight to the open sector: the cruise drive on the player's ship, its controls under the player, the
-    /// sector's presence on the Sector Space object, so the sector sleeps while the player is away, and, where the scene
-    /// has planets, their ground on the Far Space object, on a layer of its own. Safe to run more than once; scene changes
-    /// can be undone, the new layer is kept.
+    /// Adds planet flight to the open sector: the cruise drive, atmosphere flight and entry glow on the player's ship; the
+    /// drive's controls and level flight under the player, with the kit's auto roll switched off; the sector's presence on
+    /// the Sector Space object, so the sector sleeps while the player is away; and, where the scene has planets, their
+    /// ground on the Far Space object, on a layer of its own. Safe to run more than once; scene changes can be undone, the
+    /// new layer is kept.
     /// </summary>
     internal static class PlanetFlightSetup
     {
@@ -23,17 +25,27 @@ namespace DeadCargo.EditorTools
         private const string DialogTitle = "Phase 6.12 - Planet Flight";
         private const string UndoName = "Set Up Planet Flight";
         private const string ControlsName = "CruiseControls";
+        private const string LevelControlsName = "LevelFlightControls";
+        private const string KitAutoRollProperty = "autoRollEnabled";
+        private const string KitAutoRollStrengthProperty = "autoRollStrength";
+        private const string KitMaxAutoRollProperty = "maxAutoRoll";
+        private const string LevelStrengthProperty = "strength";
+        private const string LevelMaxRollProperty = "maxRoll";
         private const string LayerProperty = "layer";
+        private const string GlowShaderProperty = "shader";
 
         /// <summary>
-        /// True when the ship has a cruise drive, the player its controls and the sector its presence, and any planets
-        /// their ground on its own layer.
+        /// True when the ship has a cruise drive, atmosphere flight and an entry glow with its shader, the player the drive's
+        /// controls and level flight, and the sector its presence, and any planets their ground on its own layer.
         /// </summary>
         public static bool IsInstalled(Scene scene)
         {
             VehicleEngines3D ship = SceneSetupUtility.FindShip(scene);
-            bool flight = ship != null && ship.GetComponent<CruiseDrive>() != null &&
+            EntryGlow glow = ship != null ? ship.GetComponent<EntryGlow>() : null;
+            bool flight = ship != null && ship.GetComponent<CruiseDrive>() != null && ship.GetComponent<AtmosphereFlight>() != null &&
+                          glow != null && glow.HasShader &&
                           SceneSetupUtility.FindInScene<CruiseDriveInput>(scene).Count > 0 &&
+                          SceneSetupUtility.FindInScene<LevelFlightInput>(scene).Count > 0 &&
                           SceneSetupUtility.FindInScene<SectorPresence>(scene).Count > 0;
 
             List<FarSpace> far = SceneSetupUtility.FindInScene<FarSpace>(scene);
@@ -72,6 +84,10 @@ namespace DeadCargo.EditorTools
             if (spaces.Count == 0)
                 return Fail("The open scene has no Sector Space. Run Set Up Sector first.");
 
+            Shader glowShader = Shader.Find(EntryGlow.ShaderName);
+            if (glowShader == null)
+                return Fail($"The {EntryGlow.ShaderName} shader is missing. Click into Unity so it imports Shaders/EntryGlow.shader, then run this again.");
+
             List<FarSpace> far = SceneSetupUtility.FindInScene<FarSpace>(scene);
             int groundLayer = -1;
             if (far.Count > 0 && far[0].GetComponent<BackdropBodies>() != null)
@@ -88,6 +104,17 @@ namespace DeadCargo.EditorTools
             if (ship.GetComponent<CruiseDrive>() == null)
                 Undo.AddComponent<CruiseDrive>(ship.gameObject);
 
+            if (ship.GetComponent<AtmosphereFlight>() == null)
+                Undo.AddComponent<AtmosphereFlight>(ship.gameObject);
+
+            EntryGlow entryGlow = ship.GetComponent<EntryGlow>();
+            if (entryGlow == null)
+                entryGlow = Undo.AddComponent<EntryGlow>(ship.gameObject);
+
+            var serializedGlow = new SerializedObject(entryGlow);
+            serializedGlow.FindProperty(GlowShaderProperty).objectReferenceValue = glowShader;
+            serializedGlow.ApplyModifiedProperties();
+
             if (spaces[0].GetComponent<SectorPresence>() == null)
                 Undo.AddComponent<SectorPresence>(spaces[0].gameObject);
 
@@ -99,6 +126,8 @@ namespace DeadCargo.EditorTools
                 Undo.SetTransformParent(controls.transform, player.transform, "Parent Cruise Controls");
                 controls.transform.localPosition = Vector3.zero;
             }
+
+            AddLevelFlight(scene, player);
 
             if (groundLayer > 0)
             {
@@ -115,6 +144,41 @@ namespace DeadCargo.EditorTools
             EditorSceneManager.MarkSceneDirty(scene);
             Debug.Log($"Planet flight set up in '{scene.name}': cruise drive on '{ship.name}', B to engage. Save the scene.", ship);
             return true;
+        }
+
+        // Wings level to the planet below, not the world's up: the kit's auto roll is switched off and its feel carried over.
+        private static void AddLevelFlight(Scene scene, GameAgent player)
+        {
+            List<LevelFlightInput> found = SceneSetupUtility.FindInScene<LevelFlightInput>(scene);
+            LevelFlightInput level;
+            if (found.Count > 0)
+            {
+                level = found[0];
+            }
+            else
+            {
+                var controls = new GameObject(LevelControlsName, typeof(LevelFlightInput));
+                Undo.RegisterCreatedObjectUndo(controls, "Create Level Flight Controls");
+                Undo.SetTransformParent(controls.transform, player.transform, "Parent Level Flight Controls");
+                controls.transform.localPosition = Vector3.zero;
+                level = controls.GetComponent<LevelFlightInput>();
+            }
+
+            foreach (PlayerSpaceVehicleFlightControls kit in SceneSetupUtility.FindInScene<PlayerSpaceVehicleFlightControls>(scene))
+            {
+                var serializedKit = new SerializedObject(kit);
+                SerializedProperty autoRoll = serializedKit.FindProperty(KitAutoRollProperty);
+                if (autoRoll == null || !autoRoll.boolValue)
+                    continue;
+
+                var serializedLevel = new SerializedObject(level);
+                serializedLevel.FindProperty(LevelStrengthProperty).floatValue = serializedKit.FindProperty(KitAutoRollStrengthProperty).floatValue;
+                serializedLevel.FindProperty(LevelMaxRollProperty).floatValue = serializedKit.FindProperty(KitMaxAutoRollProperty).floatValue;
+                serializedLevel.ApplyModifiedProperties();
+
+                autoRoll.boolValue = false;
+                serializedKit.ApplyModifiedProperties();
+            }
         }
 
         private static bool Fail(string message)

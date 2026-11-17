@@ -21,7 +21,8 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test. Steps 2a (the sun) and 2b (a new sun each run, darker space) built, awaiting test |
 | 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
 | 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
-| 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen, in three steps: 1 a cruise drive to orbit, 2 the descent to the ground, 3 the planets' painted look. First person on C | Step 1 and first person on C done, tested 2026-11-17. Step 2 (descent) built and compile-checked, awaiting test |
+| 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen: 1 a cruise drive, 2 the descent to the ground, 2b an autopilot cruise, 2c a long atmospheric descent, 2d a real star system, 3 the sun's and planets' look. First person on C | Steps 1, 2 and 2b and first person on C tested 2026-11-17. Step 2c (atmospheric descent) built; in its test the ship kept rolling itself, fixed with level flight, tested 2026-11-17 ("a lot better") |
+| 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Step 1 (status strip) built and fixed after a first look; step 2 (pop-up tags) built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -1484,8 +1485,11 @@ Fly from Polaris to Ixara and down to its surface, with no loading screen: point
 | Step | Delivers | Status |
 |---|---|---|
 | 1. Cruise drive | Engage with **B**: a short charge, then cruise where the ship points, fast in open space and slower near a surface, so leaving Polaris takes about 12 seconds and reaching Ixara's orbit under a minute. Drops out on its own 20 km above a planet, at Polaris on the way home, or on **B**. Polaris sleeps while you are away and wakes as you return. Cruise plate and planet markers on the HUD; God Menu **Flight** tab | Done, tested 2026-11-17 |
-| 2. Descent | Cruise drops you 3 km above the ground, under the clouds; fly down and land. The far copy keeps drawing Ixara at every height, and an invisible copy at true scale gives the ground you touch, matched triangle for triangle. Gravity pulls you down; the sea is solid for now | Built and compile-checked, awaiting test |
-| 3. Planet look | Ixara and Halonix painted like the sun (6.9 step 5d, moved here): soft tone bands, a cool charcoal night side, colours pulled into Dead Cargo's warm and teal palette, holding from orbit to the ground | Planned |
+| 2. Descent | Cruise drops you 3 km above the ground, under the clouds; fly down and land. The far copy keeps drawing Ixara at every height, and an invisible copy at true scale gives the ground you touch, matched triangle for triangle. Gravity pulls you down; the sea is solid for now | Tested 2026-11-17: cruise ended too close to the ground, so step 2b moves it up to the top of the atmosphere |
+| 2b. Autopilot cruise | **B** locks the destination ahead and the autopilot flies there with the controls locked: it turns the ship while charging, goes round any planet in the way, and ends above the top of the destination's atmosphere, nose down. It will not engage with an asteroid field along the route out of Polaris. Quicker: about 41 seconds from **B** to Ixara | Done, tested 2026-11-17 ("all ok") |
+| 2c. Atmospheric descent | Thin air reaches twice as high as the visible sky, and cruise hands over above it, diving at full throttle. Fast in thin air, slowing as it thickens: about 52 seconds from where cruise ends to the ground. The hull glows with heat on the way down; gravity acts through all of it | Built and compile-checked, awaiting test |
+| 2d. Real star system | The sun becomes a real place, with the planets on far-out orbits round it and Polaris on its own. The sun still feels big and looks like a sun, not a flat disc, and planets look like planets from afar. Cruise from Polaris to Ixara takes about 45 seconds | Planned |
+| 3. Sun and planet look | Ixara and Halonix painted like the sun (6.9 step 5d, moved here): soft tone bands, a cool charcoal night side, colours pulled into Dead Cargo's warm and teal palette, sharper textures, holding from orbit to the ground; the sun as a sun up close | Planned |
 
 ### Design (step 1: cruise drive)
 The user asked to fly to a planet and down to its surface, seamlessly, and chose to build the flight before the planets' look, so the look is built once and holds at every distance. Ixara is the run's primary planet and Halonix the second, the only two in the catalogue for now.
@@ -1607,4 +1611,240 @@ The user tested cruise and first person ("works fine") and asked for the descent
 
 ### Tuning (step 2)
 - On `Far Space`'s **Planet Ground**: **Ground Range**, **Ground Detail**, **Surface Gravity**, **Ground Near Clip**.
-- On the ship's **Cruise Drive**: **Drop Height**.
+- On the ship's **Cruise Drive**: **Arrival Margin** and **Airless Arrival**, which replaced **Drop Height** in step 2b.
+
+### Design (step 2b: autopilot cruise)
+The user tested the descent and asked for changes on 2026-11-17: cruise ended far too close to the planet; the drive should be an autopilot that takes the controls; it should not engage with an asteroid field along the route; it should be quicker. They also asked for a longer flight down through the atmosphere (step 2c), planets far from the sun in a real star system with a sun and planets that still look big (step 2d), and better planet textures (step 3). They chose a trip of about 45 seconds to Ixara once the system is real, and about a minute from the top of the atmosphere to the ground.
+- **Pick by pointing.** As before, the HUD names the destination within 30° of the nose: a planet, or Polaris while you are away. **B** locks it in. With nothing ahead, or already where cruise to it would end, **B** is refused with a notice.
+- **The autopilot has the controls.** From **B** until cruise ends, steering, throttle and boost do nothing (the kit's `Engines.ControlsDisabled`, taken back every frame because the kit's free look hands it back). Free look and the camera views still work. The plate reads CHARGING while the drive charges and the autopilot turns the ship to its course, ALIGNING if the turn is not done when the charge is, then AUTOPILOT with the speed. **B** in cruise drops out and gives the controls back.
+- **The course.** Straight at the destination's centre. If a planet lies across that line, inside its arrival height, the autopilot goes round it: climbing at 45° while inside that height, then level across its face until the destination clears the planet's limb. So **B** from the ground on Ixara's far side, with Polaris straight through the planet, climbs out and swings over the top. The turn rate is 90° a second, easing at the end.
+- **Speed.** Within Polaris's reach, 4 km/s, as the ship really flies past rocks there. Beyond it, every surface limits the speed: towards a surface, a fifth of the distance to it each second (**Approach Rate** 0.2), so the drive brakes smoothly; across or away from one, the whole distance each second (**Cross Rate** 1), so leaving a planet or Polaris is quick. Arriving, the destination's limit counts to where cruise ends, so the last stretch runs at the slowest speed, 2 km/s. Trips: Polaris to the top of Ixara's atmosphere 41 s from **B**, 11 s of it to leave Polaris's reach; back 32 s; lifting off from Ixara's far side and home 62 s.
+- **Cruise ends above the atmosphere.** At a planet, 5 km above the top of its sky (**Arrival Margin**): 35 km up on Ixara, nose down at the planet, at 300 m/s. An airless planet is reached 20 km up (**Airless Arrival**). Inside that height (in the atmosphere) the plate reads ALTITUDE, and **B** engages for any other destination ahead; the autopilot climbs out.
+- **Fields block the route.** While you are in Polaris, the straight route towards the destination ahead is checked against the field density every 50 m, out to Polaris's edge. Denser than 0.05 (**Field Limit**) anywhere along it, and the plate reads BLOCKED  FIELD and **B** is refused: FIELD ON ROUTE. Fly out of the belt, or line up through a gap, and it clears. It is checked again when the charge ends, in case the ship drifted.
+- **HUD and God Menu.** The locked destination's marker stays teal through the trip; AUTOPILOT  IXARA on engaging, ARRIVED  IXARA on arrival. The **Flight** tab shows the state with how far the nose is off course, the destination, the course (straight, or round a planet), why the drive will not engage, **Orbit** jumps now land 10 km above where cruise ends (45 km on Ixara), and a new **Far Side** jump puts you 6 km up on the side facing away from Polaris, to try the course round the planet.
+- **Not yet.** The flight down from 35 km is at the kit's normal speed, so it is slow; step 2c makes it fast in thin air. Distances and the sun are unchanged until step 2d, which retunes the speed for a 45-second trip.
+
+### Implementation (step 2b)
+| File | Role |
+|---|---|
+| `Scripts/Flight/CruiseAutopilot.cs` | The course (straight, or round a planet), the target speed, the distance to arrival: pure, flown by the drive and the self-test |
+| `Scripts/Flight/CruiseBody.cs` | A planet and the sector as the autopilot sees them |
+| `Scripts/Flight/CruiseMath.cs`, `CruiseSettings.cs` | Speed limit per surface, turning, closest approach |
+| `Scripts/Flight/CruiseRoute.cs` | Fields along a route through the sector, from the field density |
+| `Scripts/Flight/CruiseBlock.cs` | Why the drive will not engage |
+| `Scripts/Flight/CruiseDrive.cs` | Locks the destination, takes the controls, steers at the physics rate, arrives per destination |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Each planet's atmosphere height, from its sky |
+| `Scripts/UI/ExtractionHud.cs` | CHARGING, ALIGNING, AUTOPILOT, BLOCKED and ALTITUDE plates; autopilot and refusal notices; the locked destination's marker |
+| `Editor/GodMenu/Tabs/FlightTab.cs` | Autopilot state, destination, course and block; orbit jumps above the arrival height; Far Side jumps |
+| `Scripts/Sectors/SectorDebugView.cs` | The sector's debug outlines are hidden while it sleeps: they were drawn round the world's origin, where the ship waits in cruise |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Speed, turning and field checks; the trips flown by the autopilot's own rule |
+
+### Verified outside Unity (step 2b)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The cruise checks pass, run outside Unity against the compiled code, flying the autopilot's own rule at 60 frames a second with the 3-second charge:
+  - braking towards a surface, free across or away from it; a quarter turn settles in 1.8 s
+  - a field 6 km ahead blocks at 6.1 km; one beside the route, and a clearing, do not; starting in one blocks at once
+  - Polaris's belt to Ixara, starting facing away: out of Polaris's reach in 11.0 s, arrived 35.0 km above Ixara after 40.9 s, fastest 195 km/s
+  - back to Polaris in 31.6 s
+  - from 200 m above Ixara's far side, home through the planet: climbed and went round it, never lower than where it started, home after 62.3 s
+  - a planet 11,464 km out after 68.4 s, at the 400 km/s limit at most
+- Not run in Unity: the locked controls, the turn, the course round a planet, the field check against Polaris's real belt, the plates and notices, and the Flight tab.
+
+### Test steps (step 2b)
+1. Click into Unity and let it compile. No setup step is needed: the Cruise Drive's new settings take their defaults. Save Polaris if Unity marks it changed.
+2. Press Play. Inside the belt, point at Ixara: the plate reads BLOCKED  FIELD, and **B** shows FIELD ON ROUTE. The Flight tab gives how far ahead the field is.
+3. Fly out of the belt, or line up through a gap, until the plate reads READY  IXARA. Press **B**: CHARGING, and the ship turns itself onto its course. Try to steer or throttle: nothing happens. Free look still works.
+4. AUTOPILOT: about 4 km/s through Polaris, then much faster once clear. The Ixara marker stays teal. About 40 seconds after **B**: ARRIVED  IXARA, 35 km up, nose down at the planet, and the controls are yours again.
+5. The plate reads ALTITUDE. Fly down a little (the descent itself is slow until step 2c).
+6. Point at the **POLARIS** marker and press **B**: the autopilot climbs out and flies home; ARRIVED  POLARIS at its reach.
+7. Far side: in the Flight tab, **Far Side Ixara** puts you 6 km up on the side facing away from Polaris. Pitch down until the **POLARIS** marker, below the horizon, is within 30° of the nose, so the route goes through the planet. Press **B**: the ship climbs out at a slant, the **Course** field reads Round Ixara, it swings over the top, then goes straight home.
+8. Press **B** in the middle of a cruise: CRUISE DISENGAGED, and the controls come back at once.
+9. With nothing within 30° of the nose, **B** shows NO DESTINATION AHEAD; pointing at Ixara while below 35 km over it shows ALREADY AT IXARA.
+
+### Tuning (step 2b)
+- On the ship's **Cruise Drive**: **Charge Time**, **Align Tolerance**, **Field Limit**; **Turn Rate**, **Turn Ease**; **Approach Rate** (lower is slower arrivals and longer trips), **Cross Rate** (higher leaves faster), **Slowest Speed**, **Max Speed**, **Sector Speed**, **Response**; **Arrival Margin**, **Airless Arrival**, **Home Margin**, **Exit Speed**.
+
+### Design (step 2c: atmospheric descent)
+The user tested the autopilot ("all ok") and asked for the next steps. They had chosen about a minute from the top of the atmosphere to the ground, flown by hand: fast in thin air, slowing as it thickens.
+- **The air reaches past the sky.** Ixara's visible sky is 30 km deep. The air flight runs in goes twice as high (**Air Reach** 2, so 60 km): thin and nearly clear in its upper half, so a descent starts above the visible sky and drops into it. Planet Forge's sky is left as it is, since changing its height changes how it looks. Cruise now ends 5 km above the top of the air: 65 km over Ixara.
+- **Fast in thin air.** Near a planet, the ship's top speed is a multiple of its open-space speed (the fighter's 133 m/s at full throttle): 25 times at the top of the air and above it (3.3 km/s), falling evenly with height to 1.5 times at the ground (200 m/s). Thrust rises and drag falls by the square root of that factor each, so the ship still answers the throttle quickly, only heavier at speed. The kit's engines are untouched: the extra thrust is added beside theirs, from the same inputs, so boost and cargo weight work as before. Above the air the fast flight holds for 20 km, then eases back to open-space speed over the next 20 km (**Range** 40 km).
+- **The hand-over dives.** When cruise ends at a planet, nose down, the ship keeps the speed the air allows there, 3.3 km/s, with the throttle full. Keep the nose down and the ground arrives about 52 seconds later: 1.9 km/s at 30 km, 760 m/s through the clouds at 10 km, about 200 m/s at the ground. Throttle down, pull up, or land. Leaving cruise anywhere else, the throttle is back where you left it.
+- **Gravity everywhere in the air.** The planet's pull, 6 m/s² at the surface and weaker with height, now acts through the air and its range, not only below 40 km. It moved from Planet Ground to the ship.
+- **Entry glow.** Fast enough through thick enough air, the hull heats: air density times speed cubed. The air thins by e every eighth of its height, so heating builds from about 41 km, is strongest at about 30 km as you enter the visible sky, and fades out by about 6 km as the air slows you. The glow is a shell of plasma fitted round the hull: brightest at the bow, in flat comic tone bands from white-hot through orange to red, with streaks flowing back along the flanks. From the chase view its bow shows round the ship's outline; from the cockpit (**C**) it fills the view ahead, dimmed. A warm light glows on the hull with it. Cruise heats it too: lifting off at speed through the air glows.
+- **Flight tab.** A new **Air** section: the planet whose air you are in and how high it reaches, your altitude, the air's density, the top speed now and its multiple, your speed through the air, gravity, heating and glow.
+
+### Implementation (step 2c)
+| File | Role |
+|---|---|
+| `Scripts/Flight/PlanetPhysics.cs`, `AirSettings.cs` | Speed multiple with height, air density, heating and glow: pure, checked by the self-test |
+| `Scripts/Flight/AtmosphereFlight.cs` | On the ship: the nearest planet's air and pull, the extra thrust and lighter drag, gravity, the diving hand-over from cruise |
+| `Scripts/Flight/EntryGlow.cs`, `Shaders/EntryGlow.shader` | On the ship: the plasma shell fitted to the hull and the warm light, following the heating |
+| `Scripts/Flight/CruiseDrive.cs` | Arrival above the air; the throttle given back as it was |
+| `Scripts/Flight/PlanetGround.cs` | Gravity moved to the ship |
+| `Editor/PlanetFlightSetup.cs` | **Planet Flight** adds Atmosphere Flight and Entry Glow, with its shader |
+| `Editor/GodMenu/Tabs/FlightTab.cs` | **Air** section |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Speed and air with height; a dive to the ground |
+
+### Verified outside Unity (step 2c)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code. The Entry Glow shader compiles for Direct3D 11 with Unity's shader compiler, vertex and fragment, with no warnings.
+- The new checks pass, run outside Unity against the compiled code:
+  - top speed 1.5 times open space at the ground, 13.3 times at 30 km, 25 times at the top of the air, back to 1 time 40 km above it; air thins from 1 at sea level to none at 60 km
+  - a dive from 65 km at full throttle, nose down, flown by the kit's engine rule at 60 frames a second: the ground in 52.4 s; 1,910 m/s at 30 km, 760 at 10 km, 207 at the ground; the hull glows from 41 km down to 6 km, brightest at 30 km
+- Every earlier cruise check still passes, now arriving above the air.
+- Not run in Unity: the dive itself, the glow's look, the extra thrust with boost and cargo, and the Air section.
+
+### Test steps (step 2c)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows **Planet Flight** missing: press **Set Up Sector**. The player's ship gains **Atmosphere Flight** and **Entry Glow**. Save the scene.
+2. Press Play, point at Ixara and press **B**. The autopilot now arrives 65 km up: ARRIVED  IXARA, nose down, and the ship carries on diving at about 3.3 km/s with the throttle full.
+3. Keep the nose down. Around 40 km the bow starts to glow; it is strongest as you drop into the blue of the sky near 30 km, then fades as the air slows you. The clouds come up at about 10 km.
+4. About 50 seconds after arriving you are near the ground at about 200 m/s. Throttle down and land, or pull up and fly low.
+5. Open the God Menu **Flight** tab, **Air** section, on the way down: altitude, density, top speed and its multiple, gravity, heating and glow.
+6. Switch to the cockpit (**C**) while glowing: the bow glow fills the view ahead, dimmer than outside.
+7. Climb back up: the higher you go, the faster the ship gets. Point at the **POLARIS** marker and press **B** to go home; back in Polaris the ship flies at its normal speed.
+8. If the glow is too strong or too faint, change **Brightness** on the ship's **Entry Glow**; for more or less of it, **Glow Start** and **Glow Full** on **Atmosphere Flight**.
+
+### Tuning (step 2c)
+- On the ship's **Atmosphere Flight**: **Air Reach** (the air's height as a multiple of the visible sky), **Ground Factor**, **Top Factor**, **Curve**, **Range**; **Surface Gravity**; **Glow Start**, **Glow Full**.
+- On the ship's **Entry Glow**: **Shell Scale**, **Bow Reach**, **Brightness**, **Response**, **Light Intensity**, **Light Color**.
+- On the ship's **Cruise Drive**: **Arrival Margin**, above the top of the air.
+
+### Fix (after the test of step 2c: level flight)
+Tested 2026-11-17: "a lot better".
+The user found the ship "keeps trying to orient itself all the time". The cause was the kit's **Auto Roll** on the player's flight controls: half a second after you stop rolling it levels the wings, always to the world's up. In Polaris the world's up is the sector's, so it read as level flight. Over a planet, which lies in any direction from Polaris, the world's up is tilted against the ground, so the kit kept rolling the ship towards a false horizon.
+- **Level flight replaces it.** The same rule, with the same feel (it takes the kit's strength and limit), levelling to the right up: away from the planet's centre within its reach, the sector's up in open space, turning from one to the other over the outer half of the planet's range. The kit's auto roll is switched off on the player.
+- It runs after the kit's flight controls each frame and changes only their roll, never while you are rolling or for half a second after, nor while the autopilot has the controls. Pointing straight up or down there is no horizon, so it fades out.
+
+| File | Role |
+|---|---|
+| `Scripts/Controls/LevelFlightInput.cs` | Levels the wings to the right up when the player is not rolling |
+| `Scripts/Flight/AtmosphereFlight.cs`, `PlanetPhysics.cs` | **Up** for level flight, and the planet's reach it turns over |
+| `Editor/PlanetFlightSetup.cs` | **Planet Flight** adds level flight under the player and switches off the kit's auto roll, carrying its strength over |
+| `Editor/Diagnostics/SectorSelfTest.cs` | The planet's reach |
+
+Verified outside Unity: every Dead Cargo assembly compiles with no warnings from Dead Cargo code, and every self-test check passes, the planet's reach included. Not run in Unity: the levelling itself.
+
+#### Test steps (level flight)
+1. Click into Unity and let it compile. The God Menu **Project** tab shows **Planet Flight** missing: press **Set Up Sector**. The player gains `LevelFlightControls`, and the kit's flight controls on the player show **Auto Roll Enabled** off. Save the scene.
+2. In Polaris, roll and let go: half a second later the wings ease back level, as before.
+3. Cruise to Ixara and dive. Roll and let go: the wings ease level with the planet's horizon below and stay there. Fly low along the ground: the ship holds level with the terrain, with nothing fighting you.
+4. Climb well above the air: the level slowly turns back to the sector's.
+5. To make it stronger, weaker or slower to start: **Strength**, **Max Roll** and **Delay** on `LevelFlightControls`.
+
+## Phase 6.13: HUD: Status Strip
+
+### Goal
+Redo the on-screen UI so it fits Dead Cargo's comic art and stops cluttering the screen, in the chase view and the cockpit alike. On 2026-11-17 the user asked for three concepts in the style of the Figma "Futuristic UI Kit" (hairlines, tick marks, segmented bars, label flags, small mono figures) blended with Dead Cargo's look. The concept board has A Ink Panels, B Hairline Ring and C Status Strip: https://claude.ai/artifact/UYrLKFSU6Rp3v7Fwow6d81. They picked **C · Status Strip**.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Status strip | One leaning, ink-outlined strip at the bottom centre: shield and hull, speed and throttle, both weapons with their rounds. The kit's health bars, weapon boxes and reticle arcs are hidden | Built and compile-checked, awaiting test |
+| 2. Pop-up tags | The plates on the right become sticker tags that pop in only when they matter: cruise while a destination is ahead, cargo when it changes, heat when it rises, jump while spooling, then slide away. Extraction moves onto its marker; notices become tags | Built and compile-checked, awaiting test |
+| 3. Markers and reticle | Chunky inked diamonds and chevrons with sticker labels for planets, extraction, hunters and pickups; an inked chevron reticle | Planned |
+| 4. Cockpit | In first person the strip sits on the dash lip like a visor readout; the console screens show hull and shield, and the hold beside the radar; tags pop on the glass | Planned |
+
+### Design (step 1: status strip)
+- **One strip, bottom centre, under the ship.** 930 by 81 reference pixels, 26 above the bottom edge. It is a sticker leaning like italic type, charcoal, with a 4-pixel ink outline and a hard ink shadow, and ink bands dividing it into four sections:
+  - **Shield and hull:** two leaning bars, teal over amber, each with its figure in percent. A figure below 30 turns to the warning colour.
+  - **Speed:** big leaning figures in metres a second. In autopilot cruise it shows the cruise speed in kilometres a second, with the unit in teal. Beside it is the throttle as an amber bar, which turns full and teal while boosting.
+  - **Weapon 1 and weapon 2:** rounds left in big figures, the key and the weapon's name above, and what it holds as pips (up to 8, as missiles) or as a figure. A weapon that never runs dry shows two dashes, and an empty one shows its figure in the warning colour.
+- **The kit's parts it replaces are hidden, not deleted.** On the player's ship, the kit HUD group *Cockpit* holds the two reticle arcs (`HUDFrame_Left`, `HUDFrame_Right`), the health bars, the speed and weapon-power fills and the weapon boxes. Set Up Sector gives each a CanvasGroup at zero alpha. The kit turns its HUD groups back on whenever the ship is entered, but never touches their alpha, so they stay hidden. Raising a part's alpha brings it back. The launch prompt (`MessagePrompts`), the cursor, target boxes and radar are untouched.
+- **The same numbers the kit showed.** Shield and hull use the kit's own health types, taken by Set Up Sector from its shield and armour bars. Speed comes from the ship's velocity, throttle and boost from its engines, and rounds from each weapon's ammunition, in the ship's mount order.
+- **Built with the HUD's own parts.** A new `HudSticker` graphic draws every leaning shape, outline and shadow in one mesh, so the strip costs a handful of draw calls. Text is rebuilt only when a whole figure changes. The figures are Saira Condensed ExtraBold, leaning, and the labels are Chakra Petch Bold, the concept's fonts. The user approved downloading both (SIL Open Font License, from Google Fonts' repository), and they are in `Resources/HUD` with their licences.
+- **Not yet.** The run plates on the right stay as they are until step 2. In the cockpit the strip sits over the radar dome until step 4 moves it.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/UI/HudSticker.cs` | A leaning sticker or bar with ink outline and hard shadow, in one mesh |
+| `Scripts/UI/StatusStripView.cs` | Builds the strip and updates its bars and figures |
+| `Scripts/UI/StatusStrip.cs` | On its own canvas in the UI folder: follows the player's ship and feeds the view |
+| `Editor/StatusStripSetup.cs`, `Editor/SectorSetup.cs` | Setup step **Status Strip**: the strip, its health types, the kit parts hidden |
+
+### Verified outside Unity (step 1)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code; every self-test check still passes.
+- Not run in Unity: the strip's look and layout, the hiding of the kit parts, and the figures in play.
+
+### Test steps (step 1)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows **Status Strip** missing: press **Set Up Sector**. A **Status Strip** object appears in the UI folder. On the player's ship, under `HUD/Cockpit`, six parts gain a CanvasGroup at alpha 0. Save the scene.
+2. Press Play. The top shield and hull bars, the weapon boxes and the two arcs round the reticle are gone. The strip sits under the ship.
+3. Throttle up and down: the speed figure follows and the amber throttle bar fills. Boost: the bar turns full and teal.
+4. Fire the lasers and a missile: the rounds count down, and a missile pip goes grey.
+5. Take hits: the shield bar and figure drop, then the hull's; below 30 a figure turns red.
+6. Cruise to Ixara with **B**: the speed reads in KM/S, in teal.
+7. To compare with the kit HUD, raise the alpha of any hidden part's CanvasGroup in Play Mode.
+
+### Fix (after the first look at step 1)
+The user's first screenshot showed three problems, fixed on 2026-11-17:
+- **The shield and hull figures were missing.** At full health "100" was wider than its box, so the text wrapped and was cut off. Figures now never wrap.
+- **The weapon names shrank until they were unreadable**, because a long kit name such as "PROJECTILE LASER X 2" had to fit beside the rounds. The name now runs across the top of the section, with the rounds and pips below.
+- **Edge arrows sat over the strip.** The marker layer now keeps them above the band the strip covers, as it already kept them clear of the plates.
+
+The strip still overlaps the run plates on the right when the game view is narrower than 16:9. Step 2 replaces the plates with pop-up tags.
+
+| File | Role |
+|---|---|
+| `Resources/HUD/SairaCondensed-ExtraBold.ttf`, `ChakraPetch-Bold.ttf` and their OFL licences | The concept's fonts |
+| `Scripts/UI/HudFactory.cs` | Figure and sticker fonts |
+| `Scripts/UI/StatusStripView.cs`, `StatusStrip.cs` | Figures that never wrap; names across the top; the band the strip covers |
+| `Scripts/UI/HudMarkerLayer.cs`, `ExtractionHud.cs` | Edge arrows kept above the strip |
+
+Verified outside Unity: every Dead Cargo assembly compiles with no warnings from Dead Cargo code.
+
+#### Test steps (fix)
+1. Click into Unity and let it import the two fonts and compile. Press Play; nothing needs setting up again.
+2. The strip's figures are in the chunky condensed face. Shield and hull read 100 at full. The weapon names read whole across the top of their sections.
+3. Turn so the extraction point is behind you: its edge arrow stays above the strip.
+
+### Design (step 2: pop-up tags)
+The user saw the right-hand plates beside the strip and said they "don't match the style" and are "too cluttered". Step 2 replaces them.
+- **Tags, not plates.** Each tag is a leaning colour sticker, 340 by 58, with a 3-pixel ink outline, a hard ink shadow and a slight tilt. It carries:
+  - an ink key cap where a key applies;
+  - a small label in Chakra Petch, and a big value and a right-hand figure in Saira Condensed, in ink on the colour;
+  - a thin ink progress bar along its foot where something is counting.
+
+  Tags stack up the screen's right edge from 180 reference pixels above the strip. They slide in from the edge and back out, and the stack closes up smoothly as tags come and go.
+- **Each shows only while it matters:**
+
+  | Tag | Shown | Shows |
+  |---|---|---|
+  | Cargo (amber; red when full) | for 3.5 s after cargo comes aboard or is jettisoned, headed by what happened; held while the hold is full or the manifest is open | mass against capacity, value at risk, load bar |
+  | Heat (tier colour) | while heat is above zero or Authority ships hunt the player | tier, score, hunters, heat bar |
+  | Jump drive (blue; violet for fuel) | held while it can jump (READY with the spool time) and while spooling (countdown, TOO FAST, DISRUPTED); for 3.5 s after dark matter comes aboard | state, seconds or fuel, spool bar |
+  | Extraction point | held while in range (UPLINK READY with the U key), uplinking or open (seconds left, progress) | state, distance or seconds |
+  | Cruise (teal; red when blocked) | while a destination is ahead, charging, aligning, on autopilot (to where), blocked by a field, or low over a planet (altitude) | state, destination, key B with what it does now |
+  | Notice | on top, for 2.7 s | the message |
+
+- **Less said twice.** Far from the extraction point, only its world marker shows it, with state and distance. Cargo and dark matter pickups pulse their own tag rather than raising a notice. In cruise the tag names the destination, since the strip already shows the speed.
+- **The manifest** (I) is an inked charcoal panel on the left, above the strip's band, in the same fonts.
+- **Edge arrows** keep clear of the tag stack, as they did of the plates.
+
+### Implementation (step 2)
+| File | Role |
+|---|---|
+| `Scripts/UI/HudTag.cs` | One pop-up tag: sticker, key, label, value, figure, progress; held or pulsed; slides and stacks |
+| `Scripts/UI/ExtractionHudView.cs` | The run HUD as a stack of tags with their show rules, and the manifest panel |
+| `Scripts/UI/ExtractionHud.cs` | Ticks the stack; cruise and extraction show rules; pickups and jettisons pulse their tags |
+
+### Tool: Play Window
+The user asked for the game to play in a pop-out window. The God Menu **Play Window** tab (Game group) pops the game out into a floating Game view of its own when Play starts, at 1280×720, 1600×900 (the default) or 1920×1080. The window opens where it was last left, or centred over the editor the first time, and closes when Play stops. **Pop Out Now** opens it during Play, and **Centre Next Time** forgets the saved place. Settings are kept per machine. Unity has no public way to float a Game view, so `Editor/PlayWindow.cs` creates the editor's own Game view type by name.
+
+**Fix (after the first try):** the user found the game "playing twice", in the docked Game tab and the pop-out. While the window is open, every other Game view is now switched to Display 8, the last display Unity supports, which no camera renders to. They draw nothing, so the game is drawn once, and each gets its own display back when Play stops. This uses the Game view's `targetDisplay`, which has a protected setter; it was checked in the editor's own assembly. If a script reload in Play loses track of the views, any still on Display 8 go back to Display 1 when the editor leaves Play.
+
+**Fix (frame rate):** the user saw about 150 fps in the pop-out against about 220 in the docked tab. Most of that is pixels: the docked tab drew about 1180×880 (1.0 million), and the pop-out about 1920×960 (1.8 million). Two faults made the picture bigger than chosen. The size was set in editor units, which Windows display scaling makes larger than pixels, and a 1920×1080 picture with its title bars did not fit a 1080p screen, so Unity squashed it out of 16:9. The chosen size is now the picture's real size in pixels, shrunk to fit the screen while keeping 16:9. The tab shows the picture's size and how many other Game views are blanked. For a like-for-like comparison with the docked tab, use 1280 × 720.
+
+### Verified outside Unity (step 2 and Play Window)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- Not run in Unity: the tags' look, their show rules and slides, the manifest panel, and the play window.
+
+### Test steps (step 2 and Play Window)
+1. Click into Unity and let it compile. In the God Menu, open **Play Window**, tick **Pop the game out into its own window on Play**, and pick a size.
+2. Press Play. The game opens in its own window, focused. The old plates are gone. With nothing going on, the right side of the screen is empty apart from markers.
+3. Point at Ixara: a teal **CRUISE · ENGAGE  READY  IXARA** tag slides in. Look away from every destination: it slides out.
+4. Pick up cargo: the amber tag slides in headed **+1 …**, with mass and value, and leaves after a few seconds. Pick up dark matter: the jump tag does the same.
+5. Press **I**: the manifest panel opens on the left and the cargo tag stays. Press **I** again: both go.
+6. Fly into the extraction point's range: **UPLINK READY** with the U key. Press **U**: **UPLINKING** with seconds and progress.
+7. Raise heat: the heat tag appears with tier, score and hunters, and leaves when heat is back to zero.
+8. Press **H** with enough dark matter: the jump tag counts down. Cruise with **B**: **AUTOPILOT  IXARA**, then the notice **ARRIVED  IXARA** on top.
+9. Stop Play: the window closes. Next Play it opens where you left it.
+10. While the window is open, the docked Game tab reads Display 8 and draws nothing. After Play it shows the game again on Display 1.

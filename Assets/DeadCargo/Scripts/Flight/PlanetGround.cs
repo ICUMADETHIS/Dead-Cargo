@@ -21,9 +21,9 @@ namespace DeadCargo.Flight
     /// same triangles for both and the colliders match what is seen. A sphere at sea level makes the sea solid.
     /// </para>
     /// <para>
-    /// While a ground copy exists: both copies build triangles down to <c>groundDetail</c>; the far camera draws from
-    /// <c>groundNearClip</c>; and the player's ship is pulled towards the planet's centre. While the player is away from
-    /// the sector every body holds still, as a turning planet would slide its surface under the ship.
+    /// While a ground copy exists, both copies build triangles down to <c>groundDetail</c> and the far camera draws from
+    /// <c>groundNearClip</c>. While the player is away from the sector every body holds still, as a turning planet would
+    /// slide its surface under the ship. The planet's pull is the ship's own (<see cref="AtmosphereFlight"/>).
     /// </para>
     /// Lives on the Far Space object, beside the planets it grounds. Play Mode only.
     /// </summary>
@@ -57,10 +57,6 @@ namespace DeadCargo.Flight
                  "of its colliders. Smaller is finer and costs more.")]
         [SerializeField, Range(0.25f, 50f)] private float groundDetail = 2f;
 
-        [Tooltip("Pull towards a planet's centre at its surface, in metres per second squared. Weaker with the square of the " +
-                 "distance. The kit's ships fly against heavy drag, so this is a gentle sink.")]
-        [SerializeField, Min(0f)] private float surfaceGravity = 6f;
-
         [Tooltip("Nearest the far camera draws while near a planet's ground, in metres, so ground close below the ship is " +
                  "not cut away.")]
         [SerializeField, Range(0.05f, 100f)] private float groundNearClip = 0.5f;
@@ -91,9 +87,6 @@ namespace DeadCargo.Flight
 
         /// <summary>The ship's height above the ground below it, in metres: by a ray to the ground copy, else above sea level.</summary>
         public double GroundDistance { get; private set; } = double.PositiveInfinity;
-
-        /// <summary>The pull on the ship now, in metres per second squared.</summary>
-        public double Gravity { get; private set; }
 
         /// <summary>The layer the ground copy sits on.</summary>
         public int Layer => layer;
@@ -165,23 +158,6 @@ namespace DeadCargo.Flight
 
             far.SetNearClipOverride(HasGround ? groundNearClip / far.Scale : 0f);
             GroundDistance = HasGround ? MeasureGround(space) : altitude;
-        }
-
-        private void FixedUpdate()
-        {
-            Gravity = 0.0;
-            SectorSpace space = SectorSpace.Active;
-            if (!HasGround || ship == null || space == null || ship.isKinematic)
-                return;
-
-            double3 centre = bodies.CentreOf(Planet);
-            double3 toCentre = centre - space.WorldToSystem(ship.position);
-            double distance = math.length(toCentre);
-            if (distance <= 0.0)
-                return;
-
-            Gravity = PlanetPhysics.GravityAt(distance, bodies.RadiusOf(Planet), surfaceGravity);
-            ship.AddForce((Vector3)(float3)(toCentre / distance * Gravity), ForceMode.Acceleration);
         }
 
         private void FindShip()
@@ -291,7 +267,6 @@ namespace DeadCargo.Flight
             groundBody = null;
             farLandscape = null;
             Planet = -1;
-            Gravity = 0.0;
         }
 
         // The ground copy stands where the planet is in the star system, so it moves only when the world's origin does.

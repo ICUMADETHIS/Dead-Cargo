@@ -4,278 +4,215 @@ using UnityEngine.UI;
 
 namespace DeadCargo.UI
 {
-    /// <summary>Builds the run HUD plates and stacks the visible ones up from the bottom-right corner.</summary>
+    /// <summary>
+    /// The run HUD as pop-up tags (<see cref="HudTag"/>) stacked up the screen's right edge, above the status strip, each
+    /// shown only while it matters: cargo when it changes or the hold is full, heat while there is any, the jump drive while
+    /// it is ready, spooling or taking on fuel, the extraction point near or in use, cruise while a destination is ahead,
+    /// and notices on top. The manifest is an inked panel on the left while it is open. The stack eases as tags come and go.
+    /// </summary>
     internal sealed class ExtractionHudView
     {
         internal const int RowsPerPage = 5;
 
-        private const float Width = 356f;
-        private const float HeatHeight = 76f;
-        private const float JumpHeight = 76f;
-        private const float CruiseHeight = 76f;
-        private const float PointHeight = 76f;
-        private const float CargoHeight = 106f;
-        private const float NoticeHeight = 37f;
-        private const float Gutter = 8f;
-        private const float RightMargin = 37f;
-        private const float BottomMargin = 34f;
-        private const float ManifestRowsTop = 65f;
+        private const float TagWidth = 340f;
+        private const float NoticeWidth = 520f;
+        private const float Gap = 14f;
+        private const float RightMargin = 40f;
+
+        // The stack starts this far above the band the status strip covers, in reference pixels.
+        private const float StackLift = 180f;
+
+        private const float PulseTime = 3.5f;
+        private const float ManifestWidth = 390f;
+        private const float ManifestLeft = 40f;
+        private const float ManifestLift = 30f;
+        private const float ManifestSlant = 0.06f;
+        private const float ManifestRowsTop = 74f;
         private const float RowHeight = 24f;
 
-        private static readonly Vector2 BottomRight = new Vector2(1f, 0f);
+        private static readonly Color PanelFace = new Color32(24, 27, 34, 245);
 
-        private readonly HudPlate heatPlate;
-        private readonly HudPlate jumpPlate;
-        private readonly HudPlate cruisePlate;
-        private readonly HudPlate pointPlate;
-        private readonly HudPlate cargoPlate;
-        private readonly HudPlate manifestPlate;
-        private readonly HudPlate noticePlate;
-        private readonly HudMeter heatMeter;
-        private readonly HudMeter jumpMeter;
-        private readonly HudMeter cruiseMeter;
-        private readonly HudMeter pointMeter;
-        private readonly HudMeter loadMeter;
-        private readonly Text heatTitle;
-        private readonly Text tier;
-        private readonly Text heatNumber;
-        private readonly Text jumpStatus;
-        private readonly Text jumpTime;
-        private readonly Text jumpAction;
-        private readonly Text cruiseStatus;
-        private readonly Text cruiseValue;
-        private readonly Text cruiseAction;
-        private readonly Text pointStatus;
-        private readonly Text pointValue;
-        private readonly Text pointAction;
-        private readonly RectTransform pointKey;
-        private readonly Text cargoTitle;
-        private readonly Text cargoMass;
-        private readonly Text cargoValue;
-        private readonly Text manifestToggle;
-        private readonly Text manifestFooter;
+        private readonly HudTag cargoTag;
+        private readonly HudTag heatTag;
+        private readonly HudTag jumpTag;
+        private readonly HudTag pointTag;
+        private readonly HudTag cruiseTag;
+        private readonly HudTag noticeTag;
+        private readonly HudTag[] stack;
+
+        private readonly RectTransform manifest;
+        private readonly HudSticker manifestBody;
         private readonly Text handling;
         private readonly Text emptyManifest;
-        private readonly Text notice;
+        private readonly Text manifestFooter;
         private readonly Text[,] manifestRows = new Text[RowsPerPage, 4];
-        private readonly CanvasGroup noticeGroup;
+
+        private string heatStatus = "";
+        private Color heatColor = HudFactory.Muted;
+        private int heatScore;
+        private int hunters;
+        private float heatFraction;
+
+        private string cargoHeadline;
+        private float cargoHeadlineLeft;
+        private string cargoMass = "";
+        private string cargoValue = "";
+        private bool cargoFull;
+        private bool manifestOpen;
+
+        private string jumpHeadline;
+        private float jumpHeadlineLeft;
+        private string jumpStatus = "";
+        private string jumpFigure = "";
+        private Color jumpColor = HudFactory.JumpColor;
 
         /// <summary>
-        /// Size of the bottom-right screen corner the visible plates cover, margins included, in reference pixels.
-        /// Zero when no plate is shown. Updated by <see cref="Layout"/>.
+        /// Size of the area up the screen's right edge the shown tags cover, from the bottom, in reference pixels. Zero when
+        /// no tag is shown. Updated by <see cref="Tick"/>.
         /// </summary>
         internal Vector2 StackSize { get; private set; }
 
         internal ExtractionHudView(RectTransform parent)
         {
-            Color ink = HudFactory.Ink;
-            Color muted = HudFactory.Muted;
-            Color cargo = HudFactory.CargoColor;
+            cargoTag = new HudTag(parent, "Cargo Tag", TagWidth, "I");
+            heatTag = new HudTag(parent, "Heat Tag", TagWidth, null);
+            jumpTag = new HudTag(parent, "Jump Tag", TagWidth, "H");
+            pointTag = new HudTag(parent, "Extraction Tag", TagWidth, "U");
+            cruiseTag = new HudTag(parent, "Cruise Tag", TagWidth, "B");
+            noticeTag = new HudTag(parent, "Notice Tag", NoticeWidth, null);
+            stack = new[] { cargoTag, heatTag, jumpTag, pointTag, cruiseTag, noticeTag };
 
-            cargoPlate = MakePlate("Cargo Hold", parent, CargoHeight);
-            cargoPlate.SetAccent(cargo);
-            RectTransform cargoRect = cargoPlate.rectTransform;
-            cargoTitle = HudFactory.Label("Cargo title", cargoRect, "CARGO HOLD", 19, 8, 174, 22, 17, muted);
-            HudFactory.Key(cargoRect, "I", 257, 10);
-            manifestToggle = HudFactory.Label("Manifest shortcut", cargoRect, "MANIFEST", 281, 8, 57, 22, 15, ink, TextAnchor.MiddleRight);
-            cargoMass = HudFactory.Label("Cargo mass", cargoRect, "", 19, 30, 193, 42, 28, ink, numeric: true);
-            cargoMass.supportRichText = true;
-            HudFactory.Fit(cargoMass, 17);
-            HudFactory.Label("Value title", cargoRect, "VALUE AT RISK", 204, 35, 133, 18, 14, cargo, TextAnchor.MiddleRight);
-            cargoValue = HudFactory.Label("Cargo value", cargoRect, "", 191, 53, 146, 25, 19, ink, TextAnchor.MiddleRight, true);
-            HudFactory.Fit(cargoValue, 12);
-            loadMeter = HudFactory.Meter("Load meter", cargoRect, 19, 86, 318, 7);
+            manifest = HudFactory.Anchored("Cargo Manifest", parent, Vector2.zero, ManifestWidth, 160f);
+            manifestBody = manifest.gameObject.AddComponent<HudSticker>();
+            manifestBody.Configure(PanelFace, 4f, new Vector2(8f, -8f), ManifestSlant);
 
-            heatPlate = MakePlate("Authority Heat", parent, HeatHeight);
-            RectTransform heatRect = heatPlate.rectTransform;
-            heatTitle = HudFactory.Label("Heat title", heatRect, "AUTHORITY HEAT", 19, 7, 220, 19, 15, muted);
-            heatTitle.supportRichText = true;
-            HudFactory.Fit(heatTitle, 11);
-            tier = HudFactory.Label("Heat tier", heatRect, "", 19, 24, 232, 32, 25, ink);
-            HudFactory.Fit(tier, 17);
-            heatNumber = HudFactory.Label("Heat score", heatRect, "", 242, 16, 95, 36, 27, ink, TextAnchor.MiddleRight, true);
-            HudFactory.Fit(heatNumber, 17);
-            heatMeter = HudFactory.Meter("Heat meter", heatRect, 19, 57, 318, 7);
-
-            jumpPlate = MakePlate("Jump Drive", parent, JumpHeight);
-            jumpPlate.SetAccent(HudFactory.JumpColor);
-            RectTransform jumpRect = jumpPlate.rectTransform;
-            HudFactory.Label("Jump title", jumpRect, "JUMP DRIVE", 19, 7, 203, 19, 15, muted);
-            HudFactory.Key(jumpRect, "H", 257, 8);
-            jumpAction = HudFactory.Label("Jump shortcut", jumpRect, "SPOOL", 281, 6, 57, 22, 15, ink, TextAnchor.MiddleRight);
-            jumpStatus = HudFactory.Label("Jump status", jumpRect, "", 19, 24, 200, 32, 25, ink);
-            HudFactory.Fit(jumpStatus, 17);
-            jumpTime = HudFactory.Label("Jump time", jumpRect, "", 222, 24, 115, 32, 25, ink, TextAnchor.MiddleRight, true);
-            HudFactory.Fit(jumpTime, 15);
-            jumpMeter = HudFactory.Meter("Jump meter", jumpRect, 19, 57, 318, 7);
-
-            cruisePlate = MakePlate("Cruise Drive", parent, CruiseHeight);
-            cruisePlate.SetAccent(HudFactory.CruiseColor);
-            RectTransform cruiseRect = cruisePlate.rectTransform;
-            HudFactory.Label("Cruise title", cruiseRect, "CRUISE DRIVE", 19, 7, 203, 19, 15, muted);
-            HudFactory.Key(cruiseRect, "B", 257, 8);
-            cruiseAction = HudFactory.Label("Cruise shortcut", cruiseRect, "ENGAGE", 281, 6, 57, 22, 15, ink, TextAnchor.MiddleRight);
-            cruiseStatus = HudFactory.Label("Cruise status", cruiseRect, "", 19, 24, 170, 32, 25, ink);
-            HudFactory.Fit(cruiseStatus, 15);
-            cruiseValue = HudFactory.Label("Cruise value", cruiseRect, "", 192, 24, 145, 32, 25, ink, TextAnchor.MiddleRight, true);
-            HudFactory.Fit(cruiseValue, 13);
-            cruiseMeter = HudFactory.Meter("Cruise meter", cruiseRect, 19, 57, 318, 7);
-
-            pointPlate = MakePlate("Extraction Point", parent, PointHeight);
-            RectTransform pointRect = pointPlate.rectTransform;
-            HudFactory.Label("Point title", pointRect, "EXTRACTION POINT", 19, 7, 203, 19, 15, muted);
-            pointKey = HudFactory.Key(pointRect, "U", 257, 8);
-            pointAction = HudFactory.Label("Point shortcut", pointRect, "UPLINK", 281, 6, 57, 22, 15, ink, TextAnchor.MiddleRight);
-            pointStatus = HudFactory.Label("Point status", pointRect, "", 19, 24, 200, 32, 25, ink);
-            HudFactory.Fit(pointStatus, 15);
-            pointValue = HudFactory.Label("Point value", pointRect, "", 222, 24, 115, 32, 25, ink, TextAnchor.MiddleRight, true);
-            HudFactory.Fit(pointValue, 15);
-            pointMeter = HudFactory.Meter("Point meter", pointRect, 19, 57, 318, 7);
-
-            manifestPlate = MakePlate("Cargo Manifest", parent, 129);
-            manifestPlate.SetAccent(cargo);
-            RectTransform manifestRect = manifestPlate.rectTransform;
-            HudFactory.Label("Manifest title", manifestRect, "CARGO MANIFEST", 19, 8, 180, 27, 22, ink);
-            handling = HudFactory.Label("Handling penalties", manifestRect, "", 168, 11, 169, 22, 14, cargo, TextAnchor.MiddleRight);
-            HudFactory.Rule(manifestRect, 19, 39, 318);
-            HudFactory.Label("Item column", manifestRect, "ITEM", 19, 44, 129, 18, 13, muted);
-            HudFactory.Label("Quantity column", manifestRect, "QTY", 149, 44, 33, 18, 13, muted, TextAnchor.MiddleRight);
-            HudFactory.Label("Mass column", manifestRect, "MASS", 188, 44, 59, 18, 13, muted, TextAnchor.MiddleRight);
-            HudFactory.Label("Value column", manifestRect, "VALUE", 255, 44, 82, 18, 13, muted, TextAnchor.MiddleRight);
+            Text title = HudFactory.Label("Manifest Title", manifest, "CARGO MANIFEST", 22f, 10f, 220f, 30f, 24, HudFactory.CargoColor);
+            title.font = HudFactory.FigureFont;
+            title.fontStyle = FontStyle.Italic;
+            handling = Caption("Handling Penalties", manifest, "", 200f, 16f, 168f, 20f, 12, HudFactory.CargoColor, TextAnchor.MiddleRight);
+            Caption("Item Column", manifest, "ITEM", 24f, 48f, 140f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleLeft);
+            Caption("Quantity Column", manifest, "QTY", 170f, 48f, 34f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
+            Caption("Mass Column", manifest, "MASS", 208f, 48f, 62f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
+            Caption("Value Column", manifest, "VALUE", 276f, 48f, 92f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
 
             for (int i = 0; i < RowsPerPage; i++)
             {
                 float y = ManifestRowsTop + i * RowHeight;
-                manifestRows[i, 0] = HudFactory.Label("Item", manifestRect, "", 19, y, 126, RowHeight, 18, ink);
-                manifestRows[i, 1] = HudFactory.Label("Quantity", manifestRect, "", 148, y, 34, RowHeight, 13, ink, TextAnchor.MiddleRight, true);
-                manifestRows[i, 2] = HudFactory.Label("Mass", manifestRect, "", 188, y, 59, RowHeight, 13, ink, TextAnchor.MiddleRight, true);
-                manifestRows[i, 3] = HudFactory.Label("Value", manifestRect, "", 252, y, 85, RowHeight, 13, ink, TextAnchor.MiddleRight, true);
-                HudFactory.Fit(manifestRows[i, 0], 12);
-                HudFactory.Fit(manifestRows[i, 3], 10);
+                manifestRows[i, 0] = Caption("Item", manifest, "", 24f, y, 144f, RowHeight, 14, HudFactory.Ink, TextAnchor.MiddleLeft);
+                manifestRows[i, 1] = Numbers("Quantity", manifest, 170f, y, 34f);
+                manifestRows[i, 2] = Numbers("Mass", manifest, 208f, y, 62f);
+                manifestRows[i, 3] = Numbers("Value", manifest, 276f, y, 92f);
+                HudFactory.Fit(manifestRows[i, 0], 11);
+                HudFactory.Fit(manifestRows[i, 3], 11);
             }
 
-            emptyManifest = HudFactory.Label("Empty hold", manifestRect, "Hold empty", 19, ManifestRowsTop, 250, RowHeight, 17, muted);
-            manifestFooter = HudFactory.Label("Manifest controls", manifestRect, "", 19, 0, 318, 22, 14, muted);
-
-            noticePlate = MakePlate("Cargo Notice", parent, NoticeHeight);
-            notice = HudFactory.Label("Notice text", noticePlate.rectTransform, "", 19, 5, 318, 25, 18, ink);
-            HudFactory.Fit(notice, 12);
-            noticeGroup = noticePlate.gameObject.AddComponent<CanvasGroup>();
-            Layout(false, false, false, false, false, false, false);
+            emptyManifest = Caption("Empty Hold", manifest, "HOLD EMPTY", 24f, ManifestRowsTop, 250f, RowHeight, 14, HudFactory.Muted,
+                TextAnchor.MiddleLeft);
+            manifestFooter = Caption("Manifest Controls", manifest, "", 24f, 0f, 344f, 20f, 12, HudFactory.Muted, TextAnchor.MiddleLeft);
+            manifest.gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// Shows the nearest extraction point: its state, the figure on the right (distance or seconds left),
-        /// and the U prompt, which is bright when the uplink can start.
+        /// The nearest extraction point, shown while it is in range or in use: its state, the figure on the right (distance
+        /// or seconds left), the U key while an uplink can start, and its progress.
         /// </summary>
-        internal void SetPoint(string status, Color color, string value, bool showPrompt, bool promptReady)
+        internal void SetPoint(bool wanted, string status, string figure, Color color, bool showKey, float progress)
         {
-            pointStatus.text = status;
-            pointStatus.color = color;
-            pointPlate.SetAccent(color);
-            pointValue.text = value;
-            pointKey.gameObject.SetActive(showPrompt);
-            pointAction.enabled = showPrompt;
-            pointAction.color = promptReady ? HudFactory.Ink : HudFactory.Muted;
+            pointTag.SetHeld(wanted);
+            pointTag.SetContent("EXTRACTION POINT", status, figure, color);
+            pointTag.SetKeyVisible(showKey);
+            pointTag.SetProgress(progress);
         }
 
-        internal void SetPointProgress(float fraction, Color color)
+        internal void SetPointProgress(float fraction)
         {
-            pointMeter.SetProgress(fraction, color);
-        }
-
-        internal void SetHeatBoundaries(float[] values)
-        {
-            heatMeter.SetBoundaries(values);
+            pointTag.SetProgress(fraction);
         }
 
         internal void SetHeat(int score, string status, Color statusColor, float fraction)
         {
-            heatNumber.text = score.ToString("00");
-            tier.text = status;
-            tier.color = statusColor;
-            heatPlate.SetAccent(statusColor);
-            heatMeter.SetProgress(fraction, statusColor);
+            heatScore = score;
+            heatStatus = status;
+            heatColor = statusColor;
+            heatFraction = fraction;
+            ShowHeat();
         }
 
-        /// <summary>Adds the number of Authority ships hunting the player to the heat plate's title, in red.</summary>
+        /// <summary>The number of Authority ships hunting the player, named on the heat tag. Any keeps the tag on screen.</summary>
         internal void SetHunters(int count)
         {
-            heatTitle.text = count > 0
-                ? $"AUTHORITY HEAT  <color=#FF795B>· {count} {(count == 1 ? "HUNTER" : "HUNTERS")}</color>"
-                : "AUTHORITY HEAT";
+            hunters = count;
+            ShowHeat();
         }
 
-        /// <summary>Shows an idle drive and the spool time the current load would need, in seconds.</summary>
+        /// <summary>An idle drive with fuel: ready, with the spool time the current load would need, in seconds.</summary>
         internal void SetJumpReady(float spoolTime)
         {
-            jumpStatus.text = "READY";
-            jumpStatus.color = HudFactory.Ink;
-            jumpTime.text = $"{Mathf.CeilToInt(spoolTime)} s";
-            jumpTime.color = HudFactory.Muted;
-            jumpAction.text = "SPOOL";
-            jumpPlate.SetAccent(HudFactory.JumpColor);
-            jumpMeter.SetProgress(0f, HudFactory.JumpColor);
+            ShowJump("READY", $"{Mathf.CeilToInt(spoolTime)} S", HudFactory.JumpColor, -1f, true);
         }
 
-        /// <summary>Shows an idle drive short of fuel: dark matter aboard against what a jump burns, as a filling bar.</summary>
+        /// <summary>An idle drive short of fuel: dark matter aboard against what a jump burns. Shown when it changes.</summary>
         internal void SetJumpFuel(int aboard, int required)
         {
-            jumpStatus.text = "DARK MATTER";
-            jumpStatus.color = HudFactory.DarkMatterColor;
-            jumpTime.text = $"{aboard} / {required}";
-            jumpTime.color = HudFactory.Ink;
-            jumpAction.text = "SPOOL";
-            jumpPlate.SetAccent(HudFactory.DarkMatterColor);
-            jumpMeter.SetProgress(required > 0 ? (float)aboard / required : 1f, HudFactory.DarkMatterColor);
+            ShowJump("DARK MATTER", $"{aboard} / {required}", HudFactory.DarkMatterColor, required > 0 ? (float)aboard / required : 1f, false);
         }
 
-        /// <summary>Shows a spooling drive: its state (SPOOLING, TOO FAST, DISRUPTED) and whole seconds left.</summary>
+        /// <summary>A spooling drive: its state (SPOOLING, TOO FAST, DISRUPTED) and whole seconds left.</summary>
         internal void SetJumpCountdown(int secondsRemaining, string status, Color statusColor)
         {
-            jumpStatus.text = status;
-            jumpStatus.color = statusColor;
-            jumpPlate.SetAccent(statusColor);
-            jumpTime.text = $"{secondsRemaining} s";
-            jumpTime.color = HudFactory.Ink;
-            jumpAction.text = "CANCEL";
+            ShowJump(status, $"{secondsRemaining} S", statusColor, 0f, true);
         }
 
         internal void SetJumpProgress(float fraction, Color color)
         {
-            jumpMeter.SetProgress(fraction, color);
+            jumpTag.SetProgress(fraction);
+        }
+
+        /// <summary>Shows the jump tag for a while, headed by what just happened, such as dark matter taken aboard.</summary>
+        internal void PulseJump(string headline)
+        {
+            jumpHeadline = headline;
+            jumpHeadlineLeft = PulseTime;
+            jumpTag.Pulse(PulseTime);
+            jumpTag.SetContent(jumpHeadline, jumpStatus, jumpFigure, jumpColor);
         }
 
         /// <summary>
-        /// Shows the cruise drive: its state (READY, CHARGING, CRUISE, ORBIT), the figure on the right (the destination
-        /// ahead, seconds of charge or speed), what C does now, and the meter.
+        /// The cruise drive, shown while it matters: its state, the figure on the right (the destination ahead, seconds of
+        /// charge, speed or height), what B does now, and the meter.
         /// </summary>
-        internal void SetCruise(string status, Color statusColor, string value, string action, float fraction)
+        internal void SetCruise(bool wanted, string status, Color statusColor, string value, string action, float fraction)
         {
-            cruiseStatus.text = status;
-            cruiseStatus.color = statusColor;
-            cruiseValue.text = value;
-            cruiseAction.text = action;
-            cruisePlate.SetAccent(statusColor);
-            cruiseMeter.SetProgress(fraction, statusColor);
+            cruiseTag.SetHeld(wanted);
+            cruiseTag.SetContent(string.IsNullOrEmpty(action) ? "CRUISE DRIVE" : $"CRUISE  ·  {action}", status, value, statusColor);
+            cruiseTag.SetKeyVisible(!string.IsNullOrEmpty(action));
+            cruiseTag.SetProgress(fraction > 0f ? fraction : -1f);
         }
 
         internal void SetCruiseProgress(float fraction, Color color)
         {
-            cruiseMeter.SetProgress(fraction, color);
+            cruiseTag.SetProgress(fraction > 0f ? fraction : -1f);
         }
 
+        /// <summary>The hold: shown while full or while the manifest is open, and for a while after it changes.</summary>
         internal void SetCargo(CargoHold hold, bool expanded)
         {
-            bool full = hold.LoadFraction >= .9999f;
-            cargoTitle.text = full ? "HOLD FULL" : "CARGO HOLD";
-            cargoTitle.color = full ? HudFactory.WarningColor : HudFactory.Muted;
-            cargoMass.text = $"{hold.TotalMass:0.#}<size=17><color=#9EB6B9> / {hold.MassCapacity:0.#} t</color></size>";
-            cargoValue.text = $"{hold.TotalValue:N0} cr";
-            manifestToggle.text = expanded ? "CLOSE" : "MANIFEST";
-            Color color = full ? HudFactory.WarningColor : HudFactory.CargoColor;
-            cargoPlate.SetAccent(color);
-            loadMeter.SetProgress(hold.LoadFraction, color);
+            cargoFull = hold.LoadFraction >= .9999f;
+            cargoMass = $"{hold.TotalMass:0.#} / {hold.MassCapacity:0.#} T";
+            cargoValue = $"{hold.TotalValue:N0} CR";
+            manifestOpen = expanded;
+            cargoTag.SetHeld(cargoFull || expanded);
+            cargoTag.SetProgress(hold.LoadFraction);
+            ShowCargo();
+        }
+
+        /// <summary>Shows the cargo tag for a while, headed by what just happened, such as cargo taken aboard.</summary>
+        internal void PulseCargo(string headline)
+        {
+            cargoHeadline = headline;
+            cargoHeadlineLeft = PulseTime;
+            cargoTag.Pulse(PulseTime);
+            ShowCargo();
         }
 
         internal void SetManifest(CargoHold hold, CargoLoadHandling loadHandling, bool canJettison, int page)
@@ -293,7 +230,7 @@ namespace DeadCargo.UI
                     continue;
 
                 CargoStack stack = hold.Stacks[start + i];
-                manifestRows[i, 0].text = stack.Item.DisplayName;
+                manifestRows[i, 0].text = stack.Item.DisplayName.ToUpperInvariant();
                 manifestRows[i, 1].text = stack.Quantity.ToString();
                 manifestRows[i, 2].text = $"{stack.Mass:0.#} t";
                 manifestRows[i, 3].text = $"{stack.Value:N0} cr";
@@ -311,52 +248,107 @@ namespace DeadCargo.UI
                 handling.text = "";
             }
 
-            string jettison = canJettison ? "[J] Jettison heaviest" : "";
-            string pages = pageCount > 1 ? $"[PgUp/PgDn]  {page + 1}/{pageCount}" : "";
+            string jettison = canJettison ? "[J] JETTISON HEAVIEST" : "";
+            string pages = pageCount > 1 ? $"[PGUP/PGDN]  {page + 1}/{pageCount}" : "";
             manifestFooter.text = jettison.Length > 0 && pages.Length > 0 ? jettison + "       " + pages : jettison + pages;
-            float footer = ManifestRowsTop + Mathf.Max(1, count) * RowHeight + 5;
-            HudFactory.SetOffset(manifestFooter.rectTransform, 19, footer);
-            manifestPlate.rectTransform.sizeDelta = new Vector2(Width, footer + (manifestFooter.text.Length > 0 ? 28 : 5));
+            float footer = ManifestRowsTop + Mathf.Max(1, count) * RowHeight + 6f;
+            HudFactory.SetOffset(manifestFooter.rectTransform, 24f, footer);
+            manifest.sizeDelta = new Vector2(ManifestWidth, footer + (manifestFooter.text.Length > 0 ? 30f : 8f));
         }
 
         internal void SetNotice(string message, Color color)
         {
-            noticePlate.SetAccent(color);
-            notice.text = message;
+            noticeTag.SetContent(null, message, null, color);
         }
 
-        internal void SetNoticeOpacity(float alpha)
-        {
-            noticeGroup.alpha = alpha;
-        }
-
+        /// <summary>Which systems the HUD has, whether the manifest is open, and whether a notice is up.</summary>
         internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasCruise, bool hasPoint, bool isExpanded, bool hasNotice)
         {
-            float y = BottomMargin;
-            Stack(cargoPlate, hasCargo, ref y);
-            Stack(heatPlate, hasHeat, ref y);
-            Stack(jumpPlate, hasJumpDrive, ref y);
-            Stack(cruisePlate, hasCruise, ref y);
-            Stack(pointPlate, hasPoint, ref y);
-            Stack(manifestPlate, hasCargo && isExpanded, ref y);
-            Stack(noticePlate, hasNotice, ref y);
-            StackSize = y > BottomMargin ? new Vector2(RightMargin + Width, y - Gutter) : Vector2.zero;
+            heatTag.SetAvailable(hasHeat);
+            cargoTag.SetAvailable(hasCargo);
+            jumpTag.SetAvailable(hasJumpDrive);
+            cruiseTag.SetAvailable(hasCruise);
+            pointTag.SetAvailable(hasPoint);
+            noticeTag.SetHeld(hasNotice);
+
+            bool showManifest = hasCargo && isExpanded;
+            if (manifest.gameObject.activeSelf != showManifest)
+                manifest.gameObject.SetActive(showManifest);
         }
 
-        private static void Stack(HudPlate plate, bool visible, ref float y)
+        /// <summary>
+        /// Moves the tags for this frame, the stack starting above the band of the screen's bottom the status strip covers,
+        /// <paramref name="coveredBottom"/> reference pixels high.
+        /// </summary>
+        internal void Tick(float deltaTime, float coveredBottom)
         {
-            plate.gameObject.SetActive(visible);
-            if (!visible)
-                return;
+            if (cargoHeadline != null && (cargoHeadlineLeft -= deltaTime) <= 0f)
+            {
+                cargoHeadline = null;
+                ShowCargo();
+            }
 
-            RectTransform rect = plate.rectTransform;
-            rect.anchoredPosition = new Vector2(-RightMargin, y);
-            y += rect.sizeDelta.y + Gutter;
+            if (jumpHeadline != null && (jumpHeadlineLeft -= deltaTime) <= 0f)
+            {
+                jumpHeadline = null;
+                jumpTag.SetContent("JUMP DRIVE", jumpStatus, jumpFigure, jumpColor);
+            }
+
+            manifest.anchoredPosition = new Vector2(ManifestLeft, coveredBottom + ManifestLift);
+
+            float y = coveredBottom + StackLift;
+            float widest = 0f;
+            foreach (HudTag tag in stack)
+            {
+                tag.Tick(deltaTime, y, RightMargin);
+                if (tag.Shown <= 0f)
+                    continue;
+
+                y += (HudTag.Height + Gap) * tag.Shown;
+                widest = Mathf.Max(widest, tag.Width);
+            }
+
+            StackSize = widest > 0f ? new Vector2(RightMargin + widest, y) : Vector2.zero;
         }
 
-        private static HudPlate MakePlate(string name, RectTransform parent, float height)
+        private void ShowHeat()
         {
-            return HudFactory.Plate(name, parent, BottomRight, Width, height);
+            string label = hunters > 0 ? $"AUTHORITY  ·  {hunters} {(hunters == 1 ? "HUNTER" : "HUNTERS")}" : "AUTHORITY HEAT";
+            Color color = hunters > 0 && heatScore <= 0 ? HudFactory.WarningColor : heatColor;
+            heatTag.SetHeld(heatScore > 0 || hunters > 0);
+            heatTag.SetContent(label, heatStatus, heatScore.ToString("00"), color);
+            heatTag.SetProgress(heatFraction);
+        }
+
+        private void ShowJump(string status, string figure, Color color, float progress, bool held)
+        {
+            jumpStatus = status;
+            jumpFigure = figure;
+            jumpColor = color;
+            jumpTag.SetHeld(held);
+            jumpTag.SetContent(jumpHeadline ?? "JUMP DRIVE", status, figure, color);
+            jumpTag.SetProgress(progress);
+        }
+
+        private void ShowCargo()
+        {
+            string label = cargoHeadline ?? (cargoFull ? "HOLD FULL" : manifestOpen ? "CARGO  ·  CLOSE" : "CARGO HOLD");
+            cargoTag.SetContent(label, cargoMass, cargoValue, cargoFull ? HudFactory.WarningColor : HudFactory.CargoColor);
+        }
+
+        private static Text Caption(string name, RectTransform parent, string content, float x, float y, float width, float height, int size,
+            Color tint, TextAnchor alignment)
+        {
+            Text text = HudFactory.Label(name, parent, content, x, y, width, height, size, tint, alignment);
+            text.font = HudFactory.StickerFont;
+            return text;
+        }
+
+        private static Text Numbers(string name, RectTransform parent, float x, float y, float width)
+        {
+            Text text = HudFactory.Label(name, parent, "", x, y, width, RowHeight, 16, HudFactory.Ink, TextAnchor.MiddleRight);
+            text.font = HudFactory.FigureFont;
+            return text;
         }
     }
 }

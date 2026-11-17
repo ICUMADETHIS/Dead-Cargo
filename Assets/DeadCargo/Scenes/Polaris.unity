@@ -616,6 +616,11 @@ PrefabInstance:
       objectReference: {fileID: 1576657373}
     - target: {fileID: 114539922474783570, guid: fa121e623b5943845b46f6357b72aff2,
         type: 3}
+      propertyPath: autoRollEnabled
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 114539922474783570, guid: fa121e623b5943845b46f6357b72aff2,
+        type: 3}
       propertyPath: debugInitialization
       value: 0
       objectReference: {fileID: 0}
@@ -672,6 +677,10 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 707018720}
+    - targetCorrespondingSourceObject: {fileID: 4451864936151626, guid: fa121e623b5943845b46f6357b72aff2,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 990303706}
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: fa121e623b5943845b46f6357b72aff2, type: 3}
 --- !u!1 &283108237
@@ -1700,6 +1709,67 @@ Transform:
   - {fileID: 855403756}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &990303705
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 990303706}
+  - component: {fileID: 990303707}
+  m_Layer: 0
+  m_Name: LevelFlightControls
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &990303706
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 990303705}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1954953501}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &990303707
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 990303705}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c65de6a2bd83dd4382a793545ab1e22, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Controls.LevelFlightInput
+  activateInputAtStart: 1
+  inputUpdateConditions:
+    evaluationType: 0
+    conditionsList: []
+    onConditionsMet:
+      m_PersistentCalls:
+        m_Calls: []
+    onConditionsFailed:
+      m_PersistentCalls:
+        m_Calls: []
+  debugInitialization: 0
+  startingVehicle: {fileID: 0}
+  specifyCompatibleVehicleClasses: 0
+  compatibleVehicleClasses: []
+  delay: 0.5
+  strength: 0.04
+  maxRoll: 0.2
 --- !u!1 &1068206314
 GameObject:
   m_ObjectHideFlags: 0
@@ -3068,6 +3138,14 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 1576657437}
+    - targetCorrespondingSourceObject: {fileID: 1188162684729026, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1576657439}
+    - targetCorrespondingSourceObject: {fileID: 1188162684729026, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1576657438}
   m_SourcePrefab: {fileID: 100100000, guid: bfb4e62c148bb074b91ba5ccba7d04a1, type: 3}
 --- !u!114 &1576657373 stripped
 MonoBehaviour:
@@ -3186,14 +3264,60 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Flight.CruiseDrive
   chargeTime: 3
-  rate: 0.2
-  minSpeed: 2500
+  alignTolerance: 2
+  fieldLimit: 0.05
+  turnRate: 90
+  turnEase: 3
+  approachRate: 0.2
+  crossRate: 1
+  slowestSpeed: 2000
   maxSpeed: 400000
+  sectorSpeed: 4000
   response: 1.5
-  dropHeight: 3000
+  arrivalMargin: 5000
+  airlessArrival: 20000
   homeMargin: 10000
   exitSpeed: 300
   dustSpeed: 1500
+--- !u!114 &1576657438
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 135507684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 835f8e8ff81d4e7498e12ef0517fa841, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Flight.EntryGlow
+  shader: {fileID: 4800000, guid: 15f51f7b58022614498210f86b8e468c, type: 3}
+  shellScale: 1.3
+  bowReach: 0.3
+  brightness: 1.6
+  response: 4
+  lightIntensity: 4
+  lightColor: {r: 1, g: 0.55, b: 0.25, a: 1}
+--- !u!114 &1576657439
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 135507684}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9f707e66f38d1e42b0dd2e9e2ae1f55, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Flight.AtmosphereFlight
+  airReach: 2
+  groundFactor: 1.5
+  topFactor: 25
+  curve: 1
+  range: 40000
+  surfaceGravity: 6
+  glowStart: 0.06
+  glowFull: 0.13
 --- !u!1 &1632265999
 GameObject:
   m_ObjectHideFlags: 0
@@ -4049,7 +4173,6 @@ MonoBehaviour:
   layer: 13
   groundRange: 40000
   groundDetail: 2
-  surfaceGravity: 6
   groundNearClip: 0.5
 --- !u!1 &2067685829
 GameObject:

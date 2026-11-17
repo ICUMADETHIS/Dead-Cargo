@@ -73,6 +73,7 @@ namespace DeadCargo.EditorTools.Diagnostics
             CheckSunDirection(result);
             CheckBackdrop(result);
             CheckCruise(result);
+            CheckDescent(result);
             CheckField(result);
             CheckRockShapes(result);
             CheckIcosphere(result);
@@ -714,15 +715,17 @@ namespace DeadCargo.EditorTools.Diagnostics
                 $"a 500 km planet 30° across stands {distance:0} km away (1,932 expected)");
         }
 
-        // The cruise drive's maths, and the trips it was tuned for: from Polaris's belt to Ixara's orbit and back, and out to
-        // a smaller, further planet. The trip follows the drive's own rule (CruiseDrive.Cruise): ease towards the target
-        // speed, step, and stop at a planet's floor.
+        // The autopilot's maths, and the trips it was tuned for: from Polaris's belt to the top of Ixara's atmosphere and
+        // back, lifting off from Ixara's far side, and out to a smaller, further planet. Each trip flies the drive's own rule
+        // (CruiseDrive.Steer and Cruise) at 60 frames a second: charge while turning to the course, then turn, ease towards
+        // the target speed and step.
         private static void CheckCruise(Result result)
         {
             CruiseSettings settings = CruiseSettings.Default;
-            bool speeds = CruiseMath.TargetSpeed(0.0, settings) == settings.MinSpeed &&
-                          CruiseMath.TargetSpeed(1e12, settings) == settings.MaxSpeed &&
-                          CruiseMath.TargetSpeed(1e6, settings) > CruiseMath.TargetSpeed(1e5, settings);
+            bool speeds = CruiseMath.SurfaceLimit(10000.0, 1.0, settings) == settings.ApproachRate * 10000.0 &&
+                          CruiseMath.SurfaceLimit(10000.0, 0.0, settings) == settings.CrossRate * 10000.0 &&
+                          CruiseMath.SurfaceLimit(10000.0, -1.0, settings) == settings.CrossRate * 10000.0 &&
+                          CruiseMath.SurfaceLimit(-5.0, 1.0, settings) == 0.0;
 
             var boxMin = new double3(-20000.0, -3000.0, -20000.0);
             var boxMax = new double3(20000.0, 3000.0, 20000.0);
@@ -734,28 +737,72 @@ namespace DeadCargo.EditorTools.Diagnostics
                            double.IsPositiveInfinity(CruiseMath.DistanceToSphere(double3.zero, new double3(0, 1, 0), centre, 1000.0)) &&
                            CruiseMath.DistanceToSphere(centre, new double3(1, 0, 0), centre, 1000.0) == 0.0;
 
-            result.Check(speeds && boxes && spheres, "Cruise: speed and distances",
-                "speed holds to its limits and rises with clearance; distances to the sector's box and to a sphere are exact");
+            // A quarter turn settles; a half turn, with no single way round, still starts.
+            const double frame = 1.0 / 60.0;
+            var nose = new double3(0.0, 0.0, 1.0);
+            var right = new double3(1.0, 0.0, 0.0);
+            double turnSeconds = 0.0;
+            while (CruiseMath.AngleBetween(nose, right) > math.radians(1.0) && turnSeconds < 10.0)
+            {
+                nose = CruiseMath.Turn(nose, right, settings, frame);
+                turnSeconds += frame;
+            }
 
-            // Ixara: 500 km in radius, 30° across, so 1,932 km out. Halonix: 500 km, 5° across, 11,464 km out.
+            double3 halfTurn = CruiseMath.Turn(new double3(0.0, 0.0, 1.0), new double3(0.0, 0.0, -1.0), settings, 0.1);
+            bool turns = turnSeconds > 0.9 && turnSeconds < 3.0 && Math.Abs(math.length(halfTurn) - 1.0) < 1e-9 &&
+                         CruiseMath.AngleBetween(halfTurn, new double3(0.0, 0.0, 1.0)) > 0.1;
+
+            result.Check(speeds && boxes && spheres && turns, "Cruise: speed, distances and turning",
+                $"braking towards a surface, free across or away from it; box and sphere distances exact; a quarter turn settles in {turnSeconds:0.0} s");
+
+            // Fields on the route: one ahead blocks, one beside it does not, a clearing is no field, and starting in one blocks at once.
+            var regions = new List<RegionVolume>
+            {
+                RegionVolume.Create(new float3(0f, 0f, 8000f), new float3(2000f), 0f, 1f, 0.3f, SectorRegionKind.AsteroidField),
+                RegionVolume.Create(new float3(-8000f, 0f, 0f), new float3(1500f), 0f, 1f, 0.3f, SectorRegionKind.Clearing)
+            };
+            var set = new LayoutRegionSet(regions);
+            var fieldMin = new float3(-20000f, -3000f, -20000f);
+            float3 fieldMax = -fieldMin;
+            float ahead = CruiseRoute.FieldAlong(set, float3.zero, new float3(0f, 0f, 2e6f), fieldMin, fieldMax, 50f, 0.05f);
+            float beside = CruiseRoute.FieldAlong(set, float3.zero, new float3(2e6f, 0f, 0f), fieldMin, fieldMax, 50f, 0.05f);
+            float clearing = CruiseRoute.FieldAlong(set, float3.zero, new float3(-2e6f, 0f, 0f), fieldMin, fieldMax, 50f, 0.05f);
+            float inside = CruiseRoute.FieldAlong(set, new float3(0f, 0f, 8000f), new float3(2e6f, 0f, 8000f), fieldMin, fieldMax, 50f, 0.05f);
+            result.Check(ahead > 6000f && ahead < 6700f && float.IsPositiveInfinity(beside) && float.IsPositiveInfinity(clearing) && inside == 0f,
+                "Cruise: fields block the route",
+                $"a field 6 km ahead blocks at {ahead / 1000f:0.0} km; one beside the route, and a clearing, do not; starting in one blocks at once");
+
+            // Ixara: 500 km in radius, 30° across, so 1,932 km out, with 30 km of air and a 5 km margin. Halonix: 500 km, 5°
+            // across, 11,464 km out.
             const double radius = 500000.0;
-            var direction = math.normalize(new double3(0.6, 0.1, 0.79));
-            double3 ixara = direction * (radius / Math.Sin(15.0 * Math.PI / 180.0));
+            const double arrival = 35000.0;
+            double3 ixara = math.normalize(new double3(0.6, 0.1, 0.79)) * (radius / Math.Sin(15.0 * Math.PI / 180.0));
             double3 halonix = math.normalize(new double3(-0.7, -0.05, 0.4)) * (radius / Math.Sin(2.5 * Math.PI / 180.0));
+            var bodies = new[]
+            {
+                new CruiseBody { Centre = ixara, Radius = radius, ArrivalHeight = arrival },
+                new CruiseBody { Centre = halonix, Radius = radius, ArrivalHeight = arrival }
+            };
+            var sector = new CruiseSector { Min = boxMin, Max = boxMax, Reach = 10000.0 };
             var belt = new double3(8000.0, 0.0, 5000.0);
-            const double homeMargin = 10000.0;
+            var away = new double3(0.0, 0.0, -1.0);
 
-            Trip outbound = Fly(belt, ixara, radius, boxMin, boxMax, homeMargin, false, settings);
-            Trip homeward = Fly(outbound.End, double3.zero, 0.0, boxMin, boxMax, homeMargin, true, settings, ixara, radius);
-            Trip further = Fly(belt, halonix, radius, boxMin, boxMax, homeMargin, false, settings);
+            Trip outbound = Autopilot(belt, away, 0, bodies, sector, settings);
+            Trip homeward = Autopilot(outbound.End, outbound.Nose, CruiseAutopilot.Home, bodies, sector, settings);
+            double3 farSide = math.normalize(ixara);
+            Trip liftoff = Autopilot(ixara + farSide * (radius + 200.0), farSide, CruiseAutopilot.Home, bodies, sector, settings);
+            Trip further = Autopilot(belt, away, 1, bodies, sector, settings);
 
-            result.Check(outbound.Arrived && outbound.Seconds < 60.0 && outbound.LeftHomeAt < 15.0 && Math.Abs(outbound.Altitude - settings.DropHeight) < 1.0,
+            result.Check(outbound.Arrived && outbound.Seconds < 45.0 && outbound.LeftHomeAt < 12.0 && Math.Abs(outbound.Altitude - arrival) < 1.0,
                 "Cruise: Polaris to above Ixara",
-                $"out of reach of the sector in {outbound.LeftHomeAt:0.0} s, dropped out {outbound.Altitude / 1000.0:0.0} km above it after {outbound.Seconds:0.0} s, " +
-                $"fastest {outbound.PeakSpeed / 1000.0:N0} km/s");
-            result.Check(homeward.Arrived && homeward.Seconds < 60.0, "Cruise: Ixara back to Polaris",
-                $"within {homeMargin / 1000.0:0} km of the sector after {homeward.Seconds:0.0} s");
-            result.Check(further.Arrived && further.Seconds < 90.0 && further.PeakSpeed <= settings.MaxSpeed,
+                $"turned round and out of the sector's reach in {outbound.LeftHomeAt:0.0} s, arrived {outbound.Altitude / 1000.0:0.0} km above " +
+                $"it, at the top of its air, after {outbound.Seconds:0.0} s, fastest {outbound.PeakSpeed / 1000.0:N0} km/s");
+            result.Check(homeward.Arrived && homeward.Seconds < 45.0, "Cruise: Ixara back to Polaris",
+                $"within {sector.Reach / 1000.0:0} km of the sector after {homeward.Seconds:0.0} s");
+            result.Check(liftoff.Arrived && liftoff.Rounded && liftoff.Lowest > 150.0 && liftoff.Seconds < 75.0,
+                "Cruise: lifting off from Ixara's far side",
+                $"climbed and went round the planet, never below {liftoff.Lowest:N0} m, home after {liftoff.Seconds:0.0} s");
+            result.Check(further.Arrived && further.Seconds < 75.0 && further.PeakSpeed <= settings.MaxSpeed,
                 "Cruise: out to a further planet",
                 $"above a planet 11,464 km out after {further.Seconds:0.0} s, fastest {further.PeakSpeed / 1000.0:N0} km/s");
 
@@ -763,65 +810,74 @@ namespace DeadCargo.EditorTools.Diagnostics
             double atSurface = PlanetPhysics.GravityAt(radius, radius, 6.0);
             double atTwice = PlanetPhysics.GravityAt(radius * 2.0, radius, 6.0);
             double below = PlanetPhysics.GravityAt(radius * 0.5, radius, 6.0);
-            double atDrop = PlanetPhysics.GravityAt(radius + settings.DropHeight, radius, 6.0);
+            double atArrival = PlanetPhysics.GravityAt(radius + arrival, radius, 6.0);
             result.Check(Math.Abs(atSurface - 6.0) < 1e-9 && Math.Abs(atTwice - 1.5) < 1e-9 && below == atSurface &&
-                         PlanetPhysics.GravityAt(radius, 0.0, 6.0) == 0.0 && atDrop < atSurface && atDrop > 5.9,
+                         PlanetPhysics.GravityAt(radius, 0.0, 6.0) == 0.0 && atArrival < atSurface && atArrival > 5.0,
                 "Ground: gravity",
-                $"{atSurface:0.00} m/s² at the surface, {atDrop:0.00} at the drop height, {atTwice:0.00} at twice the radius, none without a planet");
+                $"{atSurface:0.00} m/s² at the surface, {atArrival:0.00} where cruise ends, {atTwice:0.00} at twice the radius, none without a planet");
         }
 
         private struct Trip
         {
             public bool Arrived;
+            public bool Rounded;
             public double Seconds;
             public double LeftHomeAt;
             public double PeakSpeed;
             public double Altitude;
+            public double Lowest;
             public double3 End;
+            public double3 Nose;
         }
 
-        // Flies straight at the target: a planet's floor, or with home set, the sector's reach. A planet passed along the
-        // way still sets the clearance, as it does for the drive.
-        private static Trip Fly(double3 start, double3 target, double targetRadius, double3 boxMin, double3 boxMax, double homeMargin,
-            bool home, in CruiseSettings settings, double3 otherCentre = default, double otherRadius = 0.0)
+        // Flies the autopilot from start, its nose along a unit direction, to a planet's arrival height or the sector's reach.
+        private static Trip Autopilot(double3 start, double3 nose, int destination, CruiseBody[] bodies, in CruiseSector sector,
+            in CruiseSettings settings)
         {
             const double step = 1.0 / 60.0;
             const double limit = 600.0;
-            double3 direction = math.normalize(target - start);
+            const double chargeTime = 3.0;
+            const double alignTolerance = 2.0;
+            double3 aim = destination >= 0 ? bodies[destination].Centre : (sector.Min + sector.Max) * 0.5;
             double3 position = start;
             double speed = 0.0;
-            var trip = new Trip { LeftHomeAt = double.NaN };
+            bool cruising = false;
+            var trip = new Trip { LeftHomeAt = double.NaN, Lowest = double.PositiveInfinity };
 
             for (double time = 0.0; time < limit; time += step)
             {
-                double toBox = CruiseMath.DistanceToBox(position, boxMin, boxMax);
-                if (double.IsNaN(trip.LeftHomeAt) && toBox > homeMargin)
+                double3 course = CruiseAutopilot.Course(position, aim, bodies, destination, out int around);
+                trip.Rounded |= around >= 0;
+                double error = math.degrees(CruiseMath.AngleBetween(nose, course));
+                nose = CruiseMath.Turn(nose, course, settings, step);
+                if (!cruising)
+                {
+                    cruising = time + step >= chargeTime && error <= alignTolerance;
+                    continue;
+                }
+
+                if (double.IsNaN(trip.LeftHomeAt) && CruiseMath.DistanceToBox(position, sector.Min, sector.Max) > sector.Reach)
                     trip.LeftHomeAt = time;
 
-                double clearance = toBox;
-                if (!home)
-                    clearance = Math.Min(clearance, CruiseMath.Altitude(position, target, targetRadius));
-                else if (otherRadius > 0.0)
-                    clearance = Math.Min(clearance, CruiseMath.Altitude(position, otherCentre, otherRadius));
-
-                speed = CruiseMath.Ease(speed, CruiseMath.TargetSpeed(clearance, settings), settings.Response, step);
+                double target = CruiseAutopilot.TargetSpeed(position, nose, bodies, destination, sector, settings);
+                speed = CruiseMath.Ease(speed, target, settings.Response, step);
                 trip.PeakSpeed = Math.Max(trip.PeakSpeed, speed);
                 double move = speed * step;
 
-                if (!home)
+                double toArrival = CruiseAutopilot.ToArrival(position, nose, bodies, destination);
+                if (toArrival <= move)
                 {
-                    double toFloor = CruiseMath.DistanceToSphere(position, direction, target, targetRadius + settings.DropHeight);
-                    if (toFloor <= move)
-                    {
-                        position += direction * toFloor;
-                        trip.Arrived = true;
-                        trip.Seconds = time + step;
-                        break;
-                    }
+                    position += nose * toArrival;
+                    trip.Arrived = true;
+                    trip.Seconds = time + step;
+                    break;
                 }
 
-                position += direction * move;
-                if (home && CruiseMath.DistanceToBox(position, boxMin, boxMax) <= homeMargin)
+                position += nose * move;
+                foreach (CruiseBody body in bodies)
+                    trip.Lowest = Math.Min(trip.Lowest, CruiseMath.Altitude(position, body.Centre, body.Radius));
+
+                if (destination == CruiseAutopilot.Home && CruiseMath.DistanceToBox(position, sector.Min, sector.Max) <= sector.Reach)
                 {
                     trip.Arrived = true;
                     trip.Seconds = time + step;
@@ -830,8 +886,118 @@ namespace DeadCargo.EditorTools.Diagnostics
             }
 
             trip.End = position;
-            trip.Altitude = home ? 0.0 : CruiseMath.Altitude(position, target, targetRadius);
+            trip.Nose = nose;
+            trip.Altitude = destination >= 0 ? CruiseMath.Altitude(position, bodies[destination].Centre, bodies[destination].Radius) : 0.0;
             return trip;
+        }
+
+        // The flight down: speed and density with height, then a dive from where cruise ends to the ground, flown by the
+        // kit's own engine rule (thrust against drag, VehicleEngines3D) with Atmosphere Flight's extra thrust, lighter drag
+        // and gravity, at 60 frames a second.
+        private static void CheckDescent(Result result)
+        {
+            AirSettings air = AirSettings.Default;
+            const double airHeight = 60000.0;
+            const double radius = 500000.0;
+            const double arrival = airHeight + 5000.0;
+
+            double atThirty = PlanetPhysics.SpeedFactor(30000.0, airHeight, air);
+            bool factors = Math.Abs(PlanetPhysics.SpeedFactor(0.0, airHeight, air) - air.GroundFactor) < 1e-9 &&
+                           Math.Abs(PlanetPhysics.SpeedFactor(airHeight, airHeight, air) - air.TopFactor) < 1e-9 &&
+                           atThirty > air.GroundFactor && atThirty < air.TopFactor &&
+                           Math.Abs(PlanetPhysics.SpeedFactor(airHeight + air.Range * 0.25, airHeight, air) - air.TopFactor) < 1e-9 &&
+                           Math.Abs(PlanetPhysics.SpeedFactor(airHeight + air.Range, airHeight, air) - 1.0) < 1e-9 &&
+                           PlanetPhysics.SpeedFactor(1000.0, 0.0, air) == 1.0;
+
+            // The planet's reach, which also turns level flight from the planet's horizon to the sector's.
+            bool reach = PlanetPhysics.Reach(20000.0, airHeight, air) == 1.0 &&
+                         PlanetPhysics.Reach(airHeight + air.Range * 0.5, airHeight, air) == 1.0 &&
+                         PlanetPhysics.Reach(airHeight + air.Range * 0.75, airHeight, air) is > 0.0 and < 1.0 &&
+                         PlanetPhysics.Reach(airHeight + air.Range, airHeight, air) == 0.0;
+            bool density = Math.Abs(PlanetPhysics.AirDensity(0.0, airHeight) - 1.0) < 1e-9 &&
+                           PlanetPhysics.AirDensity(airHeight, airHeight) == 0.0 &&
+                           PlanetPhysics.AirDensity(30000.0, airHeight) < PlanetPhysics.AirDensity(10000.0, airHeight) &&
+                           PlanetPhysics.AirDensity(5000.0, 0.0) == 0.0;
+            result.Check(factors && density && reach, "Descent: speed and air with height",
+                $"top speed {air.GroundFactor:0.0}x open space at the ground, {atThirty:0.0}x at 30 km, {air.TopFactor:0}x at the top of the air, " +
+                $"back to 1x {air.Range / 1000.0:0} km above it, where level flight turns to the sector's; air thins from 1 at sea level to none at {airHeight / 1000.0:0} km");
+
+            Dive dive = DiveToGround(arrival, airHeight, radius, air);
+            result.Check(dive.Landed && dive.Seconds > 40.0 && dive.Seconds < 75.0 && dive.GlowTop < arrival && dive.GlowTop > 30000.0 &&
+                         dive.GlowBottom > 5000.0,
+                "Descent: a dive to the ground",
+                $"from {arrival / 1000.0:0} km at full throttle, nose down: the ground in {dive.Seconds:0.0} s; {dive.SpeedAtThirty:N0} m/s at 30 km, " +
+                $"{dive.SpeedAtTen:N0} at 10 km, {dive.SpeedAtGround:N0} at the ground; the hull glows from {dive.GlowTop / 1000.0:0} km " +
+                $"down to {dive.GlowBottom / 1000.0:0} km, brightest at {dive.GlowPeak / 1000.0:0} km");
+        }
+
+        private struct Dive
+        {
+            public bool Landed;
+            public double Seconds;
+            public double SpeedAtThirty;
+            public double SpeedAtTen;
+            public double SpeedAtGround;
+            public double GlowTop;
+            public double GlowBottom;
+            public double GlowPeak;
+        }
+
+        // The fighter: 1 t, drag 3, 400 N forward at full throttle, so 133 m/s in open space. Cruise hands over at the speed
+        // the air allows (AtmosphereFlight.OnCruiseDropped); drag falls and thrust rises by the root of the speed factor each.
+        private static Dive DiveToGround(double start, double airHeight, double radius, in AirSettings air)
+        {
+            const double step = 1.0 / 60.0;
+            const double mass = 1.0;
+            const double damping = 3.0;
+            const double force = 400.0;
+            const double surfaceGravity = 6.0;
+            const double visibleGlow = 0.05;
+
+            double altitude = start;
+            double speed = force / mass / damping * PlanetPhysics.SpeedFactor(start, airHeight, air);
+            double brightest = 0.0;
+            var dive = new Dive { GlowTop = double.NaN, GlowBottom = double.NaN };
+
+            for (double time = 0.0; time < 600.0; time += step)
+            {
+                double scale = Math.Sqrt(PlanetPhysics.SpeedFactor(altitude, airHeight, air));
+                double gravity = PlanetPhysics.GravityAt(radius + altitude, radius, surfaceGravity);
+                speed += (force * scale / mass + gravity) * step;
+                speed /= 1.0 + damping / scale * step;
+
+                double before = altitude;
+                altitude -= speed * step;
+                if (before > 30000.0 && altitude <= 30000.0)
+                    dive.SpeedAtThirty = speed;
+                if (before > 10000.0 && altitude <= 10000.0)
+                    dive.SpeedAtTen = speed;
+
+                double glow = PlanetPhysics.Glow(PlanetPhysics.Heating(PlanetPhysics.AirDensity(altitude, airHeight), speed), air);
+                if (glow > visibleGlow)
+                {
+                    if (double.IsNaN(dive.GlowTop))
+                        dive.GlowTop = altitude;
+
+                    dive.GlowBottom = altitude;
+                }
+
+                if (glow > brightest)
+                {
+                    brightest = glow;
+                    dive.GlowPeak = altitude;
+                }
+
+                if (altitude <= 0.0)
+                {
+                    dive.Landed = true;
+                    dive.Seconds = time + step;
+                    dive.SpeedAtGround = speed;
+                    break;
+                }
+            }
+
+            return dive;
         }
 
         private static bool SameSystem(List<BackdropPlan> a, List<BackdropPlan> b)
