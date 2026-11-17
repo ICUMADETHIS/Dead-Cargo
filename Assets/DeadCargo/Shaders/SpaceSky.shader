@@ -1,8 +1,10 @@
 // Dead Cargo's procedural space sky: deep space as an endless dark void.
 // Layers, farthest first: a near-black backdrop stepping up faintly towards a galactic plane, distant galaxies, a
 // faint far nebula, then the near nebula: muted gas lit softly from one side, cut through by dark dust lanes. Sparse
-// stars sit on top. Softness blends the steps from crisp cel bands to soft gas; ink and hatching give a comic look
-// when wanted. Motion is pure maths on time: cloud edges creep, the far layer drifts, stars shimmer.
+// stars sit on top, and the sun on top of everything: a distant star seen as a boiling sphere with a ragged corona,
+// drawn wherever the scene's sun light comes from, so the sky, the ships and the rocks always agree on where the
+// light is. Softness blends the steps from crisp cel bands to soft gas; ink and hatching give a comic look when
+// wanted. Motion is pure maths on time: cloud edges creep, the far layer drifts, stars shimmer, the sun boils and turns.
 // The nebula's shape is baked into a small two-channel map (see SpaceSkyBaker), so the costly noise runs once in
 // the editor and the sky costs four reads of that map and a little maths per pixel.
 // Hard edges are softened over exactly one pixel, so the sky stays crisp at any resolution.
@@ -19,6 +21,25 @@ Shader "DeadCargo/Space Sky"
         _FarDrift ("Far Drift", Range(-2, 2)) = 0.15
         _StarTwinkle ("Twinkle", Range(0, 1)) = 0.15
         _TwinkleSpeed ("Twinkle Speed", Range(0, 4)) = 0.8
+        _SunBoil ("Sun Boil", Range(0, 2)) = 0.25
+        _SunSpin ("Sun Spin", Range(-5, 5)) = 0.4
+
+        _SunSize ("Sun Size", Range(0.2, 60)) = 28
+        _SunCoreColor ("Hot", Color) = (1, 0.92, 0.6, 1)
+        _SunSurfaceColor ("Surface", Color) = (0.98, 0.48, 0.12, 1)
+        _SunSpotColor ("Cool", Color) = (0.42, 0.08, 0.03, 1)
+        _SunBrightness ("Brightness", Range(0, 2)) = 1.1
+        [IntRange] _SunSteps ("Tone Steps", Range(2, 8)) = 5
+        _SunSoftness ("Softness", Range(0, 1)) = 0.55
+        _SunGranules ("Granules", Range(1, 30)) = 9
+        _SunVeins ("Veins", Range(0, 1)) = 0.25
+        _SunLimbDarkening ("Limb Darkening", Range(0, 1)) = 0.65
+        _SunCoronaColor ("Corona", Color) = (1, 0.45, 0.12, 1)
+        _SunCorona ("Corona Strength", Range(0, 2)) = 0.4
+        _SunCoronaSize ("Corona Size", Range(0.2, 40)) = 5
+        _SunFlares ("Flares", Range(0, 1)) = 0.5
+        _SunLightTint ("Light Colour", Range(0, 1)) = 0.3
+        _SunLightsClouds ("Lights the Clouds", Range(0, 1)) = 1
 
         _VoidColor ("Void", Color) = (0.006, 0.008, 0.016, 1)
         _PlaneColor ("Galactic Plane", Color) = (0.02, 0.027, 0.045, 1)
@@ -95,6 +116,7 @@ Shader "DeadCargo/Space Sky"
             #pragma target 3.5
 
             #include "UnityCG.cginc"
+            #include "UnityLightingCommon.cginc"
 
             sampler2D _NebulaMap;
             float4 _NebulaMap_TexelSize;
@@ -108,6 +130,29 @@ Shader "DeadCargo/Space Sky"
             float _FarDrift;
             float _StarTwinkle;
             float _TwinkleSpeed;
+            float _SunBoil;
+            float _SunSpin;
+
+            float _SunSize;
+            float4 _SunCoreColor;
+            float4 _SunSurfaceColor;
+            float4 _SunSpotColor;
+            float _SunBrightness;
+            float _SunSteps;
+            float _SunSoftness;
+            float _SunGranules;
+            float _SunVeins;
+            float _SunLimbDarkening;
+            float4 _SunCoronaColor;
+            float _SunCorona;
+            float _SunCoronaSize;
+            float _SunFlares;
+            float _SunLightTint;
+            float _SunLightsClouds;
+
+            // The darkness of space, set by Space Lighting (Scripts/Visuals/SpaceLighting.cs). y: how much darker the
+            // sky is, 0 to 1. Zero, as with no Space Lighting in the scene, leaves the sky unchanged.
+            float4 _SpaceShade;
 
             float4 _VoidColor;
             float4 _PlaneColor;
@@ -210,6 +255,39 @@ Shader "DeadCargo/Space Sky"
             // How much a dust lane darkens what lies behind it.
             static const float DustDarkening = 0.8;
 
+            // Below this brightness the scene has no sun light, and no sun is drawn.
+            static const float MinSunLight = 0.001;
+
+            // Narrowest tone step edge on the sun's surface, as a share of a step. Its pixels sit inside a dynamic
+            // branch, where screen derivatives are not available, so softness has a floor instead.
+            static const float SunMinStepWidth = 0.04;
+
+            // The surface: how far the slow field bends the gas, and how thin the bright veins are.
+            static const float SunBend = 0.5;
+            static const float SunVeinSharpness = 10.0;
+            static const float SunFineGrain = 0.08;
+
+            // A tight halo hugs the limb, out to this share of Corona Size, at this strength.
+            static const float SunHaloReach = 0.12;
+            static const float SunHaloStrength = 0.8;
+
+            // The corona fades by this rate over its reach, which varies from short to long round the rim in fine
+            // streamers, so it is ragged rather than round. It ends at Fade Out times the reach.
+            static const float SunCoronaFalloff = 3.5;
+            static const float SunStreamerShort = 0.7;
+            static const float SunStreamerLong = 1.3;
+            static const float SunStreamerDetail = 9.0;
+            static const float SunCoronaFadeOut = 1.6;
+
+            // Flame tongues: how many round the rim, the share of noise that becomes flame, and how high they rise as
+            // a share of Corona Size.
+            static const float SunFlameDetail = 5.0;
+            static const float SunFlameCut = 0.35;
+            static const float SunFlameHeight = 0.35;
+
+            // Time wraps before it grows large enough to cost the noise its precision.
+            static const float SunTimeWrap = 1000.0;
+
             struct Attributes
             {
                 float4 vertex : POSITION;
@@ -223,6 +301,9 @@ Shader "DeadCargo/Space Sky"
                 float3 farDirection : TEXCOORD1;
                 float3 light : TEXCOORD2;
                 float3 dustDirection : TEXCOORD3;
+
+                // Towards the sun in sky space, and 1 when the scene has a sun light, else 0.
+                float4 sun : TEXCOORD4;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -503,6 +584,126 @@ Shader "DeadCargo/Space Sky"
                 return lerp(color, layer.rgb, layer.a * visibility);
             }
 
+            // Gradient noise for the sun, smooth and about -1 to 1. It only runs on the pixels round the sun.
+            float3 SunGradient(float3 cell)
+            {
+                float3 h = float3(dot(cell, float3(127.1, 311.7, 74.7)), dot(cell, float3(269.5, 183.3, 246.1)),
+                    dot(cell, float3(113.5, 271.9, 124.6)));
+                return frac(sin(h) * 43758.5453) * 2 - 1;
+            }
+
+            float SunNoise(float3 p)
+            {
+                float3 i = floor(p);
+                float3 f = p - i;
+                float3 u = f * f * f * (f * (f * 6 - 15) + 10);
+                float n000 = dot(SunGradient(i), f);
+                float n100 = dot(SunGradient(i + float3(1, 0, 0)), f - float3(1, 0, 0));
+                float n010 = dot(SunGradient(i + float3(0, 1, 0)), f - float3(0, 1, 0));
+                float n110 = dot(SunGradient(i + float3(1, 1, 0)), f - float3(1, 1, 0));
+                float n001 = dot(SunGradient(i + float3(0, 0, 1)), f - float3(0, 0, 1));
+                float n101 = dot(SunGradient(i + float3(1, 0, 1)), f - float3(1, 0, 1));
+                float n011 = dot(SunGradient(i + float3(0, 1, 1)), f - float3(0, 1, 1));
+                float n111 = dot(SunGradient(i + float3(1, 1, 1)), f - float3(1, 1, 1));
+                float4 alongX = lerp(float4(n000, n010, n001, n011), float4(n100, n110, n101, n111), u.x);
+                float2 alongY = lerp(alongX.xz, alongX.yw, u.y);
+
+                // Gradient noise rarely passes about 0.6, so it is scaled to use the whole range.
+                return lerp(alongY.x, alongY.y, u.z) * 1.6;
+            }
+
+            // Four layers, the last a faint fine grain, so the surface holds detail when the star fills much of the view.
+            float SunFractal(float3 p)
+            {
+                return SunNoise(p) * 0.55 + SunNoise(p * 2.1 + 3.7) * 0.3 + SunNoise(p * 4.3 + 7.1) * 0.15 +
+                    SunNoise(p * 8.9 + 1.9) * SunFineGrain;
+            }
+
+            // Steps a tone of 0 to 1 into Tone Steps flat tones; Softness widens each edge into a blend, as the
+            // nebula's Softness does.
+            float SunTone(float tone)
+            {
+                float steps = max(_SunSteps, 2) - 1;
+                float x = saturate(tone) * steps;
+                float whole = floor(x);
+                float width = lerp(SunMinStepWidth, 1, _SunSoftness);
+                return (whole + saturate((x - whole - 0.5) / width + 0.5)) / steps;
+            }
+
+            // The sun's surface and corona, for the pixels near it only. Angles are in radians; disc is the share of
+            // the pixel the sphere covers.
+            float3 SunNear(float3 color, float3 d, float3 towardsSun, float angle, float radius, float coronaSize, float disc)
+            {
+                // Where on the face of the sun this pixel looks: across the disc, -1 to 1, and towards the viewer.
+                float3 side = abs(towardsSun.y) < 0.99 ? float3(0, 1, 0) : float3(1, 0, 0);
+                float3 right = normalize(cross(side, towardsSun));
+                float3 up = cross(towardsSun, right);
+                float2 across = float2(dot(d, right), dot(d, up)) / max(sin(radius), MinWidth);
+                float time = fmod(_Time.y, SunTimeWrap);
+                float boil = time * _SunBoil;
+                float3 light = _LightColor0.rgb;
+                float3 tint = lerp(1, light / max(max(light.r, max(light.g, light.b)), MinWidth), _SunLightTint);
+
+                // The surface, only where the disc covers the pixel: most of this region is corona.
+                float3 face = 0;
+                UNITY_BRANCH
+                if (disc > 0)
+                {
+                    // The sphere turns about its own axis.
+                    float facing = sqrt(saturate(1 - dot(across, across)));
+                    float spinSin;
+                    float spinCos;
+                    sincos(radians(time * _SunSpin), spinSin, spinCos);
+                    float3 surface = float3(across.x * spinCos + facing * spinSin, across.y, facing * spinCos - across.x * spinSin);
+
+                    // A slow field bends the surface, so the cells churn and stream rather than slide past.
+                    float3 p = surface * _SunGranules;
+                    float3 bend = float3(SunNoise(p * 0.5 + float3(0, boil, 0)), SunNoise(p * 0.5 + float3(5.2, -boil, 1.3)),
+                        SunNoise(p * 0.5 + float3(boil, 2.8, 9.4)));
+                    float3 gas = p + bend * SunBend;
+                    float cells = SunFractal(gas + float3(0, 0, boil * 0.5));
+                    float veins = pow(saturate(1 - abs(SunNoise(gas * 1.7 - boil * 0.3))), SunVeinSharpness) * _SunVeins;
+                    float tone = SunTone((0.5 + cells * 0.6 + veins * 0.5) * lerp(1 - _SunLimbDarkening, 1, sqrt(facing)));
+
+                    face = lerp(lerp(_SunSpotColor.rgb, _SunSurfaceColor.rgb, saturate(tone * 2)), _SunCoreColor.rgb, saturate(tone * 2 - 1));
+                    face *= tint * _SunBrightness;
+                }
+
+                // Corona: a tight halo hugging the limb, a long soft glow whose reach varies in fine streamers round
+                // the rim, and a few tongues of flame rising off the limb.
+                float height = max(angle - radius, 0) / coronaSize;
+                float2 rim = across / max(length(across), MinWidth);
+                float halo = pow(saturate(1 - height / SunHaloReach), 2) * SunHaloStrength;
+                float streamers = SunNoise(float3(rim * SunStreamerDetail, boil * 0.2)) * 0.5 + 0.5;
+                float reach = lerp(SunStreamerShort, SunStreamerLong, streamers);
+                float glow = exp(-height / reach * SunCoronaFalloff) * saturate(1 - height / (reach * SunCoronaFadeOut));
+                float flame = SunNoise(float3(rim * SunFlameDetail, height * 2.5 - boil * 0.6));
+                float flames = saturate((flame - SunFlameCut) * 3) * saturate(1 - height / SunFlameHeight) * _SunFlares;
+                float3 corona = (_SunCoronaColor.rgb * (glow + halo) + lerp(_SunCoronaColor.rgb, _SunSurfaceColor.rgb, 0.5) * flames) *
+                    tint * _SunCorona;
+
+                return lerp(color + corona, face, disc);
+            }
+
+            // The sun: a distant star seen as a sphere, where the scene's light comes from. Its surface boils: cells
+            // of hot gas churn and turn, cut by bright veins, painted in a few soft tones like the nebula. It darkens
+            // and reddens towards the limb, which makes it read as round. Round it, a ragged corona of streamers and
+            // tongues of flame. The limb is softened over one pixel; everything else is soft by nature, so the costly
+            // part runs only near the sun, in a branch where screen derivatives are not needed.
+            float3 SunLayer(float3 color, float3 d, float4 sun, float pixelAngle)
+            {
+                float angle = acos(clamp(dot(d, sun.xyz), -1, 1));
+                float radius = radians(_SunSize) * 0.5;
+                float disc = saturate((radius - angle) / pixelAngle + 0.5) * sun.w;
+                float coronaSize = max(radians(_SunCoronaSize), MinWidth);
+
+                UNITY_BRANCH
+                if (sun.w > 0 && angle <= radius + coronaSize * SunStreamerLong * SunCoronaFadeOut)
+                    color = SunNear(color, d, sun.xyz, angle, radius, coronaSize, disc);
+
+                return color;
+            }
+
             Varyings Vertex(Attributes input)
             {
                 Varyings output;
@@ -519,7 +720,16 @@ Shader "DeadCargo/Space Sky"
                 float drift = fmod(_Time.y * _FarDrift, 360);
                 output.farDirection = mul(output.direction, EulerMatrix(_FarNebulaRotation.xyz + float3(0, drift, 0)));
 
-                float3 light = _LightDirection.xyz;
+                // The sun is where the scene's main directional light comes from: the Sun Source in the Lighting
+                // settings, or else the brightest directional light. The clouds are lit from it by Lights the Clouds,
+                // or from the authored Light Direction.
+                float3 towardsSun = _WorldSpaceLightPos0.xyz;
+                float hasSun = length(towardsSun) > 0.5 && max(_LightColor0.r, max(_LightColor0.g, _LightColor0.b)) > MinSunLight;
+                towardsSun = hasSun ? normalize(towardsSun) : float3(0, 1, 0);
+                output.sun = float4(mul(towardsSun, sky), hasSun);
+
+                float3 authored = _LightDirection.xyz / max(length(_LightDirection.xyz), MinWidth);
+                float3 light = lerp(authored, towardsSun, _SunLightsClouds * hasSun);
                 output.light = mul(light / max(length(light), MinWidth), sky);
 
                 // Dust lanes read the map turned a third way, so they cut across the clouds rather than follow them.
@@ -602,7 +812,10 @@ Shader "DeadCargo/Space Sky"
                 color = Composite(color, StarLayer(face, d, dX, dY, pixelAngle, pixelScale, _StarMedium, 1u, 0), visibility);
                 color = Composite(color, StarLayer(face, d, dX, dY, pixelAngle, pixelScale, _StarLarge, 2u, _StarSparkle), visibility);
 
-                return half4(color * _Exposure, 1);
+                // Space Lighting darkens the sky, not the sun, which sits in front of everything and keeps its own
+                // brightness whatever the sky's exposure.
+                color = SunLayer(color * _Exposure * (1 - _SpaceShade.y), d, input.sun, pixelAngle);
+                return half4(color, 1);
             }
             ENDCG
         }

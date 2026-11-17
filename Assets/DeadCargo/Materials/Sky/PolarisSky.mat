@@ -37,7 +37,7 @@ Material:
     - _CloudRelief: 0.05
     - _DustLanes: 0.75
     - _DustThreshold: 0.55
-    - _Exposure: 1
+    - _Exposure: 0.5
     - _FarDrift: 0.15
     - _FarNebula: 0.6
     - _FarNebulaThreshold: 0.42
@@ -63,6 +63,25 @@ Material:
     - _StarSeed: 32728
     - _StarSparkle: 0.3
     - _StarTwinkle: 0.15
+    - _SunBoil: 0.25
+    - _SunBrightness: 1.1
+    - _SunCorona: 0.4
+    - _SunCoronaSize: 4
+    - _SunFlares: 0.5
+    - _SunGlow: 0.45
+    - _SunGlowSize: 12
+    - _SunGlowSoftness: 0.35
+    - _SunGranules: 4
+    - _SunLightTint: 0.5
+    - _SunLightsClouds: 1
+    - _SunLimbDarkening: 0.65
+    - _SunPulse: 0.3
+    - _SunRings: 4
+    - _SunSize: 60
+    - _SunSoftness: 0.55
+    - _SunSpin: 0.4
+    - _SunSteps: 5
+    - _SunVeins: 0.25
     - _TwinkleSpeed: 0.8
     m_Colors:
     - _DustRotation: {r: -60, g: 200, b: 45, a: 0}
@@ -89,6 +108,12 @@ Material:
     - _StarSmall: {r: 90, g: 0.3, b: 0.7, a: 0.4}
     - _StarTints: {r: 0.12, g: 0.08, b: 0, a: 0}
     - _StarWarmColor: {r: 1, g: 0.9, b: 0.76, a: 1}
+    - _SunCoreColor: {r: 1, g: 0.92, b: 0.6, a: 1}
+    - _SunCoronaColor: {r: 1, g: 0.45, b: 0.11999995, a: 1}
+    - _SunDiscColor: {r: 1, g: 0.96999997, b: 0.9, a: 1}
+    - _SunGlowColor: {r: 1, g: 0.78, b: 0.5, a: 1}
+    - _SunSpotColor: {r: 0.41999996, g: 0.079999976, b: 0.03, a: 1}
+    - _SunSurfaceColor: {r: 0.97999996, g: 0.47999996, b: 0.11999995, a: 1}
     - _VoidColor: {r: 0.006, g: 0.008, b: 0.016, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

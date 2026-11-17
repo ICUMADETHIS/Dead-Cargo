@@ -34,6 +34,8 @@ namespace DeadCargo.EditorTools.GodMenu
         private const string EditShipLabel = "Edit Ship Look";
         private const string PlaceRockLabel = "Place Test Rock";
         private const string RemoveRockLabel = "Remove Test Rock";
+        private const string SetUpSunLabel = "Set Up Sun";
+        private const string SelectSunLabel = "Select Sun";
 
         // Matching entries: button label and project-relative path.
         private static readonly string[] DocLabels = { "Game Design", "Roadmap", "Code Standards", "Backlog" };
@@ -54,10 +56,12 @@ namespace DeadCargo.EditorTools.GodMenu
         private SpaceDepth depth;
         private bool shipIsComic;
         private GameObject testRock;
+        private Light sun;
+        private bool sunReady;
 
-        // The Visuals section's buttons, one each for the sky, the dust, the distance fade, the ship and the test rock,
-        // chosen in OnUpdate.
-        private readonly string[] visualLabels = new string[5];
+        // The Visuals section's buttons, one each for the sky, the dust, the distance fade, the ship, the test rock and
+        // the sun, chosen in OnUpdate.
+        private readonly string[] visualLabels = new string[6];
 
         public override string Title => "Project";
         public override GodMenuGroup Group => GodMenuGroup.Editor;
@@ -102,11 +106,14 @@ namespace DeadCargo.EditorTools.GodMenu
             depth = SpaceDepthSetup.Find(scene);
             shipIsComic = hasPlayer && ComicLookSetup.IsShipComic(scene);
             testRock = ComicLookSetup.FindTestRock(scene);
+            sun = SunSetup.Find(scene);
+            sunReady = SunSetup.IsInstalled(scene);
             visualLabels[0] = !hasSpaceSky ? ApplySkyLabel : skyIsCurrent ? EditSkyLabel : BakeNebulaLabel;
             visualLabels[1] = dust == null ? AddDustLabel : EditDustLabel;
             visualLabels[2] = depth == null ? AddFadeLabel : EditFadeLabel;
             visualLabels[3] = shipIsComic ? EditShipLabel : ComicShipLabel;
             visualLabels[4] = testRock == null ? PlaceRockLabel : RemoveRockLabel;
+            visualLabels[5] = sunReady ? SelectSunLabel : SetUpSunLabel;
         }
 
         public override void OnGUI()
@@ -185,6 +192,11 @@ namespace DeadCargo.EditorTools.GodMenu
                 else
                     GodMenuGUI.Status(skyIsCurrent, skyIsCurrent ? "Sky: " + sky.name : "Sky: nebula out of date");
 
+                if (sun == null)
+                    GodMenuGUI.Status(false, "Sun: no directional light");
+                else
+                    GodMenuGUI.Status(sunReady, sunReady ? $"Sun: {sun.name} (turn it to move the sun)" : $"Sun: {sun.name} needs setting up");
+
                 bool hasDust = dust != null;
                 GodMenuGUI.Status(hasDust, hasDust ? "Space dust: on" : "Space dust: none");
                 bool hasDepth = depth != null;
@@ -238,6 +250,12 @@ namespace DeadCargo.EditorTools.GodMenu
                         break;
                     case EditFadeLabel when hasDepth:
                         SelectAndPing(depth.gameObject);
+                        break;
+                    case SetUpSunLabel:
+                        EditorApplication.delayCall += () => SunSetup.Apply();
+                        break;
+                    case SelectSunLabel when sun != null:
+                        SelectAndPing(sun.gameObject);
                         break;
                 }
             }

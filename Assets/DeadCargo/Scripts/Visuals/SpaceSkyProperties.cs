@@ -14,6 +14,25 @@ namespace DeadCargo.Visuals
         public const string FarDrift = "_FarDrift";
         public const string StarTwinkle = "_StarTwinkle";
         public const string TwinkleSpeed = "_TwinkleSpeed";
+        public const string SunBoil = "_SunBoil";
+        public const string SunSpin = "_SunSpin";
+
+        public const string SunSize = "_SunSize";
+        public const string SunCoreColor = "_SunCoreColor";
+        public const string SunSurfaceColor = "_SunSurfaceColor";
+        public const string SunSpotColor = "_SunSpotColor";
+        public const string SunBrightness = "_SunBrightness";
+        public const string SunSteps = "_SunSteps";
+        public const string SunSoftness = "_SunSoftness";
+        public const string SunGranules = "_SunGranules";
+        public const string SunVeins = "_SunVeins";
+        public const string SunLimbDarkening = "_SunLimbDarkening";
+        public const string SunCoronaColor = "_SunCoronaColor";
+        public const string SunCorona = "_SunCorona";
+        public const string SunCoronaSize = "_SunCoronaSize";
+        public const string SunFlares = "_SunFlares";
+        public const string SunLightTint = "_SunLightTint";
+        public const string SunLightsClouds = "_SunLightsClouds";
 
         public const string FarNebula = "_FarNebula";
         public const string FarNebulaColor = "_FarNebulaColor";

@@ -129,11 +129,11 @@ namespace DeadCargo.EditorTools
 
         // Render settings live on a hidden object in the scene that Unity exposes no public handle to. It is found by
         // reflection so the change can be undone; if Unity ever renames it, the change still applies, without undo.
-        private static void RecordRenderSettings()
+        internal static void RecordRenderSettings(string undoName = UndoName)
         {
             MethodInfo getter = typeof(RenderSettings).GetMethod("GetRenderSettings", BindingFlags.Static | BindingFlags.NonPublic);
             if (getter != null && getter.Invoke(null, null) is Object settings)
-                Undo.RecordObject(settings, UndoName);
+                Undo.RecordObject(settings, undoName);
         }
     }
 }

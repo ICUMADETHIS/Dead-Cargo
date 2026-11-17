@@ -51,8 +51,34 @@ namespace DeadCargo.EditorTools.Visuals
                 DrawVector3(SpaceSkyProperties.Rotation, "Rotation",
                     "Turns the whole sky, in degrees. Unrotated, the galactic plane lies along the horizon.");
                 DrawVector3(SpaceSkyProperties.LightDirection, "Light Direction",
-                    "World direction the nebula is lit from. The sun will drive this in a later step.");
-                Draw(SpaceSkyProperties.Exposure, "Exposure", "Multiplies the whole sky.");
+                    "World direction the nebula is lit from when it does not follow the sun (Lights the Clouds below 1).");
+                Draw(SpaceSkyProperties.Exposure, "Exposure", "Multiplies the whole sky. The sun keeps its own brightness.");
+            }
+
+            if (Section("Sun"))
+            {
+                EditorGUILayout.HelpBox("The sun is drawn where the scene's sun light comes from: the Sun Source in the Lighting " +
+                                        "window, or else the brightest directional light. Turn the light to move it.", MessageType.None);
+                Draw(SpaceSkyProperties.SunSize, "Size", "Width of the star, in degrees. The sun seen from Earth is half a degree; larger reads as closer.");
+                SubHeading("Surface");
+                Draw(SpaceSkyProperties.SunCoreColor, "Hot", "Colour of the brightest gas and the veins.");
+                Draw(SpaceSkyProperties.SunSurfaceColor, "Surface", "Colour of most of the surface.");
+                Draw(SpaceSkyProperties.SunSpotColor, "Cool", "Colour of the coolest gas and of the limb.");
+                Draw(SpaceSkyProperties.SunBrightness, "Brightness", "Multiplies the surface colours.");
+                Draw(SpaceSkyProperties.SunSteps, "Tone Steps", "Flat tones the surface is painted in.");
+                Draw(SpaceSkyProperties.SunSoftness, "Softness", "0 gives crisp comic tones; 1 blends them smoothly, as the nebula's Softness does.");
+                Draw(SpaceSkyProperties.SunGranules, "Granules", "How many cells of gas cross the star. Higher gives finer cells.");
+                Draw(SpaceSkyProperties.SunVeins, "Veins", "Bright threads of hot gas between the cells.");
+                Draw(SpaceSkyProperties.SunLimbDarkening, "Limb Darkening", "How much the surface darkens towards its edge, which makes it read as a sphere.");
+                SubHeading("Corona");
+                Draw(SpaceSkyProperties.SunCoronaColor, "Colour", null);
+                Draw(SpaceSkyProperties.SunCorona, "Strength", "Brightness of the light round the star. 0 leaves the bare sphere.");
+                Draw(SpaceSkyProperties.SunCoronaSize, "Size", "How far the corona reaches past the limb, in degrees. Its streamers reach unevenly round it.");
+                Draw(SpaceSkyProperties.SunFlares, "Flares", "Tongues of flame rising off the limb.");
+                SubHeading("Light");
+                Draw(SpaceSkyProperties.SunLightTint, "Light Colour", "How far the star's colours take on the sun light's colour.");
+                Draw(SpaceSkyProperties.SunLightsClouds, "Lights the Clouds",
+                    "1 lights the nebula from the sun, so sky and ships agree. 0 uses the Light Direction above.");
             }
 
             if (Section("Motion"))
@@ -62,6 +88,8 @@ namespace DeadCargo.EditorTools.Visuals
                 Draw(SpaceSkyProperties.FarDrift, "Far Drift", "Degrees per second the far layer turns against the near clouds, which makes the sky read as deep.");
                 Draw(SpaceSkyProperties.StarTwinkle, "Twinkle", "How much stars dim and brighten. Glints pulse with it.");
                 Draw(SpaceSkyProperties.TwinkleSpeed, "Twinkle Speed", "Average twinkle speed, in radians per second.");
+                Draw(SpaceSkyProperties.SunBoil, "Sun Boil", "How fast the sun's surface churns and its flames rise. 0 holds them still.");
+                Draw(SpaceSkyProperties.SunSpin, "Sun Spin", "Degrees per second the sun turns about its own axis.");
             }
 
             if (Section("Backdrop"))

@@ -5,6 +5,7 @@ using System.Text;
 using DeadCargo.Sectors;
 using DeadCargo.Sectors.Field;
 using DeadCargo.Sectors.Placement;
+using DeadCargo.Visuals;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -67,6 +68,7 @@ namespace DeadCargo.EditorTools.Diagnostics
             CheckTurnedRegion(result);
             CheckLayout(result);
             CheckPlacement(result);
+            CheckSunDirection(result);
             CheckField(result);
             CheckRockShapes(result);
             CheckIcosphere(result);
@@ -529,6 +531,52 @@ namespace DeadCargo.EditorTools.Diagnostics
             SectorPlacer.TryPlace(layout.Set, grid, 99u, 4, pickup, taken, out Vector3 d, out _);
             result.Check(a == b && headingA == headingB && a != c && a != d, "Placement: same seed, same spot",
                 "a piece lands in the same spot twice; a new seed or another piece moves it");
+        }
+
+        // Each run's sun sits beside the opening view, never in it or behind it, within its band round the plane, from
+        // either side.
+        private static void CheckSunDirection(Result result)
+        {
+            const int seeds = 2000;
+            const float clear = 70f;
+            const float furthest = 125f;
+            const float band = 50f;
+            Vector3 view = new Vector3(0.1f, 0.15f, 1f).normalized;
+
+            int outOfRange = 0;
+            int outOfBand = 0;
+            int notUnit = 0;
+            float nearest = 180f;
+            float widest = 0f;
+            float highest = 0f;
+            int left = 0;
+            int right = 0;
+            for (uint seed = 1; seed <= seeds; ++seed)
+            {
+                Vector3 sun = SpaceLighting.PickDirection(seed * 2654435761u, view, clear, furthest, band);
+                float angle = Vector3.Angle(sun, view);
+                float elevation = Mathf.Asin(Mathf.Clamp(sun.y, -1f, 1f)) * Mathf.Rad2Deg;
+                nearest = Math.Min(nearest, angle);
+                widest = Math.Max(widest, angle);
+                highest = Math.Max(highest, Math.Abs(elevation));
+                outOfRange += angle < clear - 0.01f || angle > furthest + 0.01f ? 1 : 0;
+                outOfBand += Math.Abs(elevation) > band + 0.01f ? 1 : 0;
+                notUnit += Math.Abs(sun.magnitude - 1f) > 1e-4f ? 1 : 0;
+                left += sun.x < -0.3f ? 1 : 0;
+                right += sun.x > 0.3f ? 1 : 0;
+            }
+
+            result.Check(outOfRange == 0 && outOfBand == 0 && notUnit == 0, "Sun: beside the opening view",
+                $"{nearest:0.0}° to {widest:0.0}° from the view ({clear:0} to {furthest:0} allowed), highest {highest:0.0}° from the plane (at most {band:0})");
+            result.Check(left > seeds / 4 && right > seeds / 4, "Sun: from either side",
+                $"{left} to the left and {right} to the right, of {seeds} runs");
+
+            Vector3 a = SpaceLighting.PickDirection(77u, view, clear, furthest, band);
+            Vector3 b = SpaceLighting.PickDirection(77u, view, clear, furthest, band);
+            Vector3 c = SpaceLighting.PickDirection(78u, view, clear, furthest, band);
+            Vector3 impossible = SpaceLighting.PickDirection(5u, view, 179f, 180f, band);
+            result.Check(a == b && a != c && Vector3.Angle(impossible, view) > 90f, "Sun: same seed, same sun",
+                "a seed turns the sun the same way twice, a new seed elsewhere, and an impossible range still faces away");
         }
 
         // The rotation Quaternion.Euler(0, degrees, 0) gives, built in managed code so the check also runs outside Unity.

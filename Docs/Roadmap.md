@@ -18,7 +18,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.6 | Scene flow performance | Every scene change through one path, load hitches hidden behind the loading screen, load timing | Planned |
 | 6.7 | Polaris sector | The game sector runs launch into, built up from an empty scene. 6.7a: the scene with the star sky. 6.7b: the player starts aboard the ship. 6.7c: pause menu Quit and Restart | Done, tested 2026-11-16 |
 | 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16. Step 2 (asteroid field) built, awaiting test. Detail pass, solid rocks (step 5a), natural placement and field dust built and compile-checked, awaiting test. Step 7a (a new sector every load) built, awaiting test |
-| 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test |
+| 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test. Steps 2a (the sun) and 2b (a new sun each run, darker space) built, awaiting test |
 | 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
 | 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
@@ -891,7 +891,7 @@ Space feels like deep space: an endless, dark void. Near objects (ships, rocks, 
 | Step | Delivers | Status |
 |---|---|---|
 | 1. Sky | Procedural deep-space sky: an endless dark void, a soft muted nebula band cut by dust lanes, a far layer and galaxies for depth, sparse stars, cheap shader-only motion. Comic ink and hatching available but off | Built, awaiting test |
-| 2. Sun and light | A stylised sun disc with flat glow rings; the scene light aimed from it, with matching light and shadow colours | Planned |
+| 2. Sun and light | A distant star in the sky, painted to match the scene; the scene light aimed from it, with matching light and shadow colours. 2a: the star drawn where the scene light comes from, lighting the clouds. 2b: a new sun each run, and the darkness of space. 2c: comic shadows from the sun | 2a and 2b built, awaiting test. 2c planned |
 | 3. Depth | 3a: space dust streaking past the ship, for speed and scale. 3b: distance fade in colour steps towards the sky colour | 3a and 3b built, awaiting test |
 | 4. Comic look | Dead Cargo's comic surface for near objects: two-tone light, ink outlines and hatching on the player ship and rocks | Built, awaiting test |
 | 5. Backdrop bodies | Cel-shaded planets, moons and rings, built on sector generation's far world (6.8 step 3) | Planned |
@@ -958,6 +958,85 @@ Space feels like deep space: an endless, dark void. Near objects (ships, rocks, 
 
 ### Tuning
 On `Materials/Sky/PolarisSky.mat`: every setting, grouped as Sky, Motion, Backdrop, Depth, Nebula, Comic, Stars and Nebula Shape. Tooltips explain each one. A material keeps the values it was tuned to; **Reset Look to Defaults** picks up the current defaults and keeps the seeds.
+
+### Design (step 2a: the sun)
+Step 2 comes in three small parts: **2a** the sun in the sky (this part), **2b** a new sun each run, and **2c** comic shadows from the sun.
+- **One sun, one light.** The scene's directional light is the sun. The sky draws the star exactly where that light comes from, the same light the comic surface lights ships and rocks with, so the sky and everything near agree. Turn the light and the star moves with it, in the editor and in play. No script: the shader reads the light Unity hands every sky.
+- **Which light.** The Sun Source in the Lighting window, or else the brightest directional light, which is Unity's own rule. **Set Up Sun** makes the scene's directional light its Sun Source. Field dust asked only for the Sun Source and, with none set in Polaris, glowed straight up; it now uses the same rule (`SceneSun`).
+- **A distant star, not a disc (after the first test).** The first try, a flat disc with stepped glow rings, read as fake, as did the kit's demo lens flare on the light, which drew a flat streak across it. The user asked for the sun to look like a very distant body, as in their references, with textures that match the scene. Now:
+  - **A sphere.** Each pixel of the star knows where on its face it looks, so the surface wraps round a ball, and turns slowly about its own axis (**Sun Spin**).
+  - **Boiling gas.** Cells of hot gas churn as a slow field bends them, cut by a few bright veins (**Granules**, **Veins**, **Sun Boil**).
+  - **Painted like the nebula.** The surface is painted in a few tones, hot, surface and cool (**Tone Steps**), blended by **Softness** as the nebula's steps are, so the star belongs to the same sky.
+  - **Round.** It darkens and reddens towards the limb (**Limb Darkening**), which is what makes a disc read as a sphere.
+  - **Corona.** A tight halo hugs the limb; beyond it a soft glow whose reach varies in fine streamers round the rim, and a few tongues of flame (**Flares**).
+  - **No lens flare.** **Set Up Sun** takes the kit's flare off the light.
+- **Massive and close (after the second test).** The user wanted the sun "a lot closer", to look like a planet: massive, though in the distance. It now spans 28° of sky, roughly half the screen's height when looked at, against 6° before. It is still drawn at infinity, which is right for a body that size: across a whole sector it would not shift by a pixel. At that size the surface needs more detail, so there are more cells (**Granules** 9) and a fourth, fine layer of grain, and the corona is kept tight (5°) so the star reads as a solid body rather than a glow.
+- **Matching colour.** The star's colours take on the light's colour by **Light Colour**, so a warmer or cooler sun light warms or cools it.
+- **The clouds face the sun.** The nebula's lit side, shadow side and highlights come from the sun (**Lights the Clouds**, 1). At 0 they use the authored **Light Direction**, as before.
+- **In front of everything** and outside the sky's **Exposure**, so a darker sky never dims the sun.
+- **Cost.** The noise runs only on the pixels near the star, inside a dynamic branch, and the surface only on the pixels the star covers: about a dozen noise lookups there, and one arc cosine everywhere else. Nothing on the CPU.
+
+### Implementation (step 2a)
+| File | Role |
+|---|---|
+| `Shaders/SpaceSky.shader` | `SunLayer` and `SunNear`: the star's surface and corona, from `_WorldSpaceLightPos0` and `_LightColor0`; the clouds lit from the sun |
+| `Scripts/Visuals/SpaceSkyProperties.cs`, `Editor/Visuals/SpaceSkyShaderGUI.cs` | The **Sun** section of the sky material (Surface, Corona, Light), and **Sun Boil** and **Sun Spin** in Motion |
+| `Scripts/Visuals/SceneSun.cs` | The sun light by Unity's rule, remembered between frames |
+| `Scripts/Visuals/FieldDust.cs` | Dust glows towards that same sun |
+| `Editor/SunSetup.cs` | **Set Up Sun**: the directional light becomes the Sun Source and loses its lens flare, with undo |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | **Visuals** section: the sun's status, and **Set Up Sun** or **Select Sun** |
+
+### Verified outside Unity (step 2a)
+- The sky's vertex and fragment programs compile with the DirectX 11 compiler against Unity's shader includes, with no warnings; a copy with a deliberate error fails, so the check is real.
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no new warnings.
+- The defaults were tuned from preview renders of a line-for-line CPU copy of the star's maths, at about the size it shows at 1080p, against the user's references. Unity's own render will differ a little: bloom, the GPU's noise hash and the nebula behind it.
+
+### Test steps (step 2a)
+1. Click into Unity and let it compile. The Console should be free of errors, including shader errors.
+2. Open Polaris. In the God Menu **Project** tab, **Visuals** reads "Sun: Directional Light needs setting up". Press **Set Up Sun**: it turns green, and the button becomes **Select Sun**. Save the scene. **Ctrl+Z** puts the flare back.
+3. Press **Select Sun** and look towards the sun in the Scene view (it lies opposite the way the light's arrow points). A massive orange star fills a large part of the view: a mottled, slowly churning surface with bright patches, darker and redder at its edge, with a tight halo and soft streamers. No flat streak across it. If it still shows small, the material kept the earlier size: set **Size** to 28 on `Materials/Sky/PolarisSky.mat`.
+4. Rotate the `Directional Light`. The star follows, and the nebula's lit side turns to face it.
+5. Press Play and find the sun. Your ship and the rocks are lit from the side facing it. In the Main Belt, look towards the sun, then away: the field dust glows on the sun's side.
+6. Watch the star for half a minute: the gas churns and the star turns slowly. **Sun Boil** and **Sun Spin** 0 hold it still.
+7. Select `Materials/Sky/PolarisSky.mat` and open **Sun**. Try **Size** (larger reads closer), the **Hot**, **Surface** and **Cool** colours (deep red and orange give a red giant), **Granules**, **Veins**, **Softness** 0 for crisp comic tones, **Corona Strength** and **Flares**.
+8. Change the `Directional Light`'s colour: the star warms or cools with it (**Light Colour** sets how much). Put the colour back.
+
+### Tuning (step 2a)
+On `Materials/Sky/PolarisSky.mat`, **Sun** section: size; the surface's colours, brightness, tone steps, softness, granules, veins and limb darkening; the corona's colour, strength, size and flares; light colour, and whether the sun lights the clouds. **Sun Boil** and **Sun Spin** under Motion. Where the sun sits is the `Directional Light`'s rotation.
+
+### Design (step 2b: a new sun each run, and the darkness of space)
+After testing 2a the user kept the massive sun, and asked for its place to change every run, away from where the player starts, and for the scene to be darker: "a little bright for space ... doesn't feel dark even though we are close to the sun".
+- **A new sun each run.** **Space Lighting**, on the sun light, turns the light to a new direction each load, drawn from the sector's seed, so a pinned seed brings the same sun back and **Random Seed** in the God Menu moves it too. The sky draws the star where the light comes from, so the star, the light on every ship and rock, the clouds and the field dust all move together.
+- **Not on top of the player, nor behind them.** The sun's centre stays 70° to 125° from where the player first looks (**Clear Of Start View**, **Furthest From Start View**). With the star 28° across, the whole of it sits outside the opening view, to one side: it is found by turning. It never sits straight behind, because a sun behind the camera lights only the side of everything the player looks at, which the first test of this step showed reads flat and bright. From the side, every ship and rock shows a lit half and a dark half.
+- **Round the plane.** It sits within 50° of the sector's plane (**Max Elevation**), so it lights the belt from the side, which suits the comic tones best.
+- **Why it was bright.** Comic surfaces paint the side away from the light in fixed tones from their materials, so shadowed sides never went dark; a pale blue rim lit every silhouette; the ambient light lifted everything not in the comic look; and the sky kept its full exposure beside a massive sun.
+- **The darkness of space.** Space has no air to scatter light: what the sun strikes is bright, the rest falls towards black. **Space Lighting** darkens, together and in Play Mode only: the shadowed sides of ships and rocks (**Shadow Darkening**, 0.8), which also pulls their mid tone towards the shadow so light falls off fast past the edge facing the sun; their rims (**Rim Dimming**, 0.8); the sky but never the sun (**Sky Darkening**, 0.6); and the ambient light (**Ambient Darkening**, 0.85). The sunlit sides keep their full brightness, so contrast rises rather than everything dimming. Without Space Lighting, as in the mothership, nothing changes. The first defaults (0.5, 0.5, 0.35, 0.6) still felt "way too light", so they were raised.
+- **Set Up Sun** now also adds Space Lighting to the sun light.
+
+### Implementation (step 2b)
+| File | Role |
+|---|---|
+| `Scripts/Visuals/SpaceLighting.cs` | The sun's direction each run (`PickDirection`), and the darkness: the `_SpaceShade` global and the ambient light |
+| `Shaders/ComicSurface.shader` | Shadow and mid tones darkened by `_SpaceShade.x`, rims dimmed by `_SpaceShade.z` |
+| `Shaders/SpaceSky.shader` | The sky, not the sun, darkened by `_SpaceShade.y` |
+| `Editor/SunSetup.cs` | **Set Up Sun** adds Space Lighting |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Three sun checks |
+
+### Verified outside Unity (step 2b)
+- Every Dead Cargo assembly compiles with Unity's own compiler, and both shaders compile with the DirectX 11 compiler in every variant the scene uses (the comic surface with and without projected texture, instancing, detail morph and cross-fade; its ink and shadow passes).
+- The sun checks pass outside Unity: over 2,000 runs the sun always sits 70° to 125° from the opening view and within 50° of the plane, about evenly to the left and the right; the same seed gives the same sun.
+- Not seen yet: how dark the defaults feel. They are first guesses to tune live in Play Mode.
+
+### Test steps (step 2b)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab's **Visuals** reads "Sun: Directional Light needs setting up". Press **Set Up Sun**, then save the scene. The `Directional Light` now carries **Space Lighting**. If it already had Space Lighting from an earlier try, use **Reset** in the component's menu to pick up the darker defaults.
+2. Press Play. The sun is not in view at the start; it lies off to one side. Your ship shows a lit half facing it and a near-black half away from it.
+3. Stop and Play again, or launch from the mothership: the sun is somewhere else. In the God Menu **Sector** tab press **Random Seed**: the sun moves with the rocks. **Pin Seed** and Restart: the same sun comes back.
+4. Compare the darkness: select the `Directional Light` in Play Mode and set every **Darkness** slider to 0, then back. The sky darkens but the star does not; ships and rocks keep their lit sides and lose their grey shadows.
+5. Tune the sliders live until it feels right, note the values, and set them after Play stops (Play Mode changes are not kept).
+6. Load the mothership: it looks exactly as before.
+
+### Tuning (step 2b)
+On the `Directional Light`'s **Space Lighting**: **New Direction Each Load**, **Clear Of Start View**, **Furthest From Start View** and **Max Elevation**; **Shadow Darkening**, **Rim Dimming**, **Sky Darkening** and **Ambient Darkening**. Darkness changes show live in Play Mode.
 
 ### Design (step 3a: space dust)
 - **Why.** A sky never moves as the ship flies, so on its own space feels like the inside of a sphere. Faint motes streaming past are the strongest cue of speed and of the size of the space around you.

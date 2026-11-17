@@ -64,8 +64,8 @@ namespace DeadCargo.Visuals
                 camera.cameraType == CameraType.Preview || camera.cameraType == CameraType.Reflection)
                 return;
 
-            Light sun = RenderSettings.sun;
-            properties.SetVector(SunDirectionId, sun != null ? -sun.transform.forward : Vector3.up);
+            // The same sun the sky draws, so dust glows towards the disc the player sees.
+            properties.SetVector(SunDirectionId, SceneSun.Direction);
             Graphics.DrawMesh(mesh, Matrix4x4.identity, material, gameObject.layer, camera, 0, properties,
                 ShadowCastingMode.Off, false, null, LightProbeUsage.Off, null);
         }

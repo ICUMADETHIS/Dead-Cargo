@@ -86,6 +86,14 @@ Shader "DeadCargo/Comic Surface"
     // x: where objects start to dissolve, y: where they are gone, in metres. Zero y: no dissolve.
     float4 _SpaceDepthDissolve;
 
+    // The darkness of space, set for every comic surface at once by Space Lighting (Scripts/Visuals/SpaceLighting.cs),
+    // which names it. x: how much darker shadowed sides are, z: how much rims are dimmed, both 0 to 1. y is the sky's.
+    // All zero, as with no Space Lighting in the scene, leaves surfaces unchanged.
+    float4 _SpaceShade;
+
+    // At full shadow darkening, the mid tone sits this much nearer the shadow tone than its material sets.
+    static const float SpaceMidPull = 0.5;
+
     static const float ReferenceHeight = 1080.0;
     static const float MinWidth = 1e-4;
 
@@ -411,7 +419,10 @@ Shader "DeadCargo/Comic Surface"
                 litColor = lerp(litColor, albedo * i.color.rgb * lightTint, i.color.a);
                 shadowColor = lerp(shadowColor, albedo * i.color.rgb * _OreShadow, i.color.a);
             #endif
-                float3 midColor = lerp(shadowColor, litColor, _MidBlend);
+                // Space has no air to scatter light, so the side away from the sun falls towards black. The mid tone is
+                // built from the shadow tone and pulled towards it, so light falls off fast past the edge facing the sun.
+                shadowColor *= 1 - _SpaceShade.x;
+                float3 midColor = lerp(shadowColor, litColor, _MidBlend * (1 - _SpaceShade.x * SpaceMidPull));
                 float3 color = lerp(lerp(shadowColor, midColor, lit), litColor, bright);
                 color = lerp(color, _HighlightColor.rgb, highlight);
 
@@ -422,7 +433,7 @@ Shader "DeadCargo/Comic Surface"
 
                 // Rim: a band along the edges seen side-on.
                 float edge = 1 - saturate(dot(normal, toView));
-                float rim = CrispStep(1 - _RimSize, edge, max(fwidth(edge), MinWidth)) * _RimStrength;
+                float rim = CrispStep(1 - _RimSize, edge, max(fwidth(edge), MinWidth)) * _RimStrength * (1 - _SpaceShade.z);
                 color = lerp(color, _RimColor.rgb, rim);
 
                 // Texture ink: the texture's darkest details, such as cracks and crater rims, are drawn in ink, like
