@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c76e77b6e47b6f34986d481a7b5cf912, type: 3}
+  m_Name: GrassTile2_CrossImpostor
+  m_EditorClassIdentifier: 
+  sourcePrefab: {fileID: 4395564235525234845, guid: a97c98ac831de364681ed6cb49ed9d77,
+    type: 3}
+  material: {fileID: 2100000, guid: a60f5dc98a3e4da44a0263704187c2d9, type: 2}
+  bakedMesh: {fileID: 4300000, guid: 4994d2c48c123ee489755671ef1f3f86, type: 2}
+  maxFrameSize: 512
+  framePadding: 4
+  BakedOffset: {x: 0.010178328, y: 2.7419202, z: 0.13790703}
+  BakedExtents: {x: 2.4717193, y: 3.0824442, z: 2.693811}
+  FrameUVRects:
+  - {x: 0.0028571428, y: 0.0038461538, z: 0.34857142, w: 0.4923077}
+  - {x: 0.0028571428, y: 0.50384617, z: 0.34857142, w: 0.4923077}
+  - {x: 0.35714287, y: 0.017307693, z: 0.31714284, w: 0.4653846}
+  - {x: 0.35714287, y: 0.5173077, z: 0.31714284, w: 0.4653846}
+  - {x: 0.68, y: 0.0048076925, z: 0.31714284, w: 0.4903846}
+  - {x: 0.68, y: 0.5048077, z: 0.31714284, w: 0.4903846}
+  AtlasWidth: 1400
+  AtlasHeight: 1040
+  AxisFrameSizes:
+  - {x: 488, y: 512}
+  - {x: 444, y: 484}
+  - {x: 444, y: 510}
+  AxisWorldHalfSizes:
+  - {x: 2.6790774, y: 2.8130314}
+  - {x: 2.4442818, y: 2.659511}
+  - {x: 2.4382615, y: 2.8040009}

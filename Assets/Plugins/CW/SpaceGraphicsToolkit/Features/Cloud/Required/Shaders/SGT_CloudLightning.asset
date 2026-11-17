@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dd468269495eb464ab757495e9cad8f9, type: 3}
+  m_Name: SGT_CloudLightning
+  m_EditorClassIdentifier: Assembly-CSharp::SimpleShaderSystem
+  shaderTemplate: {fileID: -6465566751694194690, guid: 49dfd5478b31fe949b59fa20f7744a32,
+    type: 3}
+  shaderFiles:
+  - {fileID: 10900000, guid: b3e8fc45341f0f444ba3ffa518ba9c4c, type: 3}
+  - {fileID: 10900000, guid: ed64468c4e24ed74faa0a23c544573d5, type: 3}
+  - {fileID: 10900000, guid: d4431ec5a244acd43991fdee45aa4761, type: 3}
+  - {fileID: 10900000, guid: 534e5ef5085cebf4aa0e62558987d408, type: 3}
+  outputShader: {fileID: 4800000, guid: 310b8ce1cd2958444bf26373a8bf9edd, type: 3}
+  outputTitle: Space Graphics Toolkit/CloudLightning

@@ -21,6 +21,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test. Steps 2a (the sun) and 2b (a new sun each run, darker space) built, awaiting test |
 | 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
 | 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
+| 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen, in three steps: 1 a cruise drive to orbit, 2 the descent to the ground, 3 the planets' painted look. First person on C | Step 1 and first person on C done, tested 2026-11-17. Step 2 (descent) built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -597,7 +598,7 @@ Polaris, and every later raid location, is generated from a seed: large, dense, 
 |---|---|---|
 | 1. Foundation | Sector definition, seeded random, cell grid, debug view | Done, tested 2026-11-16 |
 | 2. Asteroid field | Rocks from boulders to kilometre-wide giants, generated per cell in Burst jobs from the seed and regions, drawn GPU-instanced in the comic cel style. Adds Unity's Burst and Mathematics packages | Built, compile-checked and self-tested, awaiting test |
-| 3. Far world | A second camera draws a 1:1000 copy of space behind the real one. Planets, giant asteroids, stations and capital ships are seen from hundreds of kilometres away and grow smoothly as you approach, then hand over to the real object up close. Distant parts of the belt show too | Planned |
+| 3. Far world | A second camera draws a 1:1000 copy of space behind the real one. Planets, giant asteroids, stations and capital ships are seen from hundreds of kilometres away and grow smoothly as you approach, then hand over to the real object up close. Distant parts of the belt show too | Far camera and far world built with phase 6.9 step 5b, for planets. Giants, stations and the hand-over planned |
 | 4. Streaming | Cells load and unload around the ship, spread across frames | Planned |
 | 5. Physical asteroids | Near rocks become pooled objects with colliders and damage. Covers phase 6.5 pooling | Planned |
 | 6. Large-scale precision | Floating origin | Planned |
@@ -894,7 +895,7 @@ Space feels like deep space: an endless, dark void. Near objects (ships, rocks, 
 | 2. Sun and light | A distant star in the sky, painted to match the scene; the scene light aimed from it, with matching light and shadow colours. 2a: the star drawn where the scene light comes from, lighting the clouds. 2b: a new sun each run, and the darkness of space. 2c: comic shadows from the sun | 2a and 2b built, awaiting test. 2c planned |
 | 3. Depth | 3a: space dust streaking past the ship, for speed and scale. 3b: distance fade in colour steps towards the sky colour | 3a and 3b built, awaiting test |
 | 4. Comic look | Dead Cargo's comic surface for near objects: two-tone light, ink outlines and hatching on the player ship and rocks | Built, awaiting test |
-| 5. Backdrop bodies | Cel-shaded planets, moons and rings, built on sector generation's far world (6.8 step 3) | Planned |
+| 5. Backdrop bodies | Planets, moons and rings, built on sector generation's far world (6.8 step 3), using Planet Forge (Space Graphics Toolkit). 5a: install Planet Forge and the packages it needs. 5b: a far space camera that draws massive planets behind the near world. 5c: planets chosen and placed from the run seed. 5d: a look pass to match Dead Cargo's art | 5a installed. 5b and 5c built and tested 2026-11-17, quality fixes awaiting test. 5d moved to phase 6.12 step 3, so the look is built to hold from orbit to the ground |
 | 6. Sector identity | A colour palette per sector, with a tint per region | Planned |
 
 ### Design (step 1)
@@ -1138,6 +1139,108 @@ All three passes compile with the DirectX 11 compiler against Unity's shader inc
 ### Tuning (step 4)
 On each comic material: colours, mid tone, shadow and lit edges, cel softness, texture and normal strength, highlight, glint, rim, and ink (width, gap fill, fade range). Hatching and texture ink stay at 0.
 
+### Design (step 5a: Planet Forge installed)
+The user chose Planet Forge, by Carlos Wilkes, for the planet system. It is built on his Space Graphics Toolkit (SGT): procedural planets with landscapes, oceans, clouds, atmospheres and volumetrics, which can be seen from orbit or landed on, and 30 demo planets.
+- **Where.** `Assets/Plugins/CW/`: `Planet Forge`, `SpaceGraphicsToolkit` and CW's `Shared` code, placed exactly as Unity's own package import would (every file at its recorded path with its `.meta`), 837 MB. Never edited (see Code Standards).
+- **Works on our pipeline.** SGT's main shaders are Shader Graph builds with a Built-in pipeline target, so they need the **Shader Graph** package (17.3.0, bundled with this editor; it brings the render-pipelines core library). Its jobs need **Collections** (2.6.5). Its URP and HDRP code only switches on when those pipelines are installed, so it stays off.
+- **No Input System.** The project runs on the classic Input Manager, which Space Combat Kit needs; CW's input falls back to it, so the Input System package is not installed.
+- **Size.** No file is over GitHub's 100 MB limit (the largest are two 64 MB heightmaps). The repository grows by about 837 MB.
+
+### Verified outside Unity (step 5a: Planet Forge)
+- All five CW assemblies (`CW.Common`, `CW.SimpleShaderSystem`, `CW.SimpleOriginSystem`, `SpaceGraphicsToolkit`, `PlanetForge`) compile with Unity's own compiler and settings, with no errors or warnings, and every Dead Cargo assembly still compiles beside them.
+- Unity began importing while the files were still being copied, so its first compile missed two files and two shaders missed an include. The files were all in place afterwards; their timestamps were refreshed so Unity compiles and imports them again.
+
+### Test steps (step 5a: Planet Forge)
+1. Click into Unity. It finishes importing Planet Forge (a few minutes for its textures) and recompiles. The Console should be free of errors; press **Clear** first to drop any from the interrupted first import.
+2. Open `Assets/Plugins/CW/Planet Forge/Scenes/Alythar - Earth Sized (Orbit).unity` (or any planet scene) and press Play. The planet renders with its landscape, atmosphere and clouds: nothing pink. Stop Play, and do not save the demo scene.
+3. Open Polaris and press Play: everything works as before.
+
+### Design (step 5b: far space)
+The main camera draws 10 km. A planet thousands of kilometres across, thousands of kilometres away, needs a second view of space. This is the first part of sector generation's far world (6.8 step 3).
+- **A scale copy of space.** The **far world** is space at 1:1000: one unit is a kilometre. Perspective does not depend on scale, so a 500 km planet 2,000 km away looks exactly like a 500 unit sphere 2,000 units away. The far world holds only distant things, on its own layer (**Far Space**).
+- **A far camera.** It draws first, the space sky and then the far world, into a screen-sized HDR texture. The main camera shows that texture as its sky, through a skybox of its own (`DeadCargo/Far Space Backdrop`), and draws the near world on top. Passing the picture as an HDR texture, rather than stacking the two cameras, keeps the sun and the atmospheres brighter than white, so bloom still catches them: a stacked camera's picture is cut to plain brightness before the next camera sees it. Every frame, just before it draws, the far camera copies the main camera's position, turn and field of view, so the two never disagree, at any speed or zoom. The main camera, and every other game camera, leaves the Far Space layer out.
+- **The two cameras stand in the same place.** Planet Forge works things out from the main camera: detail on the landscape, the atmosphere, the ocean. So the far camera sits exactly where the main camera is, and the far world moves to match: its origin follows the camera at 999/1000 of the camera's own motion. Flying a kilometre moves you a metre through the far world, which is what 1:1000 means. With no camera of its own to find, every Planet Forge feature works unchanged.
+- **Planet Forge on the far camera.** The far camera carries Planet Forge's volume camera (atmospheres and clouds) and opaque texture (oceans), and the Far Space object its volume manager.
+- **A far sun.** A camera ignores lights on layers it does not draw, and Planet Forge lights a planet only with lights whose culling mask holds the planet's layer. So the far world has its own sun on its own layer, with Planet Forge's light (`SgtLight`), copying the scene's sun every frame: its turn, colour and brightness. Planets, atmospheres and clouds are lit from the same sun as the ships and rocks, and turn with it when Space Lighting places it each run. The far sun is on only while the far camera draws, and the scene's sun leaves the far layer out, so nothing is lit twice. The scene's own Directional Light is not changed.
+- **Cost.** One extra camera, which draws the sky instead of the main camera, so the sky is not drawn twice; one screen-sized texture; one full-screen read where the main camera shows its sky. Atmospheres and clouds are drawn a ninth of their pixels a frame (**Volumetric Checkerboard** 3), built up over frames. No planet means no planet cost. Nothing is generated per frame on the CPU: the far world's origin, the far camera and the far sun are each set once a frame.
+- **Off is a switch.** With Far Space disabled, the main camera draws the scene's own sky again, exactly as before this step. The God Menu toggles it live.
+- **In the Scene view.** The far world surrounds the camera, so during Play the Scene view shows the planets as huge spheres a few kilometres from the ship. That is the scale copy; only the far camera draws them in the game.
+
+### Design (step 5c: planets from the run seed)
+The user shared an article on how Elite Dangerous generates its galaxy. Two of its ideas shape this step: a top-down hierarchy, where each body's seed comes from its parent's, so the star decides its planets and each planet its moons, and adding one body never changes another; and keeping huge distances out of single-precision maths. Its catalogue of real stars and its landable-planet terrain pipeline do not apply here (Planet Forge already builds the terrain).
+- **A planet catalogue.** The 26 standard Planet Forge planets (Alythar to Zephyrus, each 500 km in radius) are copied into Dead Cargo prefabs in `Resources/Planets/`, with only what is seen from orbit: landscape, atmosphere, clouds and ocean. Underwater rays, debris and sound are removed. `Data/Planets/PlanetCatalog.asset` lists them, each with its roles and a weight. Ocean worlds can be the primary or a distant planet; dry worlds with air can be any body; airless worlds (Lunara) are moons or distant. The roles and weights can be changed by hand and are kept when the catalogue is built again.
+- **Loaded on demand.** A planet's textures are about 17 MB, so the catalogue names its prefabs instead of referencing them, and only the run's planets are loaded, as Polaris loads.
+- **Two planets a run.** The user asked for two planets, not all of them. Each run loads exactly two from the catalogue; the other 24 stay on disk. From the run seed, in the order Elite Dangerous uses, parent before child:
+  - **The primary**, the world this sector lies near: massive, 16° to 34° across, set at 60° to 160° from the sun, so it is lit from the side or behind the player and shows a broad lit face rather than a dark disc. It lies within 40° of the sector's plane, like the sun.
+  - **A second planet**, smaller and further off: 3° to 8° across, elsewhere in the same band. It is always there; if no spot meets every rule it takes the closest.
+  - **Moons** are built in but off (**Max Moons** 0): up to four, near the primary in the sky, for later sectors.
+  - Every body keeps 6° clear of the sun's edge and 2° clear of the other. The two are never the same planet.
+- **Real size, real distance.** A body's place in the sky is a direction and a size. Its distance in the far world follows from its radius: a 500 km planet 30° across stands 1,932 km away, a moon 4° across 14,300 km. Flying from one side of the 40 km sector to the other shifts that planet by about a degree, as a real one would, so it reads as truly vast.
+- **Lit by the sun.** Each planet is lit by the run's sun, so its lit face turns towards wherever the sun was placed. A planet near the sun in the sky shows a crescent; one across the sky from it, a full face.
+- **Slow life.** Each body turns slowly about a tilted axis (0.02° to 0.12° a second), enough to see clouds and coasts drift over a minute. Turning a transform is the only per-frame work.
+- **New each run, pinned with the sector.** Planets come from the sector seed with their own stream, so **Random Seed** gives a new system, a pinned seed brings the same one back, and the sky, the sun and the planets always belong to the same run.
+
+### Design (after the first test of 5b and 5c)
+The user saw both planets lit and placed, but "not the best quality" and "some weird glow around them". Three causes:
+- **Atmospheres and clouds were coarse.** They were drawn at half size with no smoothing over frames. Planet Forge samples them with noise that is meant to be smoothed over frames, so they showed speckles along the line between day and night, and the half-size layer, stretched back over the full picture, left a blocky halo round each planet's edge. They now use Planet Forge's own demo settings: full size, a checkerboard of 3 (a ninth of the pixels drawn each frame) and smoothing 0.6 (**Volumetric Downscale**, **Volumetric Checkerboard**, **Volumetric Smoothing**).
+- **Planets were far too bright.** Polaris's main camera uses the kit's post-processing, which brightens the whole picture by 1.5 stops (about 2.8 times) with an ACES tone curve, for Dead Cargo's look. Planet Forge's planets were made without any, so they washed out to white, and with bloom set to start at 1 and spread wide (diffusion 7) every bright edge bloomed into a broad glow. The far sun now shines at **Planet Light** 0.35 of the scene's sun on planets only, which brings them back under the bloom threshold and keeps their colours. The sky, ships and rocks are unchanged.
+- **Edges were jagged.** The far picture now uses the quality level's anti-aliasing (4 samples when it has none).
+- The first test also showed three bodies: **Add Planets** had run before the two-planets change compiled, so the component kept the earlier moon and distant-planet values. Removing `Far Space` and adding planets again picks up the current defaults.
+
+### Implementation (steps 5b and 5c)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/Far/FarSpace.cs` | The far world, the far camera and the far sun: follows the main camera, shows the far picture as its sky, keeps every other camera off the layer |
+| `Shaders/FarSpaceBackdrop.shader` | The main camera's sky: the far camera's picture, pixel for pixel, in HDR |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Builds the run's planets in the far world from the seed, the sun and the catalogue; turns them |
+| `Scripts/Sectors/Far/BackdropLayout.cs` | Plans the run's system: pure maths, checked by the self-test |
+| `Scripts/Sectors/Far/BackdropSettings.cs`, `BackdropPlan.cs` | The rules for each kind of body, and one planned body |
+| `Scripts/Sectors/Far/PlanetCatalog.cs`, `PlanetEntry.cs`, `BodyRoles.cs` | The catalogue of planets, each with its roles, weight and radius |
+| `Editor/Visuals/PlanetCatalogBuilder.cs` | Copies Planet Forge's 26 planets into `Resources/Planets/` and builds the catalogue. Opens each demo scene beside the open one and closes it unsaved |
+| `Editor/PlanetsSetup.cs` | **Add Planets**: the Far Space layer, the Far Space object with its planets and backdrop shader, and the catalogue |
+| `Editor/SceneHierarchy.cs` | **Tidy Hierarchy** files far space with the visuals, in Environment |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | **Visuals**: the planets' status, **Add Planets** or **Edit Planets** |
+| `Editor/GodMenu/Tabs/SectorTab.cs` | **Planets** section in Play Mode: Far Space on or off, and each body's size, place and angle from the sun |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Backdrop checks |
+
+### Verified outside Unity (steps 5b and 5c)
+- Every Dead Cargo assembly compiles with Unity's own compiler and settings, against Planet Forge's assemblies, with no new warnings.
+- The backdrop shader's vertex and fragment programs compile with the DirectX 11 compiler against Unity's shader includes; a deliberately broken copy fails, so the check is real.
+- The seven new backdrop checks pass, run outside Unity against the compiled code, over 1,000 runs with Polaris's sun (60° across, with a 4° corona):
+  - with Polaris's rules, every run has exactly two planets, the primary and one other, never the same planet, both meeting every rule
+  - with moons switched on, so every rule is exercised: every run has a primary, and every body meets every rule; none settled for a closest miss
+  - nothing comes nearer the sun's edge than 6.3° (6 needed), and no two bodies overlap
+  - 1,051 moons, every one beside its primary; 504 distant planets; all within the 40° band
+  - no planet plays a part it is not given, a weight of 0 is never chosen, and no planet repeats within a run
+  - the same seed gives the same system; taking the moons away leaves the primary exactly where it was
+  - a 500 km planet 30° across stands 1,932 km away
+- Not run in Unity: copying the planets from the demo scenes, the far camera, its picture as the main camera's sky, the far sun, Planet Forge drawing in the far world, and the God Menu.
+
+### Test steps (steps 5b and 5c)
+1. Click into Unity and let it compile. The Console should be free of errors, shader errors included.
+2. Open Polaris. In the God Menu **Project** tab, **Visuals** reads "Planets: none". Press **Add Planets**, then **Copy Planets**. A progress bar copies Planet Forge's 26 planets, a minute or two. Afterwards `Resources/Planets/` holds 26 prefabs, `Data/Planets/PlanetCatalog.asset` lists them, a `Far Space` object sits under `Environment`, and **Visuals** reads "Planets: new each run, from 26 in the catalogue". Project Settings > Tags and Layers shows layer 12, **Far Space**. Save the scene. Planet Forge itself is unchanged: its demo scenes were only read.
+3. Press Play and look around. Two planets hang in the sky: a massive one, 16° to 34° across, and a smaller one, 3° to 8°, elsewhere. Each is lit on the side facing the sun, with its atmosphere and clouds. Neither touches the sun. Ships, rocks and dust draw in front of them.
+4. Open the God Menu **Sector** tab, **Planets** section: two lines, **Primary** and **Distant**, with each planet's name, size, angle from the sun and bearing. Turn to each by its bearing (clockwise from where you started) and height.
+5. Fly at full boost and turn hard. Planets hold still in the sky, like the sun, with no shake or lag.
+6. The sun still glows as before: switch **Far Space** off in the **Planets** section and back on, and compare. Off, the planets vanish and the sky is exactly as it was.
+7. Press **Random Seed**: a new sun and a new system. **Pin Seed**, then Restart: the same planets come back. **Unpin**.
+8. Watch a planet for a minute: its clouds and coasts drift slowly as it turns.
+9. Load the mothership: it looks as before.
+10. If the frame rate drops, note it with Far Space on and off. On the `Far Space` object, a higher **Volumetric Checkerboard** makes atmospheres and clouds cheaper.
+
+**After the first test (quality and glow).** Planets made by an earlier **Add Planets** keep its values, so start fresh:
+1. Click into Unity and let it compile. Stop Play. Delete `Environment/Far Space`, press **Add Planets** in the God Menu **Project** tab (the catalogue is already built, so it is quick), and save the scene.
+2. Press Play. Two planets only: the **Planets** section lists **Primary** and **Distant**.
+3. Each planet keeps its own colours instead of washing out to white, with no wide glow round it, and its edge is smooth.
+4. The line between day and night is clean, without coloured speckles. Turn fast: atmospheres and clouds hold, with no smearing trails.
+5. Select `Far Space` in Play Mode and drag **Planet Light**: lower is darker and moodier, higher brighter. Note the value you like and set it after Play stops.
+
+### Tuning (steps 5b and 5c)
+- On `Far Space`'s **Far Space**: scale, near and far clip; **Planet Light** (how bright the sun is on planets, live in Play Mode); **Volumetric Downscale**, **Checkerboard** and **Smoothing**; **Anti Aliasing**.
+- On `Far Space`'s **Backdrop Bodies**: the primary's chance, size, angle from the sun and clearance from the opening view; how many moons (0) and distant planets (1) and their sizes; band, sun and body clearance; spin. Changes rebuild the system at once in Play Mode.
+- On `Data/Planets/PlanetCatalog.asset`: each planet's roles and weight. A weight of 0 takes a planet out of every run.
+- Each planet's look, on its prefab in `Resources/Planets/` (Planet Forge's own components). Matching them to Dead Cargo's darker space is step 5d.
+
 ---
 
 ## Phase 6.10: Destruction
@@ -1369,3 +1472,139 @@ See what every system is doing while playing, the way a studio's development bui
 - Corner and size in the God Menu **Debug Overlay** tab.
 - GPU and render-thread times come from Unity's frame timing, which needs **Frame Timing Stats** on (Player Settings > Other Settings). Without it they read n/a; everything else works.
 - Ranges, colours and the refresh rate are constants at the top of `DebugOverlay.cs` and `DebugWorldDraw.cs`.
+
+---
+
+## Phase 6.12: Planet flight
+
+### Goal
+Fly from Polaris to Ixara and down to its surface, with no loading screen: point the ship at the planet, engage a cruise drive, watch the belt fall behind and the planet grow until it fills the view, then fly down through its clouds to the ground. Built on the far world (phase 6.9 steps 5b and 5c, sector generation step 3).
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Cruise drive | Engage with **B**: a short charge, then cruise where the ship points, fast in open space and slower near a surface, so leaving Polaris takes about 12 seconds and reaching Ixara's orbit under a minute. Drops out on its own 20 km above a planet, at Polaris on the way home, or on **B**. Polaris sleeps while you are away and wakes as you return. Cruise plate and planet markers on the HUD; God Menu **Flight** tab | Done, tested 2026-11-17 |
+| 2. Descent | Cruise drops you 3 km above the ground, under the clouds; fly down and land. The far copy keeps drawing Ixara at every height, and an invisible copy at true scale gives the ground you touch, matched triangle for triangle. Gravity pulls you down; the sea is solid for now | Built and compile-checked, awaiting test |
+| 3. Planet look | Ixara and Halonix painted like the sun (6.9 step 5d, moved here): soft tone bands, a cool charcoal night side, colours pulled into Dead Cargo's warm and teal palette, holding from orbit to the ground | Planned |
+
+### Design (step 1: cruise drive)
+The user asked to fly to a planet and down to its surface, seamlessly, and chose to build the flight before the planets' look, so the look is built once and holds at every distance. Ixara is the run's primary planet and Halonix the second, the only two in the catalogue for now.
+- **The star system.** System space is the star system's frame, with its origin at Polaris's arrival point, so Polaris's own sector space is part of it. `SectorSpace.SystemOffset` says where the near world sits in the system: zero while you are in Polaris. The far world follows the camera's system position, so as the offset grows the planets come closer, at their true scale.
+- **Engaging.** **B** charges the drive for 3 seconds; **B** again cancels. Then the ship cruises where its nose points, and you steer as usual. The HUD names the destination ahead: the planet or, on the way home, Polaris.
+- **Speed follows the space around you.** The drive's speed is a fraction of the distance to the nearest surface (**Rate**, 0.2 a second): a planet's surface, or Polaris's edge. Out in the open it climbs, as you near a surface it falls, so you never overshoot and long trips take not much longer than short ones: about 12 seconds to get clear of Polaris, 51 seconds from the belt to Ixara's orbit, 39 seconds back, 84 seconds to a planet 11,000 km out. It never drops below 2.5 km/s or climbs above 400 km/s, and eases rather than jumps (**Response**). The kit's engines fly against heavy drag, so drag is off while cruising and back on after.
+- **Leaving Polaris.** Inside Polaris and out to 10 km past its edge, the ship really flies through the near world at cruise speed, so the rocks stream past and fall behind. At 10 km out, beyond the camera's draw distance, so nothing visible changes, the ship and camera are moved back to the world's origin, the offset takes up the difference, and **Polaris sleeps**.
+- **Away.** The ship holds still in the world and the offset carries it through the system. Space dust streams past from the cruise speed (capped for the eye at 1.5 km/s), and the planets grow.
+- **Polaris sleeps.** Its asteroid field and field dust stop, and everything that belongs to the place is switched off where it stands: extraction points, pickups, voxel rocks, loose cargo, Authority ships. The player's ship, the player, the cameras, the kit's managers and the Systems, UI, Cameras and Environment folders stay. Heat, the run and the jump drive keep going. It wakes in exactly the state it slept.
+- **Coming home.** Cruising towards Polaris, at 10 km from its edge the ship is put back at its true place in Polaris, the offset returns to zero, Polaris wakes beyond the draw distance, and the drive drops out.
+- **Dropping out.** **B** at any time; 20 km above a planet (**Planet Floor**), which is orbit, just above Ixara's clouds; or on arriving home. You leave cruise at 300 m/s (**Exit Speed**) in normal flight. A collision in cruise also drops you out. Below a planet's floor the drive will not engage.
+- **Orbit for now.** After step 1 you can fly on below orbit at normal speed, but there is no ground to touch yet, and below about 1 km the far camera cuts the terrain. Step 2 hands the planet over to the near world for that.
+- **HUD.** A **Cruise Drive** plate (key **B**): READY and the destination ahead, CHARGING with seconds, CRUISE with speed in km/s, or TOO CLOSE. Planets get markers with their altitude in km, and Polaris gets one while you are away.
+- **God Menu.** A **Flight** tab: the drive's state, speed, nearest surface and destination; where you are in the system; and debug jumps: **Orbit Ixara**, 25 km above the primary facing it, and **Back to Polaris**.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/SectorSpace.cs` | `SystemOffset`, `WorldToSystem`, `SystemToWorld`, `SetSystemOffset` |
+| `Scripts/Flight/CruiseDrive.cs` | The drive on the player's ship: charge, cruise, the move between near and away, drop-out, debug jumps |
+| `Scripts/Flight/CruiseMath.cs`, `CruiseSettings.cs` | Speed from clearance, distance to a body or to Polaris's box: pure, checked by the self-test |
+| `Scripts/Flight/CruiseDriveInput.cs` | **B** for the drive, under the player like the kit's input scripts |
+| `Scripts/Flight/SectorPresence.cs` | Polaris asleep while away, awake on return |
+| `Scripts/Flight/RigShift.cs` | Moves the ship and camera rig to a new place in the world, trails and world-space particles included |
+| `Scripts/Sectors/Far/FarSpace.cs` | Follows the camera's system position |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Each planet's centre and radius in system space |
+| `Scripts/Visuals/SpaceDust.cs`, `Shaders/SpaceDust.shader` | Dust streams past from cruise speed while the ship holds still |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs`, `HudMarkerLayer.cs`, `HudMarkerStyle.cs` | Cruise plate, planet and Polaris markers in km; sleeping Authority ships unmarked |
+| `Editor/PlanetFlightSetup.cs`, `Editor/SectorSetup.cs` | Setup step **Planet Flight** |
+| `Editor/GodMenu/Tabs/FlightTab.cs` | The **Flight** tab |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Cruise checks |
+
+### Verified outside Unity (step 1)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code. Unity itself also compiled an earlier pass of this step and its API updater moved the drive to Unity 6's `linearVelocity`.
+- The four new cruise checks pass, run outside Unity against the compiled code, flying the drive's own rule at 60 frames a second:
+  - speed holds to its limits and rises with clearance; distances to the sector's box and to a sphere are exact
+  - from Polaris's belt to Ixara (500 km radius, 30° across): out of the sector's reach in 12.4 s, in orbit at exactly 20.0 km after 51.1 s, fastest 130 km/s
+  - from Ixara's orbit back within 10 km of Polaris after 38.7 s
+  - to a planet 11,464 km out: orbit after 83.7 s, at the 400 km/s limit at most
+- The backdrop checks still pass with Ixara and Halonix the only planets.
+- Not run in Unity: the cruise itself, the move between near and away, Polaris sleeping and waking, the dust, the HUD plate and markers, and the Flight tab.
+
+### Test steps (step 1)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows one step missing, **Planet Flight**: press **Set Up Sector**. The ship gains a **Cruise Drive**, the player a `CruiseControls` object, and `Sector Space` a **Sector Presence**. Save the scene.
+2. Press Play. The HUD has a **Cruise Drive** plate (B), and Ixara and Halonix have markers with their height in km. Turn towards Ixara: the plate reads READY  IXARA and its marker turns teal.
+3. Press **B**: CHARGING counts down 3 s. Press **B** again to cancel: CRUISE CANCELLED. Press it again and wait.
+4. Cruise: the speed climbs from 2.5 km/s, rocks stream past and fall behind, then the belt is gone. Ixara grows; dust streams past. Steer: the ship turns as usual. The marker's km falls fast, then slows.
+5. About a minute later the drive drops out 20 km above Ixara: ORBIT  IXARA, and you fly on at 300 m/s, the planet filling the view with clouds below.
+6. Open the God Menu **Flight** tab: **Where** shows the sector asleep and your height above Ixara. Fly down a little at normal speed; there is no ground yet (step 2).
+7. Turn back towards the **POLARIS** marker, press **B**, and cruise home: the drive drops out at Polaris's reach, ARRIVED  POLARIS, and the extraction marker, pickups and rocks are back as they were.
+8. In the **Flight** tab, **Jumps**: **Orbit Ixara** puts you 25 km above its sunlit side at once; **Back To Polaris** returns you to the arrival point.
+9. Cruise into a rock inside the belt: CRUISE INTERRUPTED, and you are back in normal flight.
+10. Engage with heat raised and Authority ships about: away, their markers vanish; back home they are where they were.
+
+### Tuning (step 1)
+- On the ship's **Cruise Drive**: charge time; **Rate**, slowest and fastest speed, **Response**; **Planet Floor** (orbit height), **Home Margin**, **Exit Speed**; **Dust Speed**.
+- The planets' places and sizes come from the run seed (phase 6.9 step 5c); **Orbit** jumps in the Flight tab are the quickest way to look at one.
+
+### Design (after the test of step 1: first person on C)
+The user tested cruise ("works fine") and asked for first person on **C**, so the cruise drive moved to **B**.
+- **First person on C.** **C** switches the ship's camera to first person, the kit's Interior view from the cockpit, and **C** again goes back to the view you came from. The kit's own keys still work beside it: **1** first person, **2** the chase view, **]** and **[** to cycle. It runs only in a vehicle that offers the first-person view.
+- **Cruise on B.** B was free in the kit, the player's controls and the Input Manager, and is the quantum-drive key in other space games. The drive's input field was renamed, so Polaris's saved C is dropped and B applies with no setup.
+
+| File | Role |
+|---|---|
+| `Scripts/Controls/FirstPersonInput.cs` | **C**: first person and back, under the player like the kit's input scripts |
+| `Editor/FirstPersonSetup.cs`, `Editor/SectorSetup.cs` | Setup step **First Person**: the controls under the player, pointed at the kit's Interior view |
+| `Scripts/Flight/CruiseDriveInput.cs`, `Scripts/UI/ExtractionHudView.cs` | The drive on **B**, and the plate's key |
+
+### Test steps (first person on C)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows one step missing, **First Person**: press **Set Up Sector**. The player gains `FirstPersonControls`. Save the scene.
+2. Press Play and press **C**: the view moves into the cockpit. **C** again: back to the chase view.
+3. Press **2** for the chase view, then **C** and **C**: you return to the chase view. **1**, **2**, **]** and **[** still work.
+4. The **Cruise Drive** plate shows **B**. **B** charges and engages the drive, and **C** no longer touches it. Cruise in first person: the cockpit holds steady while the dust streams past.
+
+### Design (step 2: descent)
+The user tested cruise and first person ("works fine") and asked for the descent.
+- **One picture at every height.** Ixara is drawn only by its copy in the far world, from orbit down to the ground. There is no visual hand-over to a second copy, so nothing can jump, change colour or tear at a seam. At 1:1000 a ship two metres up is two thousandths of a unit from the far copy's ground, and floating point is as precise at that scale as at true scale, so this holds all the way down.
+- **Ground you can touch.** Physics needs the planet at true scale, in the near world. Below 40 km (**Ground Range**) and out of cruise, an invisible copy of the planet is built at true scale around the ship (the **ground copy**): the same prefab, without its atmosphere, clouds or sea, on a layer no camera draws (**Planet Ground**), with Planet Forge's landscape collider. Both copies see the camera from the same place in their own scale, so Planet Forge builds the same triangles for both, and the colliders match what you see. It is removed above 50 km and during cruise.
+- **Detail to land on.** On the planet you are near, both copies make triangles down to 2 m (**Ground Detail**), against 10 m from orbit. It returns to the planet's own setting when you leave.
+- **The sea is solid for now.** A sphere at sea level stops the ship, so landing on water rests on its surface. Swimming and floating come later.
+- **Gravity.** Out of cruise and below Ground Range, the ship is pulled towards the planet's centre: 6 m/s² at the surface (**Surface Gravity**), weaker with the square of the distance. The kit's ships fly against heavy drag, so on its own gravity is a gentle sink, a couple of metres a second; you land by flying down onto the ground.
+- **Cruise drops you lower.** The drive now drops out 3 km above a planet (**Drop Height**), under Ixara's cloud layer (7 to 12 km up), so you fly through the clouds in cruise and come out beneath them with the ground in view. Below 3 km the drive will not engage: climb out first. The setting has a new name, so Polaris's saved 20 km is replaced by the new 3 km with no setup.
+- **The far camera reaches the ground.** While a ground copy exists the far camera draws from 0.5 m (**Ground Near Clip**) instead of 1 km, and its picture keeps a 32-bit depth buffer, so the near ground is not cut away and distant terrain does not flicker.
+- **Planets stop turning while you are away.** A planet's slow spin would move its surface under you at hundreds of metres a second, so every body holds still while the sector sleeps, and turns again when you come home.
+- **Altitude.** Below the drop height the Cruise Drive plate reads ALTITUDE with your height above the ground in metres, measured by a ray to the ground copy, or above sea level before the ground is ready.
+- **Limits.** Planet terrain is drawn behind the near world, so it cannot hide near objects: a ship behind a hill shows through it, and your ship casts no shadow on the ground. The far copy keeps no trees or rocks, which Planet Forge's demo planets place with spawners that were left out. These belong with step 3, the look.
+
+### Implementation (step 2)
+| File | Role |
+|---|---|
+| `Scripts/Flight/PlanetGround.cs` | The ground copy below Ground Range, gravity, ground detail on both copies, the far camera's near clip, the height above ground |
+| `Scripts/Flight/PlanetPhysics.cs` | Gravity at a distance: pure, checked by the self-test |
+| `Scripts/Flight/CruiseDrive.cs`, `CruiseSettings.cs`, `CruiseExit.cs` | **Drop Height** 3 km; arriving at a planet |
+| `Scripts/Sectors/Far/FarSpace.cs` | A near clip set from outside, 32-bit depth, a layer kept from every camera |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Bodies hold still while the sector sleeps; each body's catalogue entry |
+| `Scripts/UI/ExtractionHud.cs` | ALTITUDE on the Cruise Drive plate |
+| `Editor/PlanetFlightSetup.cs`, `Editor/ProjectLayers.cs`, `Editor/PlanetsSetup.cs` | **Planet Flight** adds the ground to Far Space and the **Planet Ground** layer; layers are made in one place |
+| `Editor/GodMenu/Tabs/FlightTab.cs` | **Ground** section, and **Low Over** jumps 6 km above a planet |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Gravity checks; the cruise trips to the new drop height |
+
+### Verified outside Unity (step 2)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The cruise checks pass with the new drop height, flying the drive's own rule: out of Polaris's reach in 12.4 s, dropped out exactly 3.0 km above Ixara after 56.7 s, home in 45.2 s, a planet 11,464 km out in 89.3 s.
+- The new gravity check passes: 6.00 m/s² at the surface, 5.93 at the drop height, a quarter at twice the radius, no stronger below the surface, none without a planet.
+- Not run in Unity: the ground copy and its colliders, landing, gravity on the ship, the far camera reaching the ground, and the Ground section.
+
+### Test steps (step 2)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows **Planet Flight** missing: press **Set Up Sector**. `Far Space` gains a **Planet Ground**, and Project Settings > Tags and Layers a **Planet Ground** layer (13). Save the scene.
+2. Press Play, point at Ixara and press **B**. Cruise now carries you down through the cloud layer and drops out 3 km up: ARRIVED  IXARA, with the ground in view under the clouds.
+3. The **Cruise Drive** plate reads ALTITUDE with your height above the ground in metres, and **B** does nothing until you climb back above 3 km.
+4. Open the God Menu **Flight** tab, **Ground** section: "Ground solid  ·  Ixara", your height above sea level and above the ground, and the pull.
+5. Fly down. The ground comes up with no jump or change on screen, and nothing near the ship is cut away. With the engines idle the ship sinks slowly.
+6. Touch down: the ship rests on the ground. Slide along it: it follows hills and valleys. Over the sea, the ship rests on the water's surface.
+7. Fly along the ground for a while, and in first person (**C**). Hills and coasts hold steady.
+8. Climb above 3 km and press **B**: cruise takes you back up and out; turn to the **POLARIS** marker for home.
+9. In the **Flight** tab, **Jumps**: **Low Over Ixara** puts you 6 km up, level, facing the horizon, for a quick descent.
+10. If distant coastlines or cloud edges flicker while you are low, raise **Ground Near Clip** on Planet Ground; if the ground near you looks coarse, lower **Ground Detail**.
+
+### Tuning (step 2)
+- On `Far Space`'s **Planet Ground**: **Ground Range**, **Ground Detail**, **Surface Gravity**, **Ground Near Clip**.
+- On the ship's **Cruise Drive**: **Drop Height**.

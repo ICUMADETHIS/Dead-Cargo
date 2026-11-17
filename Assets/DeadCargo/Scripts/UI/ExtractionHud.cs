@@ -3,7 +3,11 @@ using System.Collections.Generic;
 using DeadCargo.Authority;
 using DeadCargo.Cargo;
 using DeadCargo.Extraction;
+using DeadCargo.Flight;
 using DeadCargo.Heat;
+using DeadCargo.Sectors;
+using DeadCargo.Sectors.Far;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -52,6 +56,15 @@ namespace DeadCargo.UI
         private static readonly HudMarkerStyle PointMarkerStyle = new HudMarkerStyle(26f, true);
         private static readonly HudMarkerStyle HunterMarkerStyle = new HudMarkerStyle(20f, true);
         private static readonly HudMarkerStyle PickupMarkerStyle = new HudMarkerStyle(11f, false);
+        private static readonly HudMarkerStyle PlanetMarkerStyle = new HudMarkerStyle(18f, true, true);
+        private static readonly HudMarkerStyle HomeMarkerStyle = new HudMarkerStyle(22f, true, true);
+
+        private const int CruiseReady = 0;
+        private const int CruiseAltitude = 1;
+        private const int CruiseCharging = 2;
+        private const int CruiseCruising = 3;
+        private const double MetresPerKilometre = 1000.0;
+        private const double AltitudeStep = 10.0;
 
         private HudMarkerLayer markers;
         private ExtractionHudView view;
@@ -61,6 +74,12 @@ namespace DeadCargo.UI
         private CargoJettison jettison;
         private CargoLoadHandling handling;
         private JumpDrive jumpDrive;
+        private CruiseDrive cruise;
+        private int displayedCruiseState = -1;
+        private int displayedCruiseFigure = int.MinValue;
+        private string[] planetLabels = Array.Empty<string>();
+        private int labelledBuild = -1;
+        private string homeLabel;
         private HeatTracker heat;
         private RunTracker run;
         private AuthorityResponse authority;
@@ -126,6 +145,8 @@ namespace DeadCargo.UI
                 run.Ended += OnRunEnded;
 
             authority = AuthorityResponse.Active;
+            SectorSpace space = SectorSpace.Active;
+            homeLabel = space != null && space.Definition != null ? space.Definition.DisplayName.ToUpperInvariant() : "HOME";
             ExtractionPoint.StateChanged += OnPointStateChanged;
             Layout();
         }
@@ -146,6 +167,9 @@ namespace DeadCargo.UI
         {
             if (jumpDrive != null && jumpDrive.IsSpooling)
                 UpdateSpool();
+
+            if (cruise != null)
+                UpdateCruise();
 
             UpdatePoint();
             UpdateHunters();
@@ -224,6 +248,15 @@ namespace DeadCargo.UI
                 RefreshJumpDrive();
             }
 
+            cruise = vehicle.GetComponent<CruiseDrive>();
+            if (cruise != null)
+            {
+                cruise.ChargeCancelled += OnCruiseCancelled;
+                cruise.Dropped += OnCruiseDropped;
+                displayedCruiseState = -1;
+                UpdateCruise();
+            }
+
             Layout();
         }
 
@@ -246,8 +279,14 @@ namespace DeadCargo.UI
                 jumpDrive.HeldChanged -= OnSpoolHeldChanged;
                 jumpDrive.FuelShortage -= OnFuelShortage;
             }
+            if (cruise != null)
+            {
+                cruise.ChargeCancelled -= OnCruiseCancelled;
+                cruise.Dropped -= OnCruiseDropped;
+            }
 
             vehicle = null;
+            cruise = null;
             hold = null;
             handling = null;
             jettison = null;
@@ -368,8 +407,9 @@ namespace DeadCargo.UI
                 IReadOnlyList<Vehicle> hunters = authority.ActiveShips;
                 for (int i = 0; i < hunters.Count; ++i)
                 {
+                    // Ships asleep with the sector, while the player is away in cruise, are not marked.
                     Vehicle hunter = hunters[i];
-                    if (hunter != null && !hunter.Destroyed)
+                    if (hunter != null && !hunter.Destroyed && hunter.gameObject.activeInHierarchy)
                         markers.Add(hunter.transform.position, HunterMarkerStyle, HudFactory.WarningColor, HunterMarker,
                             RoundDistance(Vector3.Distance(hunter.transform.position, ship)));
                 }
@@ -391,7 +431,169 @@ namespace DeadCargo.UI
                 markers.Add(pickup.transform.position, PickupMarkerStyle, color, null, 0, fade);
             }
 
+            AddPlaceMarkers(ship);
             markers.End();
+        }
+
+        // Planets by their height above the surface, and the sector by its distance while the player is away. Planets are
+        // marked over their copies in the far world, which the camera sees where the planets stand.
+        private void AddPlaceMarkers(Vector3 ship)
+        {
+            SectorSpace space = SectorSpace.Active;
+            if (space == null)
+                return;
+
+            double3 position = space.WorldToSystem(ship);
+            int heading = cruise != null ? cruise.HeadingIndex : CruiseDrive.NoHeading;
+
+            BackdropBodies bodies = BackdropBodies.Active;
+            if (bodies != null)
+            {
+                RefreshPlanetLabels(bodies);
+                for (int i = 0; i < bodies.Plans.Count && i < planetLabels.Length; ++i)
+                {
+                    Transform planet = bodies.InstanceOf(i);
+                    if (planet == null)
+                        continue;
+
+                    double altitude = CruiseMath.Altitude(position, bodies.CentreOf(i), bodies.RadiusOf(i));
+                    Color color = i == heading ? HudFactory.CruiseColor : HudFactory.Muted;
+                    markers.Add(planet.position, PlanetMarkerStyle, color, planetLabels[i], Kilometres(altitude));
+                }
+            }
+
+            if (cruise == null || !cruise.IsAway)
+                return;
+
+            SectorGrid grid = space.Grid;
+            Vector3 centre = grid.Min + grid.Size * 0.5f;
+            double3 min = (double3)(float3)grid.Min;
+            double distance = CruiseMath.DistanceToBox(position, min, min + (double3)(float3)grid.Size);
+            Color homeColor = heading == CruiseDrive.HomeHeading ? HudFactory.CruiseColor : HudFactory.JumpColor;
+            markers.Add(space.SystemToWorld((double3)(float3)centre), HomeMarkerStyle, homeColor, homeLabel, Kilometres(distance));
+        }
+
+        // Labels are built once per system, so markers allocate nothing per frame.
+        private void RefreshPlanetLabels(BackdropBodies bodies)
+        {
+            if (labelledBuild == bodies.BuildCount && planetLabels.Length == bodies.Plans.Count)
+                return;
+
+            labelledBuild = bodies.BuildCount;
+            planetLabels = new string[bodies.Plans.Count];
+            for (int i = 0; i < planetLabels.Length; ++i)
+                planetLabels[i] = bodies.NameOf(i).ToUpperInvariant();
+        }
+
+        private static int Kilometres(double metres)
+        {
+            return (int)Math.Round(Math.Max(0.0, metres) / MetresPerKilometre);
+        }
+
+        // Text is rebuilt only when the state or its whole figure changes; the meter moves every frame.
+        private void UpdateCruise()
+        {
+            int state;
+            int figure;
+            float fraction;
+            switch (cruise.State)
+            {
+                case CruiseState.Charging:
+                    state = CruiseCharging;
+                    figure = Mathf.CeilToInt(cruise.ChargeRemaining);
+                    fraction = cruise.ChargeProgress;
+                    break;
+                case CruiseState.Cruising:
+                    state = CruiseCruising;
+                    figure = (int)Math.Round(cruise.Speed / MetresPerKilometre);
+                    fraction = SpeedFraction(cruise.Speed, cruise.Settings);
+                    break;
+                default:
+                    state = cruise.IsBelowFloor ? CruiseAltitude : CruiseReady;
+                    figure = state == CruiseAltitude ? AltitudeFigure() : cruise.HeadingIndex;
+                    fraction = state == CruiseAltitude ? Mathf.Clamp01((float)(figure / cruise.Settings.DropHeight)) : 0f;
+                    break;
+            }
+
+            Color color = HudFactory.CruiseColor;
+            if (state == displayedCruiseState && figure == displayedCruiseFigure)
+            {
+                view.SetCruiseProgress(fraction, color);
+                return;
+            }
+
+            displayedCruiseState = state;
+            displayedCruiseFigure = figure;
+            switch (state)
+            {
+                case CruiseCharging:
+                    view.SetCruise("CHARGING", color, $"{figure} s", "CANCEL", fraction);
+                    break;
+                case CruiseCruising:
+                    view.SetCruise("CRUISE", color, $"{figure:N0} km/s", "DROP", fraction);
+                    break;
+                case CruiseAltitude:
+                    view.SetCruise("ALTITUDE", color, $"{figure:N0} m", "CLIMB", fraction);
+                    break;
+                default:
+                    view.SetCruise("READY", color, HeadingLabel(), "ENGAGE", fraction);
+                    break;
+            }
+        }
+
+        // Height above the ground below, in steps of 10 m so the text is not rebuilt every frame: by the planet's ground
+        // once it is solid, else above the nearest surface.
+        private int AltitudeFigure()
+        {
+            PlanetGround ground = PlanetGround.Active;
+            double metres = ground != null && ground.HasGround ? ground.GroundDistance : cruise.Clearance;
+            if (double.IsInfinity(metres) || double.IsNaN(metres))
+                metres = cruise.Clearance;
+
+            return (int)(Math.Round(Math.Max(0.0, metres) / AltitudeStep) * AltitudeStep);
+        }
+
+        private string HeadingLabel()
+        {
+            int heading = cruise.HeadingIndex;
+            if (heading == CruiseDrive.HomeHeading)
+                return homeLabel ?? "HOME";
+
+            BackdropBodies bodies = BackdropBodies.Active;
+            return heading >= 0 && bodies != null ? bodies.NameOf(heading).ToUpperInvariant() : "";
+        }
+
+        // Speed on a log scale between the drive's slowest and fastest, so the meter moves through the whole trip.
+        private static float SpeedFraction(double speed, in CruiseSettings settings)
+        {
+            double span = Math.Log(Math.Max(settings.MaxSpeed, settings.MinSpeed * 1.0001) / settings.MinSpeed);
+            return Mathf.Clamp01((float)(Math.Log(Math.Max(speed, settings.MinSpeed) / settings.MinSpeed) / span));
+        }
+
+        private void OnCruiseCancelled()
+        {
+            ShowNotice("CRUISE CANCELLED", HudFactory.WarningColor, false);
+        }
+
+        private void OnCruiseDropped(CruiseExit exit)
+        {
+            switch (exit)
+            {
+                case CruiseExit.Planet:
+                    BackdropBodies bodies = BackdropBodies.Active;
+                    string planet = bodies != null && cruise.NearestPlanet >= 0 ? bodies.NameOf(cruise.NearestPlanet).ToUpperInvariant() : "";
+                    ShowNotice($"ARRIVED  {planet}", HudFactory.CruiseColor, false);
+                    break;
+                case CruiseExit.Home:
+                    ShowNotice($"ARRIVED  {homeLabel ?? "HOME"}", HudFactory.CruiseColor, false);
+                    break;
+                case CruiseExit.Collision:
+                    ShowNotice("CRUISE INTERRUPTED", HudFactory.WarningColor, true);
+                    break;
+                default:
+                    ShowNotice("CRUISE DISENGAGED", HudFactory.Muted, false);
+                    break;
+            }
         }
 
         private static int RoundDistance(float metres)
@@ -600,7 +802,7 @@ namespace DeadCargo.UI
 
         private void Layout()
         {
-            view.Layout(heat != null, hold != null, jumpDrive != null, hasPointPlate, manifestOpen, noticeVisible);
+            view.Layout(heat != null, hold != null, jumpDrive != null, cruise != null, hasPointPlate, manifestOpen, noticeVisible);
             markers.SetCoveredCorner(view.StackSize);
         }
 

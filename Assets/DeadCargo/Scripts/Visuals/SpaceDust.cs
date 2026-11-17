@@ -20,6 +20,8 @@ namespace DeadCargo.Visuals
         private const float BoundsSize = 1e6f;
 
         private static readonly int VelocityId = Shader.PropertyToID("_Velocity");
+        private static readonly int TravelId = Shader.PropertyToID("_Travel");
+        private static readonly int FieldSizeId = Shader.PropertyToID("_FieldSize");
 
         [Tooltip("Material using the DeadCargo/Space Dust shader. The look is set there.")]
         [SerializeField] private Material material;
@@ -42,10 +44,31 @@ namespace DeadCargo.Visuals
         private Vector3 lastPosition;
         private bool hasLastPosition;
         private Vector3 velocity;
+        private Vector3 drift;
+        private Vector3 travel;
         private bool rebuildPending;
+
+        /// <summary>The space dust of the loaded scene in Play Mode, or null.</summary>
+        public static SpaceDust Active { get; private set; }
 
         /// <summary>The tracked camera's smoothed velocity, in metres per second. It streaks the dust.</summary>
         public Vector3 Velocity => velocity;
+
+        /// <summary>
+        /// Streams the dust past the tracked camera as if it moved at <paramref name="apparentVelocity"/>, in metres per
+        /// second, on top of its real motion. The cruise drive uses it while the ship holds still and the star system moves.
+        /// </summary>
+        public void Drift(Vector3 apparentVelocity)
+        {
+            drift = apparentVelocity;
+        }
+
+        // Statics survive play sessions when domain reload is off.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Active = null;
+        }
 
         private void OnEnable()
         {
@@ -55,6 +78,10 @@ namespace DeadCargo.Visuals
             BuildMesh();
             hasLastPosition = false;
             velocity = Vector3.zero;
+            drift = Vector3.zero;
+            if (Application.isPlaying)
+                Active = this;
+
             Camera.onPreCull += Draw;
         }
 
@@ -62,6 +89,8 @@ namespace DeadCargo.Visuals
         {
             Camera.onPreCull -= Draw;
             DestroyMesh();
+            if (Active == this)
+                Active = null;
         }
 
         // Meshes cannot be destroyed inside OnValidate, so the rebuild waits for the next update.
@@ -78,8 +107,15 @@ namespace DeadCargo.Visuals
 
         private void LateUpdate()
         {
-            if (Application.isPlaying)
-                TrackCamera();
+            if (!Application.isPlaying)
+                return;
+
+            TrackCamera();
+
+            // Kept within one field, so the shader's wrap stays precise however long the drift runs.
+            float size = material != null ? Mathf.Max(1f, material.GetFloat(FieldSizeId)) : 1f;
+            travel += drift * Time.deltaTime;
+            travel = new Vector3(Mathf.Repeat(travel.x, size), Mathf.Repeat(travel.y, size), Mathf.Repeat(travel.z, size));
         }
 
         // Velocity is measured against unscaled time, so a paused world draws no streaks and slow motion draws short ones.
@@ -121,7 +157,9 @@ namespace DeadCargo.Visuals
                 return;
 
             // Only the tracked camera streaks the dust. Others, such as the Scene view, see still motes.
-            properties.SetVector(VelocityId, camera == trackedCamera ? velocity : Vector3.zero);
+            bool tracked = camera == trackedCamera;
+            properties.SetVector(VelocityId, tracked ? velocity + drift : Vector3.zero);
+            properties.SetVector(TravelId, tracked ? travel : Vector3.zero);
             Graphics.DrawMesh(mesh, Matrix4x4.identity, material, gameObject.layer, camera, 0, properties,
                 ShadowCastingMode.Off, false, null, LightProbeUsage.Off, null);
         }

@@ -1,0 +1,496 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &569946535507069492
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 526341491718852860}
+  - component: {fileID: 972953595191334669}
+  m_Layer: 0
+  m_Name: SgtCloudDetail
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &526341491718852860
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 569946535507069492}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8775579450960594294}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &972953595191334669
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 569946535507069492}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7196e84cb76419e4d8e78e00afe49e83, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  coverageTex: {fileID: 2800000, guid: ec0ff2249de17e642a0fb7ad8dbd97fe, type: 3}
+  carveEdge: 0.24
+  carveCore: 0
+  scale: 0.008
+  speed: 0.02
+  offset: 0
+  channels: {x: 1, y: 1, z: 1, w: 1}
+--- !u!1 &2680589607500588428
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5870337209497642797}
+  m_Layer: 0
+  m_Name: Draxxor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5870337209497642797
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2680589607500588428}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 7383937309601031217}
+  - {fileID: 1057680314856357401}
+  - {fileID: 8775579450960594294}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2889463834822360402
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8973685100902263769}
+  - component: {fileID: 2162921246556034517}
+  m_Layer: 0
+  m_Name: SgtLandscapeBiome
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8973685100902263769
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2889463834822360402}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7383937309601031217}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2162921246556034517
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2889463834822360402}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a006683bbbcbc764d922d67f1e2590fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  space: 0
+  surfaceScale: 1
+  replace: 1
+  mask: {fileID: 0}
+  maskInvert: 0
+  maskSharpness: 1
+  maskGlobalShift: 0
+  maskDetail: {fileID: 0}
+  maskDetailTiling: {x: 10, y: 10}
+  maskDetailOffset: 0
+  color: 1
+  gradientTexture: {fileID: 2800000, guid: ac04f8ef8af3d0642b70ecaac96a9b78, type: 3}
+  variation: 0.098
+  offset: 0
+  occlusion: 1
+  strata: 0.1
+  blur: 0
+  smoothnessMidpoint: 0.5
+  smoothnessStrength: 0
+  smoothnessPower: 2
+  emissionMidpoint: 0.5
+  emissionStrength: 0
+  emissionPower: 2
+  layers:
+  - enabled: 1
+    displace: 1
+    heightTexture: {fileID: 2800000, guid: 874cd0de0dbd19c4288c9eef61a3ee0a, type: 3}
+    heightMidpoint: 0.5
+    heightRange: 2
+    globalSize: 640
+    localTiling: {x: 1, y: 1}
+    strata: 2
+    heightIndex: 0
+  - enabled: 1
+    displace: 1
+    heightTexture: {fileID: 2800000, guid: 874cd0de0dbd19c4288c9eef61a3ee0a, type: 3}
+    heightMidpoint: 0
+    heightRange: 0.05
+    globalSize: 40
+    localTiling: {x: 1, y: 1}
+    strata: 0.2
+    heightIndex: 0
+  textureLayers: []
+  maskIndex: 0
+  maskDetailIndex: 0
+  gradientIndex: 0
+--- !u!1 &4131316108558677644
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1057680314856357401}
+  - component: {fileID: 7978256594836775959}
+  m_Layer: 0
+  m_Name: SgtSky
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1057680314856357401
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4131316108558677644}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5870337209497642797}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7978256594836775959
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4131316108558677644}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c045983184b273146aa6b17b4293937b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  material: {fileID: 2100000, guid: d0470dd0285dc2a4685aa8b900ea0cc4, type: 2}
+  color: {r: 1, g: 1, b: 1, a: 1}
+  brightness: 1
+  ambientTint: {r: 1, g: 1, b: 1, a: 0.15}
+  innerMeshRadius: 500
+  height: 25
+  density: 2
+  weight: 1
+  cameraOffset: 0.1
+  revealStars: 1
+  depthOpaque: 5
+  rayleighColor: {r: 1, g: 0.01, b: 0.01, a: 1}
+  rayleighMultiplier: 1
+  rayleighHeight: 0.303
+  mieAbsorb: 4.4
+  mieMultiplier: 7.9
+  mieHeight: 0.104
+  mieAsymmetry: 0.76
+  mieAsymmetry2: 0.999
+  ozoneColor: {r: 0.345, g: 1, b: 0.045, a: 1}
+  ozoneMultiplier: 1.881
+  ozoneHeight: 0.25
+  ozoneThickness: 0.15
+  albedoTex: {fileID: 0}
+  exposure: 20
+--- !u!1 &4885181633257527594
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3937324843555712597}
+  - component: {fileID: 510778734704031180}
+  m_Layer: 0
+  m_Name: SgtCloudDetail
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3937324843555712597
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4885181633257527594}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 8775579450960594294}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &510778734704031180
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4885181633257527594}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7196e84cb76419e4d8e78e00afe49e83, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  coverageTex: {fileID: 2800000, guid: 8f51e28c66f96a645bc84423c790aa5e, type: 3}
+  carveEdge: 0.317
+  carveCore: 0.816
+  scale: 0.324
+  speed: 0
+  offset: 0
+  channels: {x: 1, y: 1, z: 1, w: 1}
+--- !u!1 &5485872920316502294
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7383937309601031217}
+  - component: {fileID: 4577712064873686249}
+  m_Layer: 0
+  m_Name: SgtSphereLandscape
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7383937309601031217
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5485872920316502294}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 8973685100902263769}
+  m_Father: {fileID: 5870337209497642797}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4577712064873686249
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5485872920316502294}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7d01db0775ae154895e45f658b2e500, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  editorDetail: 3.2
+  initDetail: 0
+  detail: 4
+  boostMultiplier: 1.75
+  minimumTriangleSize: 0.01
+  lodBudget: 0.0005
+  lodSteps: 30
+  useSpawnAnchor: 0
+  material: {fileID: 2100000, guid: eaaa943ecc193ae4a84c1eaf5befc977, type: 2}
+  globalSizes: {x: 1, y: 100, z: 10000, w: 1000000}
+  globalSizesNormalized: {x: 0.99987036, y: 101.3417, z: 3141.5928, w: 3141.5928}
+  globalTiling: {x: 3142, y: 31, z: 1, w: 1}
+  globalTilingNormalized: {x: 1.0001297, y: 0.009867607, z: 0.00031830987, w: 0.00031830987}
+  observers: []
+  castShadows: 1
+  receiveShadows: 1
+  compressBounds: 0
+  radius: 500
+  sky: {fileID: 7978256594836775959}
+  cloudShadow: {fileID: 4850245879263377074}
+  oceanFade: {fileID: 0}
+  albedoTex: {fileID: 0}
+  heightTex: {fileID: 0}
+  heightMidpoint: 0
+  heightRange: 1
+  strata: 1
+--- !u!1 &6157222186616400693
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8775579450960594294}
+  - component: {fileID: 4850245879263377074}
+  m_Layer: 0
+  m_Name: SgtCloud
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8775579450960594294
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6157222186616400693}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 3937324843555712597}
+  - {fileID: 526341491718852860}
+  m_Father: {fileID: 5870337209497642797}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4850245879263377074
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6157222186616400693}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c066d15bc639e8449a7a0222266b70f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  material: {fileID: 2100000, guid: 148391902b7010d4b9495ae346d9357e, type: 2}
+  coverageTex: {fileID: 0}
+  temperatureRoot: {fileID: 0}
+  temperatureTex: {fileID: 0}
+  temperatureInvert: 0
+  outerRadius: 512
+  innerRadius: 507
+  cullStrength: 128
+  cullInside: 0
+  sortOffset: 0.01
+  erodeTiling: 70
+  erodeCutoff: 0.5
+  erodeRange: 3
+  erodeStrength: 5
+  erodeBoostRange: 0.1
+  erodeBoostStrength: 0
+  carveTiling: 70
+  carveRange: 3
+  carveStrength: 2
+  sky: {fileID: 7978256594836775959}
+  underwaterRatio: 0
+  density: 1500
+  resolution: 512
+  highPrecision: 1
+  color: {r: 0.4339623, g: 0, b: 0, a: 1}
+  color2: {r: 1, g: 0.7225495, b: 0, a: 1}
+  scatteringColor: {r: 1, g: 0.9568336, b: 0.25, a: 0.34901962}
+  brightness: 1
+  ambientTint: {r: 1, g: 1, b: 1, a: 0.15}
+  shadowOpacity: 1
+  shadowOffset: 0.6
+  shadowLod: 0
+  shadowStrength: 0.1
+  shadowPowder: 0.5
+  longShadowTargetHeight: 0.913
+  longShadowFadeDistance: 0.024
+  lightningChannel: 3
+  lightningTiling: 1
+  lightningDetail: 0.5
+  nearDetail: 0.07
+  farDetail: 0
+  windOffset: {x: 0, y: 0, z: 0}
+  cloudLayers:
+  - Bottom: 0
+    Top: 0.425
+    Density: 1
+    Softness: 0.581
+    Bias: -0.5
+    BrightnessBottom: 0.75
+    BrightnessTop: 1
+    SampleChannel: 0
+    SampleThreshold: 0
+    ErodeChannel: 0
+    ErodeStrength: 1
+    CarveChannel: 0
+  - Bottom: 0.146
+    Top: 0.86
+    Density: 1
+    Softness: 0.181
+    Bias: -0.5
+    BrightnessBottom: 0.75
+    BrightnessTop: 1
+    SampleChannel: 0
+    SampleThreshold: 0.326
+    ErodeChannel: 0
+    ErodeStrength: 1
+    CarveChannel: 0
+  - Bottom: 0.674
+    Top: 1
+    Density: 1
+    Softness: 0.545
+    Bias: -0.5
+    BrightnessBottom: 1
+    BrightnessTop: 1
+    SampleChannel: 0
+    SampleThreshold: 0.334
+    ErodeChannel: 0
+    ErodeStrength: 0.089
+    CarveChannel: 0
+  coverage: 1
+  coverageBundle: {fileID: 0}
+  coverageLayers: []

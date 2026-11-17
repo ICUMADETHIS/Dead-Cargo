@@ -18,6 +18,7 @@ namespace DeadCargo.UI
         internal static readonly Color JumpColor = new Color32(116, 206, 255, 255);
         internal static readonly Color SuccessColor = new Color32(124, 226, 158, 255);
         internal static readonly Color DarkMatterColor = new Color32(178, 136, 255, 255);
+        internal static readonly Color CruiseColor = new Color32(96, 224, 208, 255);
 
         private const string HeadingFontPath = "HUD/BarlowCondensed-SemiBold";
         private const string NumericFontPath = "HUD/IBMPlexMono-Regular";

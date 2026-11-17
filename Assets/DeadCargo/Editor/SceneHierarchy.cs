@@ -39,6 +39,7 @@ namespace DeadCargo.EditorTools
         private const string DeadCargoNamespace = "DeadCargo";
         private const string VisualsNamespace = "DeadCargo.Visuals";
         private const string VoxelsNamespace = "DeadCargo.Destruction.Voxels";
+        private const string FarNamespace = "DeadCargo.Sectors.Far";
 
         [MenuItem(TidyMenuPath, priority = 150)]
         private static void TidyOpenScene()
@@ -137,8 +138,8 @@ namespace DeadCargo.EditorTools
             if (root.TryGetComponent(out Canvas _))
                 return UI;
 
-            // Dead Cargo's visual effects and placed asteroids are set dressing, not systems.
-            if (HasComponentFrom(root, VisualsNamespace) || HasComponentFrom(root, VoxelsNamespace))
+            // Dead Cargo's visual effects, far space and placed asteroids are set dressing, not systems.
+            if (HasComponentFrom(root, VisualsNamespace) || HasComponentFrom(root, FarNamespace) || HasComponentFrom(root, VoxelsNamespace))
                 return Environment;
             if (root.TryGetComponent(out EventSystem _) || HasComponentFrom(root, DeadCargoNamespace))
                 return Systems;

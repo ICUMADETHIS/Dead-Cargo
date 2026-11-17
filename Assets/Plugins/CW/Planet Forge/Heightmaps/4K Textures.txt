@@ -1,0 +1,5 @@
+To make this asset faster to upload and download, I've resized these heightmap textures to 2K resolution.
+
+If you want the original 4K textures, then you can download them from here: https://drive.google.com/file/d/1EqMPTYj7SoEHtU7m1Q_wtn5KuY6I8iP4
+
+NOTE: The terrains are built from multiple layers of detail, so switching to 4K textures massively increases your build size, and only delivers a minor improvement in terrain detail, so I recommend sticking to 2K, even 1K is usually good enough. 

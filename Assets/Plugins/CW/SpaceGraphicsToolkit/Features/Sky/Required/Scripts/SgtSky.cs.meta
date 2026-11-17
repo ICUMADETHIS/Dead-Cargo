@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: c045983184b273146aa6b17b4293937b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - material: {fileID: 2100000, guid: d0470dd0285dc2a4685aa8b900ea0cc4, type: 2}
+  - clouds: {instanceID: 0}
+  - albedoTex: {instanceID: 0}
+  - model: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

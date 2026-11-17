@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using DeadCargo.EditorTools.Visuals;
 using DeadCargo.Flow;
+using DeadCargo.Sectors.Far;
 using DeadCargo.Visuals;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -36,6 +37,8 @@ namespace DeadCargo.EditorTools.GodMenu
         private const string RemoveRockLabel = "Remove Test Rock";
         private const string SetUpSunLabel = "Set Up Sun";
         private const string SelectSunLabel = "Select Sun";
+        private const string AddPlanetsLabel = "Add Planets";
+        private const string EditPlanetsLabel = "Edit Planets";
 
         // Matching entries: button label and project-relative path.
         private static readonly string[] DocLabels = { "Game Design", "Roadmap", "Code Standards", "Backlog" };
@@ -58,10 +61,13 @@ namespace DeadCargo.EditorTools.GodMenu
         private GameObject testRock;
         private Light sun;
         private bool sunReady;
+        private FarSpace farSpace;
+        private bool planetsReady;
+        private int planetCount;
 
-        // The Visuals section's buttons, one each for the sky, the dust, the distance fade, the ship, the test rock and
-        // the sun, chosen in OnUpdate.
-        private readonly string[] visualLabels = new string[6];
+        // The Visuals section's buttons, one each for the sky, the dust, the distance fade, the ship, the test rock, the
+        // sun and the planets, chosen in OnUpdate.
+        private readonly string[] visualLabels = new string[7];
 
         public override string Title => "Project";
         public override GodMenuGroup Group => GodMenuGroup.Editor;
@@ -114,6 +120,11 @@ namespace DeadCargo.EditorTools.GodMenu
             visualLabels[3] = shipIsComic ? EditShipLabel : ComicShipLabel;
             visualLabels[4] = testRock == null ? PlaceRockLabel : RemoveRockLabel;
             visualLabels[5] = sunReady ? SelectSunLabel : SetUpSunLabel;
+            farSpace = PlanetsSetup.Find(scene);
+            planetsReady = PlanetsSetup.IsInstalled(scene);
+            PlanetCatalog catalog = PlanetCatalogBuilder.Find();
+            planetCount = catalog != null ? catalog.Count : 0;
+            visualLabels[6] = planetsReady ? EditPlanetsLabel : AddPlanetsLabel;
         }
 
         public override void OnGUI()
@@ -202,6 +213,10 @@ namespace DeadCargo.EditorTools.GodMenu
                 bool hasDepth = depth != null;
                 GodMenuGUI.Status(hasDepth, hasDepth ? "Distance fade: on" : "Distance fade: none");
                 GodMenuGUI.Status(shipIsComic, shipIsComic ? "Ship: comic look" : "Ship: Flat Kit look");
+                if (planetsReady)
+                    GodMenuGUI.Status(true, $"Planets: new each run, from {planetCount} in the catalogue");
+                else
+                    GodMenuGUI.Status(false, farSpace == null ? "Planets: none" : "Planets: need setting up");
 
                 int clicked = GodMenuGUI.ButtonRow(visualLabels);
                 if (clicked < 0)
@@ -256,6 +271,12 @@ namespace DeadCargo.EditorTools.GodMenu
                         break;
                     case SelectSunLabel when sun != null:
                         SelectAndPing(sun.gameObject);
+                        break;
+                    case AddPlanetsLabel:
+                        EditorApplication.delayCall += () => PlanetsSetup.Apply();
+                        break;
+                    case EditPlanetsLabel when farSpace != null:
+                        SelectAndPing(farSpace.gameObject);
                         break;
                 }
             }

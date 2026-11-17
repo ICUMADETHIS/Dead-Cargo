@@ -42,6 +42,7 @@ One public type per file. The file name matches the type.
 
 ## Kit integration
 - Kit files under `Assets/SpaceCombatKit/`, `Assets/FlatKit/` and `Assets/DrawDebugTools/` are never edited. Extend through components, events and public API.
+- **Planet Forge** (with Space Graphics Toolkit and CW's shared code) lives under `Assets/Plugins/CW/` and is never edited either; Dead Cargo's planets are our own prefabs and components that use it. It compiles into its own assemblies (`CW.Common`, `CW.SimpleOriginSystem`, `CW.SimpleShaderSystem`, `SpaceGraphicsToolkit`, `PlanetForge`). It needs the **Shader Graph** package (its shaders are Shader Graph builds with a Built-in pipeline target) and **Collections**. The Input System package is not installed: the project runs on the classic Input Manager, which the kit needs, and CW's input falls back to it. Its demo scenes are for reference only; never save changes to them.
 - The kit compiles into the default assembly, so Dead Cargo code does too. Assembly definitions are deferred until the kit is isolated.
 - Exception: pure code with no kit or scene dependency may have its own assembly. `DeadCargo.Destruction.Core` (voxel maths and its Burst jobs, unsafe code allowed) and its editor tests, `DeadCargo.Destruction.Diagnostics`, are the first. Everything else stays in the default assembly.
 
@@ -92,7 +93,7 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
   | Group | Shown | Tabs |
   |---|---|---|
   | GAME | Always | Session 0, Mothership 10, Debug Overlay 20 |
-  | LIVE RUN | In Play Mode, when the tab's system is in the scene | Player 0, Cargo 10, Heat 20, Authority 30, Extraction 40, World 50, Sector 60, Destruction 70 |
+  | LIVE RUN | In Play Mode, when the tab's system is in the scene | Player 0, Cargo 10, Heat 20, Authority 30, Extraction 40, World 50, Flight 55, Sector 60, Destruction 70 |
   | EDITOR | Outside Play Mode. Range only in the test range or a blank scene, never the mothership or a game sector | Range 0, Project 10 |
 
 - **Show only what applies.** Override `IsAvailable` so a tab hides when its system is missing or the mode is wrong. Never show a tab full of disabled controls or "run the setup" warnings. The Project tab reports setup status.
@@ -117,6 +118,8 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 - **A cell stands alone.** Anything a cell needs from its neighbours, such as the giants small rocks keep out of, is worked out again from their seeds, never read from loaded cells, so a cell is the same whatever else is loaded.
 - **Read the run's layout, not the definition.** Each run varies the regions and adds clearings round placed content (`SectorLayout`). Runtime code reads regions and density from `SectorSpace.Layout` or `SectorSpace.DensityAt`, never `SectorDefinition.Regions`, which is authoring data. Only editor tools and diagnostics read the definition.
 - **The seed is the run's.** `SectorSpace.Seed` is new every load unless the definition pins it. Anything that should change between runs (layout, placement, the sky) derives from it with its own stream, so a pinned seed replays the whole run.
+- **Places beyond the sector live in system space.** The star system's frame has its origin at the sector's arrival point and is kept in double precision. `SectorSpace.SystemOffset` says where the near world sits in it; convert with `WorldToSystem` and `SystemToWorld`. Never assume the near world sits at the system's origin: the cruise drive moves it.
+- **The sector sleeps while the player is away.** `SectorPresence` switches off every root object that belongs to the place, and pauses the asteroid field and field dust. New sector content sleeps with it by living at the scene root, or must be added to what it pauses. Objects in the Systems, UI, Cameras and Environment folders stay awake, so they must not draw or act at sector positions while the player is away.
 - **Scene content is placed by rules.** Hand-placed sector content that should move each run carries a `SectorPlacement` with a shared `SectorPlacementRule` asset. Placement runs before anything else wakes, so content may cache its position in `Awake`. Content spawned at runtime is never placed.
 
 ## Space visuals
@@ -131,6 +134,10 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 - **Largest first.** Generated content that is culled or picked by size is kept largest first in its cell (`FieldSort`), so every reader stops at the first item too small to matter from the cell's nearest point. Never loop a whole cell where an early exit will do.
 - **Detail from the camera's path.** Anything that picks detail by size on screen measures distance with `FieldRockShape.DetailDistance`, and its shader with `_FieldDetailAhead`, so the CPU and the shader agree and fast flight finds detail ready.
 - **Solid through pooled stand-ins.** Instanced content turns solid by borrowing a pooled collider near the player, picked by a job, with shapes cooked on workers at load (`FieldRockColliders`). Nothing is cooked, created or destroyed in flight.
+- **Far things live in the far world.** Anything beyond the main camera's 10 km reach (planets now; giants, stations and capital ships later) goes into `FarSpace`'s far world at 1:1000 through `FarSpace.Adopt`, on the Far Space layer, and is drawn only by the far camera. Never raise the main camera's far clip to show it. Place far content from sector-space directions and distances; the far world's origin follows the camera on its own.
+- **Planet Forge sees one camera.** Planet Forge reads `Camera.main` for detail, atmospheres and oceans, so the far camera always stands where the main camera is. Never give the far camera a position of its own, and never tag it MainCamera.
+- **A planet is drawn once.** Its far copy draws it at every height, down to the ground. Anything physical about a planet (colliders, gravity, the sea surface) lives on its invisible ground copy (`PlanetGround`), on the Planet Ground layer, which no camera draws. Never draw a second copy of a planet in the near world: two pictures of one planet will not line up.
+- **Planets load by name.** Planet prefabs live in `Resources/Planets/` and the catalogue names them, so only the run's planets are loaded. Never reference planet prefabs directly from a scene or a loaded asset.
 - **Depth through Space Depth.** Distance fade and the dissolve at the draw distance come from the `Space Depth` object's shader globals (`_SpaceDepth`, `_SpaceDepthColor`, `_SpaceDepthDissolve`). A new shader for near objects calls the comic surface's `DepthFade` and `DepthDissolve` the same way, so everything fades and dissolves alike and nothing pops at the edge of sight.
 - **Sizes in pixels where crispness matters.** Stars and similar points are sized in pixels at 1080p and scale with screen height, never in world or angle units that blur or vanish.
 - **Bake what is costly and fixed.** Noise that does not change at runtime is baked in the editor, and the shader thresholds the filtered value. Colours and thresholds stay live material settings.

@@ -27,6 +27,7 @@ Shader "DeadCargo/Space Dust"
         _RestVisibility ("Rest Visibility", Range(0, 1)) = 0.15
         _FullSpeed ("Full Speed (m/s)", Range(1, 500)) = 80
         [HideInInspector] _Velocity ("Velocity", Vector) = (0, 0, 0, 0)
+        [HideInInspector] _Travel ("Travel", Vector) = (0, 0, 0, 0)
     }
 
     SubShader
@@ -70,6 +71,7 @@ Shader "DeadCargo/Space Dust"
             float _RestVisibility;
             float _FullSpeed;
             float4 _Velocity;
+            float4 _Travel;
 
             // Pixel sizes are given at this screen height and scale with it.
             static const float ReferenceHeight = 1080.0;
@@ -127,9 +129,11 @@ Shader "DeadCargo/Space Dust"
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-                // The copy of this mote nearest the camera, inside a cube of the field size centred on it.
+                // The copy of this mote nearest the camera, inside a cube of the field size centred on it. Travel moves the
+                // field past a camera that holds still, as in cruise, where the ship stays put and the star system moves.
                 float3 camera = _WorldSpaceCameraPos;
-                float3 head = camera + (frac(input.vertex.xyz - camera / _FieldSize + 0.5) - 0.5) * _FieldSize;
+                float3 anchor = camera + _Travel.xyz;
+                float3 head = camera + (frac(input.vertex.xyz - anchor / _FieldSize + 0.5) - 0.5) * _FieldSize;
 
                 // Seen from a moving camera, a still mote smears forward along the camera's motion: that is where
                 // it sat, relative to the camera, a moment ago.

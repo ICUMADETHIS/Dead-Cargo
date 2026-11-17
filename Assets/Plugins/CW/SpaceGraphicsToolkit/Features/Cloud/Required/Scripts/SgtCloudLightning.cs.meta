@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 2f4334fcd718910448b86b9f74aae56b
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - material: {fileID: 2100000, guid: 6939a2cd69ba7bd4f84f695ba1b3be8b, type: 2}
+  - coverageTex: {instanceID: 0}
+  - temperatureTex: {instanceID: 0}
+  - lightningTexture: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

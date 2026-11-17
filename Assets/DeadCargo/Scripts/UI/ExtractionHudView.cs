@@ -12,6 +12,7 @@ namespace DeadCargo.UI
         private const float Width = 356f;
         private const float HeatHeight = 76f;
         private const float JumpHeight = 76f;
+        private const float CruiseHeight = 76f;
         private const float PointHeight = 76f;
         private const float CargoHeight = 106f;
         private const float NoticeHeight = 37f;
@@ -25,12 +26,14 @@ namespace DeadCargo.UI
 
         private readonly HudPlate heatPlate;
         private readonly HudPlate jumpPlate;
+        private readonly HudPlate cruisePlate;
         private readonly HudPlate pointPlate;
         private readonly HudPlate cargoPlate;
         private readonly HudPlate manifestPlate;
         private readonly HudPlate noticePlate;
         private readonly HudMeter heatMeter;
         private readonly HudMeter jumpMeter;
+        private readonly HudMeter cruiseMeter;
         private readonly HudMeter pointMeter;
         private readonly HudMeter loadMeter;
         private readonly Text heatTitle;
@@ -39,6 +42,9 @@ namespace DeadCargo.UI
         private readonly Text jumpStatus;
         private readonly Text jumpTime;
         private readonly Text jumpAction;
+        private readonly Text cruiseStatus;
+        private readonly Text cruiseValue;
+        private readonly Text cruiseAction;
         private readonly Text pointStatus;
         private readonly Text pointValue;
         private readonly Text pointAction;
@@ -103,6 +109,18 @@ namespace DeadCargo.UI
             HudFactory.Fit(jumpTime, 15);
             jumpMeter = HudFactory.Meter("Jump meter", jumpRect, 19, 57, 318, 7);
 
+            cruisePlate = MakePlate("Cruise Drive", parent, CruiseHeight);
+            cruisePlate.SetAccent(HudFactory.CruiseColor);
+            RectTransform cruiseRect = cruisePlate.rectTransform;
+            HudFactory.Label("Cruise title", cruiseRect, "CRUISE DRIVE", 19, 7, 203, 19, 15, muted);
+            HudFactory.Key(cruiseRect, "B", 257, 8);
+            cruiseAction = HudFactory.Label("Cruise shortcut", cruiseRect, "ENGAGE", 281, 6, 57, 22, 15, ink, TextAnchor.MiddleRight);
+            cruiseStatus = HudFactory.Label("Cruise status", cruiseRect, "", 19, 24, 170, 32, 25, ink);
+            HudFactory.Fit(cruiseStatus, 15);
+            cruiseValue = HudFactory.Label("Cruise value", cruiseRect, "", 192, 24, 145, 32, 25, ink, TextAnchor.MiddleRight, true);
+            HudFactory.Fit(cruiseValue, 13);
+            cruiseMeter = HudFactory.Meter("Cruise meter", cruiseRect, 19, 57, 318, 7);
+
             pointPlate = MakePlate("Extraction Point", parent, PointHeight);
             RectTransform pointRect = pointPlate.rectTransform;
             HudFactory.Label("Point title", pointRect, "EXTRACTION POINT", 19, 7, 203, 19, 15, muted);
@@ -143,7 +161,7 @@ namespace DeadCargo.UI
             notice = HudFactory.Label("Notice text", noticePlate.rectTransform, "", 19, 5, 318, 25, 18, ink);
             HudFactory.Fit(notice, 12);
             noticeGroup = noticePlate.gameObject.AddComponent<CanvasGroup>();
-            Layout(false, false, false, false, false, false);
+            Layout(false, false, false, false, false, false, false);
         }
 
         /// <summary>
@@ -228,6 +246,25 @@ namespace DeadCargo.UI
             jumpMeter.SetProgress(fraction, color);
         }
 
+        /// <summary>
+        /// Shows the cruise drive: its state (READY, CHARGING, CRUISE, ORBIT), the figure on the right (the destination
+        /// ahead, seconds of charge or speed), what C does now, and the meter.
+        /// </summary>
+        internal void SetCruise(string status, Color statusColor, string value, string action, float fraction)
+        {
+            cruiseStatus.text = status;
+            cruiseStatus.color = statusColor;
+            cruiseValue.text = value;
+            cruiseAction.text = action;
+            cruisePlate.SetAccent(statusColor);
+            cruiseMeter.SetProgress(fraction, statusColor);
+        }
+
+        internal void SetCruiseProgress(float fraction, Color color)
+        {
+            cruiseMeter.SetProgress(fraction, color);
+        }
+
         internal void SetCargo(CargoHold hold, bool expanded)
         {
             bool full = hold.LoadFraction >= .9999f;
@@ -293,12 +330,13 @@ namespace DeadCargo.UI
             noticeGroup.alpha = alpha;
         }
 
-        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasPoint, bool isExpanded, bool hasNotice)
+        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasCruise, bool hasPoint, bool isExpanded, bool hasNotice)
         {
             float y = BottomMargin;
             Stack(cargoPlate, hasCargo, ref y);
             Stack(heatPlate, hasHeat, ref y);
             Stack(jumpPlate, hasJumpDrive, ref y);
+            Stack(cruisePlate, hasCruise, ref y);
             Stack(pointPlate, hasPoint, ref y);
             Stack(manifestPlate, hasCargo && isExpanded, ref y);
             Stack(noticePlate, hasNotice, ref y);

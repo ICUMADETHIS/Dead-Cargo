@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: f6e1741753b8cb74f9761ddca01bd2b4
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 127671
+  packageName: Planet Forge
+  packageVersion: 1.7.4
+  assetPath: Assets/Plugins/CW/SpaceGraphicsToolkit/Features/Sky/Examples/Materials/Sky
+    (Gas Giant).mat
+  uploadId: 900922

@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using DeadCargo.EditorTools.Diagnostics;
 using DeadCargo.Sectors;
+using DeadCargo.Sectors.Far;
 using DeadCargo.Sectors.Field;
 using DeadCargo.Sectors.Placement;
+using DeadCargo.Visuals;
 using UnityEditor;
 using UnityEngine;
 
@@ -23,6 +25,7 @@ namespace DeadCargo.EditorTools.GodMenu
         private static readonly string[] ViewLabels = { "Show All", "Hide All" };
         private static readonly string[] TestLabels = { "Run Self-Test" };
         private static readonly string[] FieldLabels = { "Rebuild Field" };
+        private static readonly string[] PlanetLabels = { "Rebuild Planets" };
 
         private readonly string[] seedLabels = { "Random Seed", "Reset Seed", PinLabel };
         private readonly bool[] seedEnabled = { true, false, true };
@@ -31,6 +34,8 @@ namespace DeadCargo.EditorTools.GodMenu
         private SectorSpace space;
         private SectorDebugView view;
         private AsteroidField field;
+        private FarSpace far;
+        private BackdropBodies backdrop;
 
         public override string Title => "Sector";
         public override GodMenuGroup Group => GodMenuGroup.Run;
@@ -47,6 +52,8 @@ namespace DeadCargo.EditorTools.GodMenu
             space = GodMenuContext.IsPlaying ? SectorSpace.Active : null;
             view = space != null ? space.GetComponent<SectorDebugView>() : null;
             field = space != null ? space.GetComponent<AsteroidField>() : null;
+            far = space != null ? FarSpace.Active : null;
+            backdrop = far != null ? far.GetComponent<BackdropBodies>() : null;
         }
 
         public override void OnGUI()
@@ -57,6 +64,7 @@ namespace DeadCargo.EditorTools.GodMenu
             DrawSector();
             DrawSeed();
             DrawLayout();
+            DrawPlanets();
             DrawField();
             DrawView();
             DrawSelfTest();
@@ -213,6 +221,52 @@ namespace DeadCargo.EditorTools.GodMenu
         {
             float bearing = Mathf.Repeat(Mathf.Atan2(sectorPosition.x, sectorPosition.z) * Mathf.Rad2Deg, 360f);
             return $"{sectorPosition.magnitude / MetresPerKilometre:0.0} km at {bearing:0}°";
+        }
+
+        // The far space switch and the run's planets: what each is, how large, where, and how far from the sun.
+        private void DrawPlanets()
+        {
+            if (far == null)
+                return;
+
+            using (var section = new GodMenuGUI.SectionScope("Planets"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                bool drawn = EditorGUILayout.Toggle("Far Space", far.enabled);
+                if (drawn != far.enabled)
+                    far.enabled = drawn;
+
+                if (backdrop == null || backdrop.Plans.Count == 0)
+                {
+                    GodMenuGUI.Field("Bodies", far.IsValid ? "none this run" : "far space has no layer");
+                    return;
+                }
+
+                Vector3 towardsSun = SceneSun.Direction;
+                for (int i = 0; i < backdrop.Plans.Count; ++i)
+                {
+                    BackdropPlan plan = backdrop.Plans[i];
+                    string missed = plan.MetRule ? string.Empty : "  ·  closest miss";
+                    GodMenuGUI.Field($"{plan.Role}  ·  {backdrop.NameOf(i)}",
+                        $"{plan.Size:0.#}° across  ·  {Vector3.Angle(plan.Direction, towardsSun):0}° from the sun  ·  {Bearing(plan.Direction)}{missed}");
+                }
+
+                GodMenuGUI.Field("Sun", $"{backdrop.SunRadius * 2f:0}° across with its corona");
+                if (GodMenuGUI.ButtonRow(PlanetLabels) == 0)
+                    backdrop.Rebuild();
+
+                GodMenuGUI.Hint("Planets follow the run seed: Random Seed gives a new system. Their rules are on the Far Space object, " +
+                                "the planets' roles and weights on Data/Planets/PlanetCatalog.");
+            }
+        }
+
+        // Bearing clockwise from straight ahead, and height above the sector's plane.
+        private static string Bearing(Vector3 direction)
+        {
+            float bearing = Mathf.Repeat(Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg, 360f);
+            return $"bearing {bearing:0}°, {BackdropLayout.Elevation(direction):+0;-0;0}° up";
         }
 
         private static void Pin(SectorDefinition definition, int seed)

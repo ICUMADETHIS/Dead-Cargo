@@ -1,0 +1,145 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b606677110a2744f9c75cfd8e11c642, type: 3}
+  m_Name: PlanetCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Far.PlanetCatalog
+  entries:
+  - name: Alythar
+    resourcePath: Planets/Alythar
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Bryndor
+    resourcePath: Planets/Bryndor
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Caelith
+    resourcePath: Planets/Caelith
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Draxxor
+    resourcePath: Planets/Draxxor
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Eryndor
+    resourcePath: Planets/Eryndor
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Feros
+    resourcePath: Planets/Feros
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Grythia
+    resourcePath: Planets/Grythia
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Halonix
+    resourcePath: Planets/Halonix
+    radius: 500
+    roles: 4
+    weight: 1
+  - name: Ixara
+    resourcePath: Planets/Ixara
+    radius: 500
+    roles: 1
+    weight: 1
+  - name: Jorathis
+    resourcePath: Planets/Jorathis
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Kironis
+    resourcePath: Planets/Kironis
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Lunara
+    resourcePath: Planets/Lunara
+    radius: 500
+    roles: 6
+    weight: 0
+  - name: Myrion
+    resourcePath: Planets/Myrion
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Nexara
+    resourcePath: Planets/Nexara
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Ophyria
+    resourcePath: Planets/Ophyria
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Pyraxis
+    resourcePath: Planets/Pyraxis
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Quorax
+    resourcePath: Planets/Quorax
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Rylith
+    resourcePath: Planets/Rylith
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Saphira
+    resourcePath: Planets/Saphira
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Tessara
+    resourcePath: Planets/Tessara
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Ultrion
+    resourcePath: Planets/Ultrion
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Vesperis
+    resourcePath: Planets/Vesperis
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Wyloria
+    resourcePath: Planets/Wyloria
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Xenara
+    resourcePath: Planets/Xenara
+    radius: 500
+    roles: 7
+    weight: 0
+  - name: Yloria
+    resourcePath: Planets/Yloria
+    radius: 500
+    roles: 5
+    weight: 0
+  - name: Zephyrus
+    resourcePath: Planets/Zephyrus
+    radius: 500
+    roles: 7
+    weight: 0

@@ -1,0 +1,141 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8119131423545633363
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 145262241757105699}
+  - component: {fileID: 41059566178204297}
+  - component: {fileID: 3292492291669198839}
+  - component: {fileID: 5596573219605994965}
+  - component: {fileID: 5630240017472803773}
+  m_Layer: 0
+  m_Name: SgtCloudEffects
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &145262241757105699
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8119131423545633363}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: -1
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &41059566178204297
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8119131423545633363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e4c1819761c0dc41b11c85939282941, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cloudLayerIndex: 0
+  material: {fileID: 2100000, guid: c4f4a9ad49d48f14b83008b0c04cbfec, type: 2}
+  count: 10000
+  range: 10
+  coverageThreshold: 0.172
+  rainTex: {fileID: 2800000, guid: 6824d307a4ba19646b10c0899b983c61, type: 3}
+  rainAmount: 7.16
+  rainSpeed: 0.5
+  rainBrightness: 0.2
+  rainThickness: 0.02
+  rainLength: 0.2
+  snowTex: {fileID: 2800000, guid: 96978bb077d6b8545b6efdda11b91e0e, type: 3}
+  snowAmount: 1
+  snowSpeed: 0.05
+  snowBrightness: 2
+  snowSize: 0.015
+  snowSwayFreq: 0.5
+  snowSwayAmp: 2
+  snowMinHeight: 600
+  castShadows: 0
+  cameraVelocityMultiplier: 0.01
+  cameraVelocityCap: 5
+  cameraVelocityFade: 0.25
+--- !u!114 &3292492291669198839
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8119131423545633363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f4334fcd718910448b86b9f74aae56b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cloudLayerIndex: 0
+  material: {fileID: 2100000, guid: 6939a2cd69ba7bd4f84f695ba1b3be8b, type: 2}
+  cameraOffset: 6
+  lightningThreshold: 0.8
+  lightningBrightness: 2
+  lightningThickness: 2000
+  lightningDuration: 1
+  animationMidpoint: 0.2
+  animationBrightness: 100
+  lightningInterval: 0.4
+  lightningIntervalStdDev: 0.1
+  lightningBias: 0.75
+  lightningMinDistance: 0.005
+  flashColor: {r: 0.75, g: 0.8733103, b: 1, a: 0.011764706}
+  flashBrightness: 2
+  flashRadius: 15000
+  flashDuration: 0.4
+--- !u!114 &5596573219605994965
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8119131423545633363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 056fdeefe49e2af44b5fda672a8a2b6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rainClip: {fileID: 8300000, guid: 62ff3384b71f18548ae15328f3aaadce, type: 3}
+  rainMaxVolume: 1
+  thunderstormClip: {fileID: 8300000, guid: 0980d8bdf706acd48a28d2b448747e50, type: 3}
+  thunderstormMaxVolume: 1
+  thunderstormMaxRange: 30000
+  thunderstormFalloff: 5000
+  rainSource: {fileID: 0}
+  thunderstormSource: {fileID: 0}
+--- !u!114 &5630240017472803773
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8119131423545633363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f0f0974d784269419b372da06283278, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cloudLayerIndex: 0
+  depthMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  depthResolution: 32
+  depthRaysPerSecond: 512
+  depthRebaseDistance: 2
+  range: 15

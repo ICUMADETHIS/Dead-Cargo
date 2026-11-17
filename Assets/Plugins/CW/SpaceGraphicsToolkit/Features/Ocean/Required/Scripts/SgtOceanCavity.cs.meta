@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 03de3cc64ae27d94ba34dc73207b3bbe
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - material: {instanceID: 0}
+  - sky: {instanceID: 0}
+  - cloudShadow: {instanceID: 0}
+  - observer: {instanceID: 0}
+  - ripplesTexture: {fileID: 2800000, guid: fa3ccaeff005f9e488f927b6e5484137, type: 3}
+  - ripplesOffset: {instanceID: 0}
+  - causticsLight: {instanceID: 0}
+  - model: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

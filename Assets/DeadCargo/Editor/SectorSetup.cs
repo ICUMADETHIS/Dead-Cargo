@@ -48,6 +48,8 @@ namespace DeadCargo.EditorTools
             new Step("Destruction", DestructionSetup.Apply, DestructionSetup.IsInstalled),
             new Step("Asteroid Field", AsteroidFieldSetup.Apply, AsteroidFieldSetup.IsInstalled),
             new Step("Content Placement", SectorPlacementSetup.Apply, SectorPlacementSetup.IsInstalled),
+            new Step("Planet Flight", PlanetFlightSetup.Apply, PlanetFlightSetup.IsInstalled),
+            new Step("First Person", FirstPersonSetup.Apply, FirstPersonSetup.IsInstalled),
             new Step("Scene Flow", MothershipPhaseSetup.Apply, MothershipPhaseSetup.IsSector)
         };
 

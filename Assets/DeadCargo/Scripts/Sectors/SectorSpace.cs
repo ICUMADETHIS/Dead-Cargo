@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using DeadCargo.Sectors.Placement;
+using Unity.Mathematics;
 using UnityEngine;
 using VSX.UniversalVehicleCombat;
 using Object = UnityEngine.Object;
@@ -86,6 +87,14 @@ namespace DeadCargo.Sectors
 
         private uint DefinitionSeed => definition != null ? unchecked((uint)definition.Seed) : 0u;
 
+        /// <summary>
+        /// Where the near world sits in the star system, in metres. System space is the star system's frame, with its
+        /// origin at the sector's arrival point, so sector space is part of it. Zero while the player is in the sector;
+        /// the cruise drive carries it as the player travels. Kept in double precision, as planets lie thousands of
+        /// kilometres out.
+        /// </summary>
+        public double3 SystemOffset { get; private set; }
+
         public Vector3 WorldToSector(Vector3 worldPosition)
         {
             return worldPosition - OriginOffset;
@@ -94,6 +103,27 @@ namespace DeadCargo.Sectors
         public Vector3 SectorToWorld(Vector3 sectorPosition)
         {
             return sectorPosition + OriginOffset;
+        }
+
+        /// <summary>A world position's place in the star system, in metres.</summary>
+        public double3 WorldToSystem(Vector3 worldPosition)
+        {
+            return (double3)(float3)WorldToSector(worldPosition) + SystemOffset;
+        }
+
+        /// <summary>
+        /// A place in the star system as a world position. Far from the near world it is only good for directions,
+        /// such as screen markers.
+        /// </summary>
+        public Vector3 SystemToWorld(double3 systemPosition)
+        {
+            return SectorToWorld((float3)(systemPosition - SystemOffset));
+        }
+
+        /// <summary>Moves the near world to a new place in the star system. For the cruise drive and debug tools.</summary>
+        public void SetSystemOffset(double3 offset)
+        {
+            SystemOffset = offset;
         }
 
         /// <summary>The seed for one cell. <paramref name="stream"/> separates independent uses of the same cell.</summary>

@@ -71,7 +71,7 @@ namespace DeadCargo.UI
         }
 
         /// <summary>
-        /// Places the next marker over a world position. The label reads "<paramref name="text"/>  <paramref name="metres"/> m",
+        /// Places the next marker over a world position. The label reads "<paramref name="text"/>  <paramref name="metres"/> m", or km when the style says so,
         /// or is hidden when <paramref name="text"/> is null. Returns false when the target is not shown.
         /// </summary>
         internal bool Add(Vector3 worldPosition, in HudMarkerStyle style, Color color, string text, int metres, float alpha = 1f)
@@ -114,7 +114,7 @@ namespace DeadCargo.UI
             color.a *= alpha;
             marker.Glyph.color = color;
 
-            PlaceLabel(marker, text, metres, onScreen, position, style.Size, color);
+            PlaceLabel(marker, text, metres, style.InKilometres, onScreen, position, style.Size, color);
             return true;
         }
 
@@ -159,18 +159,21 @@ namespace DeadCargo.UI
             return Mathf.Min(x, y);
         }
 
-        private static void PlaceLabel(Marker marker, string text, int metres, bool onScreen, Vector2 position, float glyphSize, Color color)
+        private static void PlaceLabel(Marker marker, string text, int figure, bool inKilometres, bool onScreen, Vector2 position, float glyphSize,
+            Color color)
         {
             bool visible = text != null;
             marker.Label.enabled = visible;
             if (!visible)
                 return;
 
-            if (!ReferenceEquals(text, marker.ShownText) || metres != marker.ShownNumber)
+            // Kilometre figures are stored negated, so a marker that changes unit always rebuilds its label.
+            int shown = inKilometres ? -figure - 1 : figure;
+            if (!ReferenceEquals(text, marker.ShownText) || shown != marker.ShownNumber)
             {
                 marker.ShownText = text;
-                marker.ShownNumber = metres;
-                marker.Label.text = $"{text}  {metres} m";
+                marker.ShownNumber = shown;
+                marker.Label.text = inKilometres ? $"{text}  {figure:N0} km" : $"{text}  {figure} m";
             }
 
             marker.Label.color = color;

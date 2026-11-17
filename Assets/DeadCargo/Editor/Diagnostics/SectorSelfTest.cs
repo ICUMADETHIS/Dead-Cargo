@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
+using DeadCargo.Flight;
 using DeadCargo.Sectors;
+using DeadCargo.Sectors.Far;
 using DeadCargo.Sectors.Field;
 using DeadCargo.Sectors.Placement;
 using DeadCargo.Visuals;
@@ -69,6 +71,8 @@ namespace DeadCargo.EditorTools.Diagnostics
             CheckLayout(result);
             CheckPlacement(result);
             CheckSunDirection(result);
+            CheckBackdrop(result);
+            CheckCruise(result);
             CheckField(result);
             CheckRockShapes(result);
             CheckIcosphere(result);
@@ -577,6 +581,277 @@ namespace DeadCargo.EditorTools.Diagnostics
             Vector3 impossible = SpaceLighting.PickDirection(5u, view, 179f, 180f, band);
             result.Check(a == b && a != c && Vector3.Angle(impossible, view) > 90f, "Sun: same seed, same sun",
                 "a seed turns the sun the same way twice, a new seed elsewhere, and an impossible range still faces away");
+        }
+
+        // Every run's planets keep clear of the sun and of each other, moons sit beside the primary, the rest stay in their
+        // band, no planet plays a part it is not given or repeats while others are free, a parent never moves when its
+        // children change, and the same seed always gives the same sky.
+        private static void CheckBackdrop(Result result)
+        {
+            const int seeds = 1000;
+            const float tolerance = 0.01f;
+            const float sunRadius = 34f; // Polaris's sun: 60° across, with a 4° corona.
+            Vector3 view = new Vector3(0.1f, 0.15f, 1f).normalized;
+
+            // A full system, moons included, so every rule is exercised; Polaris itself runs two planets.
+            BackdropSettings settings = BackdropSettings.Default;
+            settings.MaxMoons = 2;
+            settings.MinDistant = 0;
+            var entries = new List<PlanetEntry>
+            {
+                new PlanetEntry("Ocean A", "a", 500f, BodyRoles.Primary | BodyRoles.Distant, 1f),
+                new PlanetEntry("Ocean B", "b", 500f, BodyRoles.Primary | BodyRoles.Distant, 1f),
+                new PlanetEntry("Ocean C", "c", 500f, BodyRoles.Primary | BodyRoles.Distant, 2f),
+                new PlanetEntry("Dry A", "d", 500f, BodyRoles.All, 1f),
+                new PlanetEntry("Dry B", "e", 500f, BodyRoles.All, 1f),
+                new PlanetEntry("Airless", "f", 500f, BodyRoles.Moon | BodyRoles.Distant, 1f),
+                new PlanetEntry("Never", "g", 500f, BodyRoles.All, 0f)
+            };
+
+            var plans = new List<BackdropPlan>();
+            var earlier = new List<BackdropPlan>();
+            int primaries = 0, misses = 0, moons = 0, distant = 0;
+            int ruleBreaks = 0, overlaps = 0, sunHits = 0, moonsAway = 0, outOfBand = 0, repeats = 0, wrongRole = 0;
+            float nearestSunGap = 180f;
+            for (uint seed = 1; seed <= seeds; ++seed)
+            {
+                Vector3 sun = SpaceLighting.PickDirection(seed * 2654435761u, view, 70f, 125f, 50f);
+                BackdropLayout.Plan(seed * 40503u + 7u, settings, sun, sunRadius, view, entries, plans);
+
+                for (int i = 0; i < plans.Count; ++i)
+                {
+                    BackdropPlan plan = plans[i];
+                    PlanetEntry entry = entries[plan.Entry];
+                    wrongRole += entry.CanPlay(plan.Role) ? 0 : 1;
+
+                    float sunGap = Vector3.Angle(plan.Direction, sun) - sunRadius - plan.AngularRadius;
+                    nearestSunGap = Math.Min(nearestSunGap, sunGap);
+                    sunHits += sunGap < settings.SunClearance - tolerance ? 1 : 0;
+
+                    if (plan.Role == BodyRoles.Primary)
+                    {
+                        ++primaries;
+                        misses += plan.MetRule ? 0 : 1;
+                    }
+                    else if (plan.Role == BodyRoles.Moon)
+                    {
+                        ++moons;
+                        float gap = Vector3.Angle(plan.Direction, plans[0].Direction) - plans[0].AngularRadius;
+                        moonsAway += plans[0].Role != BodyRoles.Primary || gap < settings.MoonMinGap - tolerance ||
+                                     gap > settings.MoonMaxGap + tolerance ? 1 : 0;
+                    }
+                    else
+                    {
+                        ++distant;
+                    }
+
+                    if (plan.Role != BodyRoles.Moon)
+                        outOfBand += Math.Abs(BackdropLayout.Elevation(plan.Direction)) > settings.MaxElevation + tolerance ? 1 : 0;
+
+                    earlier.Clear();
+                    for (int j = 0; j < i; ++j)
+                    {
+                        earlier.Add(plans[j]);
+                        float apart = Vector3.Angle(plan.Direction, plans[j].Direction);
+                        overlaps += apart < plan.AngularRadius + plans[j].AngularRadius + settings.BodyClearance - tolerance ? 1 : 0;
+                        repeats += plans[j].Entry == plan.Entry ? 1 : 0;
+                    }
+
+                    if (plan.MetRule && BackdropLayout.Miss(plan.Direction, plan.AngularRadius, plan.Role, settings, sun, sunRadius, view, earlier) > tolerance)
+                        ++ruleBreaks;
+                }
+            }
+
+            result.Check(primaries == seeds && misses == 0 && ruleBreaks == 0, "Backdrop: every rule met",
+                $"{primaries} primaries in {seeds} runs, {misses} closest misses, {ruleBreaks} bodies breaking a rule");
+            result.Check(sunHits == 0 && overlaps == 0, "Backdrop: clear of the sun and each other",
+                $"nearest gap to the sun's edge {nearestSunGap:0.0}° ({settings.SunClearance:0} needed), {overlaps} overlapping pairs");
+            result.Check(moons > 0 && distant > 0 && moonsAway == 0 && outOfBand == 0, "Backdrop: moons beside the primary",
+                $"{moons} moons, {moonsAway} away from the primary; {distant} distant planets; {outOfBand} out of the {settings.MaxElevation:0}° band");
+            result.Check(wrongRole == 0 && repeats == 0, "Backdrop: planets play their parts",
+                $"{wrongRole} in a part they are not given (weight 0 included), {repeats} repeated in a run");
+
+            // Polaris's own rules: exactly two planets every run, the primary and one other, both meeting every rule.
+            BackdropSettings polaris = BackdropSettings.Default;
+            int notTwo = 0, twoMissed = 0, twoSame = 0;
+            for (uint seed = 1; seed <= seeds; ++seed)
+            {
+                Vector3 sun = SpaceLighting.PickDirection(seed * 2654435761u, view, 70f, 125f, 50f);
+                BackdropLayout.Plan(seed * 40503u + 7u, polaris, sun, sunRadius, view, entries, plans);
+                bool two = plans.Count == 2 && plans[0].Role == BodyRoles.Primary && plans[1].Role == BodyRoles.Distant;
+                notTwo += two ? 0 : 1;
+                twoMissed += two && (!plans[0].MetRule || !plans[1].MetRule) ? 1 : 0;
+                twoSame += two && plans[0].Entry == plans[1].Entry ? 1 : 0;
+            }
+
+            result.Check(notTwo == 0 && twoMissed == 0 && twoSame == 0, "Backdrop: two planets a run",
+                $"{seeds - notTwo} of {seeds} runs have the primary and one distant planet, {twoMissed} settled for a closest miss, " +
+                $"{twoSame} used the same planet twice");
+
+            Vector3 fixedSun = SpaceLighting.PickDirection(9u, view, 70f, 125f, 50f);
+            var a = new List<BackdropPlan>();
+            var b = new List<BackdropPlan>();
+            var c = new List<BackdropPlan>();
+            BackdropLayout.Plan(1234u, settings, fixedSun, sunRadius, view, entries, a);
+            BackdropLayout.Plan(1234u, settings, fixedSun, sunRadius, view, entries, b);
+            BackdropLayout.Plan(1235u, settings, fixedSun, sunRadius, view, entries, c);
+
+            BackdropSettings noMoons = settings;
+            noMoons.MaxMoons = 0;
+            var parentOnly = new List<BackdropPlan>();
+            BackdropLayout.Plan(1234u, noMoons, fixedSun, sunRadius, view, entries, parentOnly);
+            bool parentKept = a.Count > 0 && parentOnly.Count > 0 && SamePlan(a[0], parentOnly[0]);
+
+            var empty = new List<BackdropPlan>();
+            BackdropLayout.Plan(1234u, settings, fixedSun, sunRadius, view, new List<PlanetEntry>(), empty);
+
+            result.Check(SameSystem(a, b) && !SameSystem(a, c) && parentKept && empty.Count == 0, "Backdrop: same seed, same sky",
+                "a seed gives the same system twice and another seed a new one; taking the moons away leaves the primary where it was; no planets, no bodies");
+
+            var thirty = new BackdropPlan(BodyRoles.Primary, 0, Vector3.forward, 30f, Vector3.up, 0f, 0f, true);
+            float distance = thirty.DistanceFor(500f);
+            result.Check(Math.Abs(distance - 1931.85f) < 0.5f, "Backdrop: size sets distance",
+                $"a 500 km planet 30° across stands {distance:0} km away (1,932 expected)");
+        }
+
+        // The cruise drive's maths, and the trips it was tuned for: from Polaris's belt to Ixara's orbit and back, and out to
+        // a smaller, further planet. The trip follows the drive's own rule (CruiseDrive.Cruise): ease towards the target
+        // speed, step, and stop at a planet's floor.
+        private static void CheckCruise(Result result)
+        {
+            CruiseSettings settings = CruiseSettings.Default;
+            bool speeds = CruiseMath.TargetSpeed(0.0, settings) == settings.MinSpeed &&
+                          CruiseMath.TargetSpeed(1e12, settings) == settings.MaxSpeed &&
+                          CruiseMath.TargetSpeed(1e6, settings) > CruiseMath.TargetSpeed(1e5, settings);
+
+            var boxMin = new double3(-20000.0, -3000.0, -20000.0);
+            var boxMax = new double3(20000.0, 3000.0, 20000.0);
+            bool boxes = CruiseMath.DistanceToBox(double3.zero, boxMin, boxMax) == 0.0 &&
+                         Math.Abs(CruiseMath.DistanceToBox(new double3(23000.0, 0.0, 24000.0), boxMin, boxMax) - 5000.0) < 1e-6;
+
+            var centre = new double3(0.0, 0.0, 10000.0);
+            bool spheres = Math.Abs(CruiseMath.DistanceToSphere(double3.zero, new double3(0, 0, 1), centre, 1000.0) - 9000.0) < 1e-6 &&
+                           double.IsPositiveInfinity(CruiseMath.DistanceToSphere(double3.zero, new double3(0, 1, 0), centre, 1000.0)) &&
+                           CruiseMath.DistanceToSphere(centre, new double3(1, 0, 0), centre, 1000.0) == 0.0;
+
+            result.Check(speeds && boxes && spheres, "Cruise: speed and distances",
+                "speed holds to its limits and rises with clearance; distances to the sector's box and to a sphere are exact");
+
+            // Ixara: 500 km in radius, 30° across, so 1,932 km out. Halonix: 500 km, 5° across, 11,464 km out.
+            const double radius = 500000.0;
+            var direction = math.normalize(new double3(0.6, 0.1, 0.79));
+            double3 ixara = direction * (radius / Math.Sin(15.0 * Math.PI / 180.0));
+            double3 halonix = math.normalize(new double3(-0.7, -0.05, 0.4)) * (radius / Math.Sin(2.5 * Math.PI / 180.0));
+            var belt = new double3(8000.0, 0.0, 5000.0);
+            const double homeMargin = 10000.0;
+
+            Trip outbound = Fly(belt, ixara, radius, boxMin, boxMax, homeMargin, false, settings);
+            Trip homeward = Fly(outbound.End, double3.zero, 0.0, boxMin, boxMax, homeMargin, true, settings, ixara, radius);
+            Trip further = Fly(belt, halonix, radius, boxMin, boxMax, homeMargin, false, settings);
+
+            result.Check(outbound.Arrived && outbound.Seconds < 60.0 && outbound.LeftHomeAt < 15.0 && Math.Abs(outbound.Altitude - settings.DropHeight) < 1.0,
+                "Cruise: Polaris to above Ixara",
+                $"out of reach of the sector in {outbound.LeftHomeAt:0.0} s, dropped out {outbound.Altitude / 1000.0:0.0} km above it after {outbound.Seconds:0.0} s, " +
+                $"fastest {outbound.PeakSpeed / 1000.0:N0} km/s");
+            result.Check(homeward.Arrived && homeward.Seconds < 60.0, "Cruise: Ixara back to Polaris",
+                $"within {homeMargin / 1000.0:0} km of the sector after {homeward.Seconds:0.0} s");
+            result.Check(further.Arrived && further.Seconds < 90.0 && further.PeakSpeed <= settings.MaxSpeed,
+                "Cruise: out to a further planet",
+                $"above a planet 11,464 km out after {further.Seconds:0.0} s, fastest {further.PeakSpeed / 1000.0:N0} km/s");
+
+            // A planet's pull: full at the surface, a quarter at twice the radius, never stronger below the surface.
+            double atSurface = PlanetPhysics.GravityAt(radius, radius, 6.0);
+            double atTwice = PlanetPhysics.GravityAt(radius * 2.0, radius, 6.0);
+            double below = PlanetPhysics.GravityAt(radius * 0.5, radius, 6.0);
+            double atDrop = PlanetPhysics.GravityAt(radius + settings.DropHeight, radius, 6.0);
+            result.Check(Math.Abs(atSurface - 6.0) < 1e-9 && Math.Abs(atTwice - 1.5) < 1e-9 && below == atSurface &&
+                         PlanetPhysics.GravityAt(radius, 0.0, 6.0) == 0.0 && atDrop < atSurface && atDrop > 5.9,
+                "Ground: gravity",
+                $"{atSurface:0.00} m/s² at the surface, {atDrop:0.00} at the drop height, {atTwice:0.00} at twice the radius, none without a planet");
+        }
+
+        private struct Trip
+        {
+            public bool Arrived;
+            public double Seconds;
+            public double LeftHomeAt;
+            public double PeakSpeed;
+            public double Altitude;
+            public double3 End;
+        }
+
+        // Flies straight at the target: a planet's floor, or with home set, the sector's reach. A planet passed along the
+        // way still sets the clearance, as it does for the drive.
+        private static Trip Fly(double3 start, double3 target, double targetRadius, double3 boxMin, double3 boxMax, double homeMargin,
+            bool home, in CruiseSettings settings, double3 otherCentre = default, double otherRadius = 0.0)
+        {
+            const double step = 1.0 / 60.0;
+            const double limit = 600.0;
+            double3 direction = math.normalize(target - start);
+            double3 position = start;
+            double speed = 0.0;
+            var trip = new Trip { LeftHomeAt = double.NaN };
+
+            for (double time = 0.0; time < limit; time += step)
+            {
+                double toBox = CruiseMath.DistanceToBox(position, boxMin, boxMax);
+                if (double.IsNaN(trip.LeftHomeAt) && toBox > homeMargin)
+                    trip.LeftHomeAt = time;
+
+                double clearance = toBox;
+                if (!home)
+                    clearance = Math.Min(clearance, CruiseMath.Altitude(position, target, targetRadius));
+                else if (otherRadius > 0.0)
+                    clearance = Math.Min(clearance, CruiseMath.Altitude(position, otherCentre, otherRadius));
+
+                speed = CruiseMath.Ease(speed, CruiseMath.TargetSpeed(clearance, settings), settings.Response, step);
+                trip.PeakSpeed = Math.Max(trip.PeakSpeed, speed);
+                double move = speed * step;
+
+                if (!home)
+                {
+                    double toFloor = CruiseMath.DistanceToSphere(position, direction, target, targetRadius + settings.DropHeight);
+                    if (toFloor <= move)
+                    {
+                        position += direction * toFloor;
+                        trip.Arrived = true;
+                        trip.Seconds = time + step;
+                        break;
+                    }
+                }
+
+                position += direction * move;
+                if (home && CruiseMath.DistanceToBox(position, boxMin, boxMax) <= homeMargin)
+                {
+                    trip.Arrived = true;
+                    trip.Seconds = time + step;
+                    break;
+                }
+            }
+
+            trip.End = position;
+            trip.Altitude = home ? 0.0 : CruiseMath.Altitude(position, target, targetRadius);
+            return trip;
+        }
+
+        private static bool SameSystem(List<BackdropPlan> a, List<BackdropPlan> b)
+        {
+            if (a.Count != b.Count)
+                return false;
+
+            for (int i = 0; i < a.Count; ++i)
+            {
+                if (!SamePlan(a[i], b[i]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static bool SamePlan(in BackdropPlan a, in BackdropPlan b)
+        {
+            return a.Role == b.Role && a.Entry == b.Entry && a.Direction == b.Direction && a.Size == b.Size &&
+                   a.SpinAxis == b.SpinAxis && a.SpinPhase == b.SpinPhase && a.SpinSpeed == b.SpinSpeed;
         }
 
         // The rotation Quaternion.Euler(0, degrees, 0) gives, built in managed code so the check also runs outside Unity.
