@@ -12,7 +12,7 @@ namespace DeadCargo.Sectors
     public sealed class SectorDefinition : ScriptableObject
     {
         /// <summary>Returned by <see cref="DensityAt"/> when a position is in no field.</summary>
-        public const int NoRegion = -1;
+        public const int NoRegion = SectorDensity.NoRegion;
 
         private const float MinSize = 1000f;
         private const float MinCellSize = 100f;
@@ -20,8 +20,14 @@ namespace DeadCargo.Sectors
         [Tooltip("Name shown to the player.")]
         [SerializeField] private string displayName = "Sector";
 
-        [Tooltip("The same seed always generates the same sector.")]
+        [Tooltip("The same seed always generates the same sector. Used every load while New Seed Each Load is off.")]
         [SerializeField] private int seed = 1;
+
+        [Tooltip("Draw a new seed every load, so every run is a new sector. Off pins the seed above, to replay a layout.")]
+        [SerializeField] private bool newSeedEachLoad = true;
+
+        [Tooltip("Vary each region within its own limits every run. Off keeps every region exactly as authored.")]
+        [SerializeField] private bool varyLayout = true;
 
         [Tooltip("Size of the sector along each axis, in metres. The sector is centred on the origin.")]
         [SerializeField] private Vector3 size = new Vector3(40000f, 6000f, 40000f);
@@ -34,6 +40,12 @@ namespace DeadCargo.Sectors
 
         public string DisplayName => displayName;
         public int Seed => seed;
+
+        /// <summary>True when every load draws a new seed. False pins <see cref="Seed"/>.</summary>
+        public bool NewSeedEachLoad => newSeedEachLoad;
+
+        /// <summary>True when each run varies the regions within their limits.</summary>
+        public bool VaryLayout => varyLayout;
 
         /// <summary>Size along each axis, in metres.</summary>
         public Vector3 Size => size;
@@ -55,32 +67,7 @@ namespace DeadCargo.Sectors
         /// </summary>
         public float DensityAt(Vector3 sectorPosition, out int regionIndex)
         {
-            regionIndex = NoRegion;
-            float density = 0f;
-            float cleared = 0f;
-
-            for (int i = 0; i < regions.Length; ++i)
-            {
-                float strength = regions[i].StrengthAt(sectorPosition);
-                if (strength <= 0f)
-                    continue;
-
-                if (regions[i].Kind == SectorRegionKind.Clearing)
-                {
-                    cleared = Mathf.Max(cleared, strength);
-                }
-                else if (strength > density)
-                {
-                    density = strength;
-                    regionIndex = i;
-                }
-            }
-
-            density *= 1f - cleared;
-            if (density <= 0f)
-                regionIndex = NoRegion;
-
-            return density;
+            return SectorDensity.DensityAt(new SectorRegionSet(regions), sectorPosition, out regionIndex);
         }
 
         /// <summary>Sets every value at once. For setup tools that create a definition.</summary>

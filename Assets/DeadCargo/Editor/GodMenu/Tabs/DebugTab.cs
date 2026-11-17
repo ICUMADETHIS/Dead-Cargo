@@ -13,6 +13,9 @@ namespace DeadCargo.EditorTools.GodMenu
         private static readonly string[] CornerNames = { "Top Left", "Top Right", "Bottom Left", "Bottom Right" };
         private static readonly string[] ChannelLabels = { "All", "None", "Defaults" };
         private static readonly string[] LogLabels = { "Clear Log" };
+        private static readonly string[] FrameCapLabels = { "Off", "30", "60", "120", "144" };
+        private static readonly int[] FrameCapPresets = { 0, 30, 60, 120, 144 };
+        private const int DefaultFrameCap = 60;
 
         private readonly GUIContent[] channelContent = new GUIContent[DebugChannels.Count];
         private float fps;
@@ -41,6 +44,9 @@ namespace DeadCargo.EditorTools.GodMenu
 
                 int channels = DebugSettings.EnabledCount;
                 string channelText = channels == 1 ? "1 channel" : $"{channels} channels";
+                if (DebugSettings.FrameCap > 0)
+                    channelText += $" · cap {DebugSettings.FrameCap}";
+
                 return running ? $"{fps:0} fps · {channelText}" : channelText;
             }
         }
@@ -55,6 +61,7 @@ namespace DeadCargo.EditorTools.GodMenu
         public override void OnGUI()
         {
             DrawOverlay();
+            DrawFrameRate();
             DrawChannels();
             DrawLog();
         }
@@ -70,6 +77,35 @@ namespace DeadCargo.EditorTools.GodMenu
                 DebugSettings.Corner = (DebugCorner)EditorGUILayout.Popup("Corner", (int)DebugSettings.Corner, CornerNames);
                 DebugSettings.TextScale = EditorGUILayout.Slider("Size", DebugSettings.TextScale, DebugSettings.MinTextScale, DebugSettings.MaxTextScale);
                 GodMenuGUI.Hint($"In game: {DebugOverlay.OverlayKey} shows or hides it, {DebugOverlay.PickerKey} opens the channel picker.");
+            }
+        }
+
+        private static void DrawFrameRate()
+        {
+            using (var section = new GodMenuGUI.SectionScope("Frame Rate"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                int cap = DebugSettings.FrameCap;
+                bool capped = EditorGUILayout.ToggleLeft("Cap frame rate", cap > 0);
+                if (capped != cap > 0)
+                    cap = capped ? DefaultFrameCap : 0;
+
+                if (capped)
+                    cap = EditorGUILayout.IntSlider("Cap (fps)", cap, DebugSettings.MinFrameCap, DebugSettings.MaxFrameCap);
+
+                int preset = GodMenuGUI.ButtonRow(FrameCapLabels);
+                if (preset >= 0)
+                    cap = FrameCapPresets[preset];
+
+                DebugSettings.FrameCap = cap;
+                GodMenuGUI.Hint("Applies in Play Mode, and is kept between sessions. A cap switches vsync off until Play stops.");
+                if (GodMenuContext.IsPlaying)
+                {
+                    int target = Application.targetFrameRate;
+                    GodMenuGUI.Hint($"Now: vsync {QualitySettings.vSyncCount}, target {(target > 0 ? target.ToString() : "none")}");
+                }
             }
         }
 

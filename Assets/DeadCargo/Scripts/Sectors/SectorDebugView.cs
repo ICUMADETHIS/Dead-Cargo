@@ -54,6 +54,7 @@ namespace DeadCargo.Sectors
 
         private SectorSpace space;
         private string[] regionLabels;
+        private uint labelledSeed;
 
         public bool ShowBounds { get => showBounds; set => showBounds = value; }
         public bool ShowRegions { get => showRegions; set => showRegions = value; }
@@ -92,35 +93,40 @@ namespace DeadCargo.Sectors
                 DrawDebugTools.DrawBox(space.SectorToWorld(Vector3.zero), Quaternion.identity, space.Grid.Size, BoundsColor);
 
             if (showRegions)
-                DrawRegions(definition);
+                DrawRegions();
 
             if (showCells || showSamples)
-                DrawCells(definition);
+                DrawCells();
         }
 
-        private void DrawRegions(SectorDefinition definition)
+        // The run's layout, as varied by the seed, with the clearings round placed content.
+        private void DrawRegions()
         {
-            EnsureLabels(definition);
+            SectorLayout layout = space.Layout;
+            EnsureLabels(layout);
 
             Camera view = Camera.main;
             Vector3 eye = view != null ? view.transform.position : Vector3.zero;
 
-            for (int i = 0; i < definition.Regions.Count; ++i)
+            for (int i = 0; i < layout.Count; ++i)
             {
-                SectorRegion region = definition.Regions[i];
+                RegionVolume region = layout[i];
                 Vector3 centre = space.SectorToWorld(region.Centre);
+                Vector3 right = region.RotateToSector(new Vector3(region.Radii.x, 0f, 0f));
+                Vector3 forward = region.RotateToSector(new Vector3(0f, 0f, region.Radii.z));
+                Vector3 up = Vector3.up * region.Radii.y;
                 Color color = KindColor(region.Kind);
 
-                DrawEllipse(centre, Vector3.right * region.Radii.x, Vector3.forward * region.Radii.z, color);
-                DrawEllipse(centre, Vector3.right * region.Radii.x, Vector3.up * region.Radii.y, color);
-                DrawEllipse(centre, Vector3.forward * region.Radii.z, Vector3.up * region.Radii.y, color);
+                DrawEllipse(centre, right, forward, color);
+                DrawEllipse(centre, right, up, color);
+                DrawEllipse(centre, forward, up, color);
 
                 float size = Mathf.Max(1f, Vector3.Distance(eye, centre) * LabelScale);
                 DrawDebugTools.DrawString3D(centre, regionLabels[i], TextAnchor.MiddleCenter, color, size);
             }
         }
 
-        private void DrawCells(SectorDefinition definition)
+        private void DrawCells()
         {
             SectorGrid grid = space.Grid;
             CellCoord focus = space.FocusCell;
@@ -143,7 +149,7 @@ namespace DeadCargo.Sectors
                         }
 
                         if (showSamples)
-                            DrawSamples(definition, grid.CellMin(cell), cellSize, space.CellSeed(cell, SampleStream));
+                            DrawSamples(grid.CellMin(cell), cellSize, space.CellSeed(cell, SampleStream));
                     }
                 }
             }
@@ -152,20 +158,21 @@ namespace DeadCargo.Sectors
         // A candidate point is kept when a random roll falls under the density there, which is the rule real
         // content will use. Every candidate draws the same number of random values, kept or not, so one point
         // never shifts the next.
-        private void DrawSamples(SectorDefinition definition, Vector3 cellMin, Vector3 cellSize, uint cellSeed)
+        private void DrawSamples(Vector3 cellMin, Vector3 cellSize, uint cellSeed)
         {
+            SectorLayout layout = space.Layout;
             var random = new SectorRandom(cellSeed);
             for (int i = 0; i < samplesPerCell; ++i)
             {
                 Vector3 position = random.NextInBox(cellMin, cellSize);
                 float roll = random.NextFloat();
 
-                float density = definition.DensityAt(position, out int regionIndex);
+                float density = layout.DensityAt(position, out int regionIndex);
                 if (roll >= density)
                     continue;
 
                 ++AcceptedSamples;
-                DrawDebugTools.DrawPoint(space.SectorToWorld(position), SamplePointSize, KindColor(definition.Regions[regionIndex].Kind));
+                DrawDebugTools.DrawPoint(space.SectorToWorld(position), SamplePointSize, KindColor(layout[regionIndex].Kind));
             }
         }
 
@@ -181,15 +188,16 @@ namespace DeadCargo.Sectors
             }
         }
 
-        // Labels are built once per definition, so drawing them every frame allocates nothing.
-        private void EnsureLabels(SectorDefinition definition)
+        // Labels are built once per layout, so drawing them every frame allocates nothing.
+        private void EnsureLabels(SectorLayout layout)
         {
-            if (regionLabels != null && regionLabels.Length == definition.Regions.Count)
+            if (regionLabels != null && labelledSeed == space.Seed && regionLabels.Length == layout.Count)
                 return;
 
-            regionLabels = new string[definition.Regions.Count];
+            labelledSeed = space.Seed;
+            regionLabels = new string[layout.Count];
             for (int i = 0; i < regionLabels.Length; ++i)
-                regionLabels[i] = $"{definition.Regions[i].Name}\n{KindName(definition.Regions[i].Kind)}";
+                regionLabels[i] = $"{layout.NameOf(i)}\n{KindName(layout[i].Kind)}";
         }
 #endif
 
@@ -237,7 +245,7 @@ namespace DeadCargo.Sectors
             {
                 SectorRegion region = definition.Regions[i];
                 Gizmos.color = KindColor(region.Kind);
-                Gizmos.matrix = Matrix4x4.TRS(region.Centre, Quaternion.identity, region.Radii);
+                Gizmos.matrix = Matrix4x4.TRS(region.Centre, Quaternion.Euler(0f, region.Yaw, 0f), region.Radii);
                 Gizmos.DrawWireSphere(Vector3.zero, 1f);
             }
 

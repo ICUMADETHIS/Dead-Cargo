@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 21125862}
   - component: {fileID: 21125861}
   - component: {fileID: 21125860}
+  - component: {fileID: 21125864}
   m_Layer: 2
   m_Name: Pickup - Fuel Cells x2
   m_TagString: Untagged
@@ -246,6 +247,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 21125858}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &21125864
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 21125858}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &47229605
 GameObject:
   m_ObjectHideFlags: 0
@@ -321,6 +335,7 @@ GameObject:
   - component: {fileID: 99473913}
   - component: {fileID: 99473912}
   - component: {fileID: 99473911}
+  - component: {fileID: 99473915}
   m_Layer: 2
   m_Name: Pickup - Scrap Metal x3
   m_TagString: Untagged
@@ -435,6 +450,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 99473909}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &99473915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 99473909}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!4 &133120097 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3737005399443817256, guid: 5b5ffc79aedd5d84e888e6154df711ee,
@@ -513,8 +541,18 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2057494799}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &211176400 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 211176399}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &282583814
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -843,7 +881,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &486199866
 Canvas:
   m_ObjectHideFlags: 0
@@ -899,6 +937,7 @@ GameObject:
   - component: {fileID: 513042357}
   - component: {fileID: 513042356}
   - component: {fileID: 513042355}
+  - component: {fileID: 513042359}
   m_Layer: 2
   m_Name: Pickup - Reactor Core x1
   m_TagString: Untagged
@@ -1013,6 +1052,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 513042353}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &513042359
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 513042353}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &611667530
 GameObject:
   m_ObjectHideFlags: 0
@@ -1162,8 +1214,18 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2090176374}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &730940511 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 730940510}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &855403755
 GameObject:
   m_ObjectHideFlags: 0
@@ -1208,11 +1270,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 71cb4645dbb245442a31b7d0f93d5cc1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Destruction.DestructionSystem
+  warmUpOnLoad: 1
   chunksPerFrame: 8
   urgentChunksPerFrame: 48
   cutsPerFrame: 32
   collidersPerFrame: 16
-  halfDetailDistance: 300
+  halfDetailStart: 200
+  quarterDetailStart: 400
   detailFadeTime: 0.5
   minPieceVoxels: 60
   maxFreePieces: 24
@@ -1221,7 +1285,7 @@ MonoBehaviour:
   maxChips: 2048
   chipsPerCubicMetre: 6
   maxChipsPerCut: 20
-  maxChipsPerFrame: 96
+  maxChipsPerSecond: 750
   chipSize: 0.35
   maxTrailRocks: 1536
   trailRange: 2500
@@ -1296,8 +1360,18 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1250237653}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &899808109 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 899808108}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &904189675
 GameObject:
   m_ObjectHideFlags: 0
@@ -1517,6 +1591,8 @@ Transform:
   - {fileID: 2067685831}
   - {fileID: 1656418792}
   - {fileID: 904189676}
+  - {fileID: 1632266000}
+  - {fileID: 2039958103}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1111594771
@@ -1585,8 +1661,18 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1447582647}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &1111594772 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 1111594771}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1117891649
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1653,8 +1739,18 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1847822369}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &1117891650 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 1117891649}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &1133461551
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1721,14 +1817,50 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 4109355348356372374, guid: 5b5ffc79aedd5d84e888e6154df711ee,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1133461553}
   m_SourcePrefab: {fileID: 100100000, guid: 5b5ffc79aedd5d84e888e6154df711ee, type: 3}
+--- !u!1 &1133461552 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4109355348356372374, guid: 5b5ffc79aedd5d84e888e6154df711ee,
+    type: 3}
+  m_PrefabInstance: {fileID: 1133461551}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1133461553
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1133461552}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 91f6b6ed633ff894eaec8c06850b2e10, type: 2}
 --- !u!4 &1250237652 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1197698152336617065, guid: 79951ae4e1457d146b2d91bde6f5e21a,
     type: 3}
   m_PrefabInstance: {fileID: 899808108}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1250237653
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 899808109}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &1261044792
 GameObject:
   m_ObjectHideFlags: 0
@@ -1740,6 +1872,7 @@ GameObject:
   - component: {fileID: 1261044793}
   - component: {fileID: 1261044795}
   - component: {fileID: 1261044794}
+  - component: {fileID: 1261044796}
   m_Layer: 0
   m_Name: Sector Space
   m_TagString: Untagged
@@ -1793,6 +1926,30 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.SectorSpace
   definition: {fileID: 11400000, guid: d362254ca45040b46b8f8ba512ad6c15, type: 2}
+--- !u!114 &1261044796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1261044792}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44ec0b96ab406b940a322f5b4e9afc3b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Field.AsteroidField
+  definition: {fileID: 11400000, guid: a688db46a4926ec45977437f6d74a1f5, type: 2}
+  material: {fileID: 2100000, guid: 1e831cdedd8d87442a723611fee4e00c, type: 2}
+  drawDistance: 0
+  detailBias: 1
+  minPixels: 1.5
+  maxDrawn: 100000
+  castShadows: 1
+  detailLookAhead: 1.5
+  solidRocks: 1
+  solidRange: 200
+  solidRangePerRadius: 20
+  maxSolidRocks: 256
 --- !u!1 &1367120785
 GameObject:
   m_ObjectHideFlags: 0
@@ -1806,6 +1963,7 @@ GameObject:
   - component: {fileID: 1367120789}
   - component: {fileID: 1367120788}
   - component: {fileID: 1367120787}
+  - component: {fileID: 1367120791}
   m_Layer: 2
   m_Name: Pickup - Fuel Cells x2
   m_TagString: Untagged
@@ -1920,6 +2078,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1367120785}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1367120791
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1367120785}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &1414302573
 GameObject:
   m_ObjectHideFlags: 0
@@ -1969,6 +2140,19 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1111594771}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1447582647
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1111594772}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1001 &1576657372
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2830,6 +3014,59 @@ MonoBehaviour:
   knockbackInterval: 0.5
   darkMatterPerJump: 100
   heatPerSecond: 2
+--- !u!1 &1632265999
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1632266000}
+  - component: {fileID: 1632266001}
+  m_Layer: 0
+  m_Name: Space Depth
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1632266000
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1632265999}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1068206315}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1632266001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1632265999}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fcf44f8032f84b948867c6dd257014f5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Visuals.SpaceDepth
+  fadeStart: 800
+  steps: 4
+  bandSoftness: 1
+  strength: 0.8
+  dissolveRange: 1400
+  fadeEnd: 0
+  useSkyColour: 1
+  colour: {r: 0.006, g: 0.008, b: 0.016, a: 1}
+  previewInEditor: 0
 --- !u!1 &1656418791
 GameObject:
   m_ObjectHideFlags: 0
@@ -2892,6 +3129,7 @@ GameObject:
   - component: {fileID: 1818806244}
   - component: {fileID: 1818806243}
   - component: {fileID: 1818806242}
+  - component: {fileID: 1818806246}
   m_Layer: 2
   m_Name: Pickup - Scrap Metal x3
   m_TagString: Untagged
@@ -3006,12 +3244,38 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1818806240}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1818806246
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1818806240}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!4 &1847822368 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1197698152336617065, guid: 79951ae4e1457d146b2d91bde6f5e21a,
     type: 3}
   m_PrefabInstance: {fileID: 1117891649}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1847822369
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1117891650}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1001 &1878907364
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3221,6 +3485,7 @@ GameObject:
   - component: {fileID: 1934837739}
   - component: {fileID: 1934837738}
   - component: {fileID: 1934837737}
+  - component: {fileID: 1934837741}
   m_Layer: 2
   m_Name: Pickup - Reactor Core x1
   m_TagString: Untagged
@@ -3335,6 +3600,19 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1934837735}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1934837741
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1934837735}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!114 &1954953499 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 114132858137245394, guid: fa121e623b5943845b46f6357b72aff2,
@@ -3419,12 +3697,72 @@ MonoBehaviour:
     mouseButton: 0
     getAxisRaw: 0
     axis: 
+--- !u!1 &2039958102
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2039958103}
+  - component: {fileID: 2039958104}
+  m_Layer: 0
+  m_Name: Field Dust
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2039958103
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2039958102}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1068206315}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2039958104
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2039958102}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0da85671480421418c8122fb4d3fed0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Visuals.FieldDust
+  material: {fileID: 2100000, guid: 83d0cd09f7b47c9438267a8ca5166399, type: 2}
+  bankCount: 1200
+  seed: 7
 --- !u!4 &2057494798 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1197698152336617065, guid: 79951ae4e1457d146b2d91bde6f5e21a,
     type: 3}
   m_PrefabInstance: {fileID: 211176399}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2057494799
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 211176400}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &2067685829
 GameObject:
   m_ObjectHideFlags: 0
@@ -3604,14 +3942,50 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2089986420}
   m_SourcePrefab: {fileID: 100100000, guid: 79951ae4e1457d146b2d91bde6f5e21a, type: 3}
+--- !u!1 &2089986419 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5514948579500817674, guid: 79951ae4e1457d146b2d91bde6f5e21a,
+    type: 3}
+  m_PrefabInstance: {fileID: 2089986418}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &2089986420
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2089986419}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!4 &2090176373 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 1197698152336617065, guid: 79951ae4e1457d146b2d91bde6f5e21a,
     type: 3}
   m_PrefabInstance: {fileID: 730940510}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &2090176374
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 730940511}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce3f82bee192f614da1d9ec8c5c36e61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Sectors.Placement.SectorPlacement
+  rule: {fileID: 11400000, guid: 17d8bd949dd121548bf1ffb2f829c951, type: 2}
 --- !u!1 &2105358568
 GameObject:
   m_ObjectHideFlags: 0
@@ -4164,7 +4538,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.1
-  far clip plane: 2000
+  far clip plane: 10000
   field of view: 60
   orthographic: 0
   orthographic size: 5

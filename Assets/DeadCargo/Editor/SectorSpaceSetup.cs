@@ -92,13 +92,17 @@ namespace DeadCargo.EditorTools
         }
 
         // A layout to start from: open space around the arrival point, a large belt and a wreck field. Meant to be edited.
+        // The arrival point never moves. The fields swing to any side of it each run, keeping their distance, and
+        // move, turn and resize a little, so every run is a new sector while the arrival point stays clear.
         private static SectorRegion[] StarterRegions()
         {
             return new[]
             {
                 new SectorRegion("Arrival Point", SectorRegionKind.Clearing, Vector3.zero, new Vector3(2500f, 2500f, 2500f), 1f, 0.5f),
-                new SectorRegion("Main Belt", SectorRegionKind.AsteroidField, new Vector3(5000f, 0f, 8000f), new Vector3(10000f, 1500f, 7000f), 0.8f, 0.5f),
-                new SectorRegion("Wreck Field", SectorRegionKind.DebrisField, new Vector3(-10000f, 400f, -5000f), new Vector3(5000f, 1200f, 5000f), 0.6f, 0.4f)
+                new SectorRegion("Main Belt", SectorRegionKind.AsteroidField, new Vector3(5000f, 0f, 8000f), new Vector3(10000f, 1500f, 7000f), 0f,
+                    0.8f, 0.5f, new RegionVariation(180f, new Vector3(1000f, 300f, 1000f), 30f, 0.15f)),
+                new SectorRegion("Wreck Field", SectorRegionKind.DebrisField, new Vector3(-10000f, 400f, -5000f), new Vector3(5000f, 1200f, 5000f), 0f,
+                    0.6f, 0.4f, new RegionVariation(180f, new Vector3(2000f, 300f, 2000f), 180f, 0.25f))
             };
         }
     }

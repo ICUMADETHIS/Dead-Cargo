@@ -58,6 +58,15 @@ namespace DeadCargo.Debugging
         private float hintUntil;
         private bool sectorViewApplied;
 
+        // Unity's value for a frame rate with no limit.
+        private const int NoFrameCap = -1;
+
+        // What the frame rate cap replaced, put back when the game stops: in the editor, both outlive Play Mode
+        // otherwise.
+        private bool frameCapApplied;
+        private int vSyncBeforeCap;
+        private int targetBeforeCap;
+
         /// <summary>The running overlay, or null outside Play Mode.</summary>
         public static DebugOverlay Instance { get; private set; }
 
@@ -103,6 +112,7 @@ namespace DeadCargo.Debugging
             ApplyLayout();
             context.OnSceneChanged(SceneManager.GetActiveScene());
             ApplySectorView();
+            ApplyFrameCap();
             hintUntil = Time.unscaledTime + HintDuration;
         }
 
@@ -124,6 +134,7 @@ namespace DeadCargo.Debugging
                 return;
 
             Instance = null;
+            ReleaseFrameCap();
             stats?.Dispose();
             DebugLog.Stop();
         }
@@ -212,6 +223,7 @@ namespace DeadCargo.Debugging
             if (!DebugSettings.OverlayVisible)
                 PickerOpen = false;
 
+            ApplyFrameCap();
             ApplyLayout();
             ApplySectorView();
             nextRefresh = 0f;
@@ -241,6 +253,36 @@ namespace DeadCargo.Debugging
             view.ShowBounds = on;
             view.ShowRegions = on;
             view.ShowCells = on;
+        }
+
+        // Vsync overrides a target frame rate, so it is switched off once a cap is set. Switching the cap off leaves
+        // the frame rate free for the rest of the session, rather than handing it back to vsync, which would hold it
+        // at the display's rate and look like a cap that never went. What was there before returns when the game stops.
+        private void ApplyFrameCap()
+        {
+            int cap = DebugSettings.FrameCap;
+            if (cap <= 0 && !frameCapApplied)
+                return;
+
+            if (!frameCapApplied)
+            {
+                frameCapApplied = true;
+                vSyncBeforeCap = QualitySettings.vSyncCount;
+                targetBeforeCap = Application.targetFrameRate;
+            }
+
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = cap > 0 ? cap : NoFrameCap;
+        }
+
+        private void ReleaseFrameCap()
+        {
+            if (!frameCapApplied)
+                return;
+
+            frameCapApplied = false;
+            QualitySettings.vSyncCount = vSyncBeforeCap;
+            Application.targetFrameRate = targetBeforeCap;
         }
 
         private void ApplyLayout()

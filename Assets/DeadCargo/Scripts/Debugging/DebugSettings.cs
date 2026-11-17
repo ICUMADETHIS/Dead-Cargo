@@ -27,6 +27,11 @@ namespace DeadCargo.Debugging
         private const string ChannelsKey = Prefix + "Channels";
         private const string CornerKey = Prefix + "Corner";
         private const string ScaleKey = Prefix + "TextScale";
+        private const string FrameCapKey = Prefix + "FrameCap";
+
+        /// <summary>The lowest and highest frame rate caps, in frames a second.</summary>
+        public const int MinFrameCap = 10;
+        public const int MaxFrameCap = 360;
 
         // Only the frame rate counter shows by default: a clean screen with the one number everyone wants.
         private const int DefaultChannels = 0;
@@ -36,6 +41,7 @@ namespace DeadCargo.Debugging
         private static int channels;
         private static DebugCorner corner;
         private static float textScale;
+        private static int frameCap;
 
         /// <summary>Raised whenever any setting changes.</summary>
         public static event Action Changed;
@@ -97,6 +103,29 @@ namespace DeadCargo.Debugging
             }
         }
 
+        /// <summary>
+        /// Most frames drawn a second, from <see cref="MinFrameCap"/> to <see cref="MaxFrameCap"/>; 0 for no cap. The
+        /// overlay applies it while the game runs, and switches vsync off while it does, as vsync overrides a cap.
+        /// </summary>
+        public static int FrameCap
+        {
+            get
+            {
+                Load();
+                return frameCap;
+            }
+            set
+            {
+                Load();
+                value = ClampFrameCap(value);
+                if (frameCap == value)
+                    return;
+
+                frameCap = value;
+                Save();
+            }
+        }
+
         /// <summary>Channels switched on.</summary>
         public static int EnabledCount
         {
@@ -154,7 +183,13 @@ namespace DeadCargo.Debugging
             channels = DefaultChannels;
             corner = DebugCorner.TopLeft;
             textScale = 1f;
+            frameCap = 0;
             Save();
+        }
+
+        private static int ClampFrameCap(int value)
+        {
+            return value <= 0 ? 0 : Mathf.Clamp(value, MinFrameCap, MaxFrameCap);
         }
 
         private static int Bit(DebugChannel channel)
@@ -172,6 +207,7 @@ namespace DeadCargo.Debugging
             channels = PlayerPrefs.GetInt(ChannelsKey, DefaultChannels);
             corner = (DebugCorner)Mathf.Clamp(PlayerPrefs.GetInt(CornerKey, 0), 0, 3);
             textScale = Mathf.Clamp(PlayerPrefs.GetFloat(ScaleKey, 1f), MinTextScale, MaxTextScale);
+            frameCap = ClampFrameCap(PlayerPrefs.GetInt(FrameCapKey, 0));
         }
 
         private static void Save()
@@ -180,6 +216,7 @@ namespace DeadCargo.Debugging
             PlayerPrefs.SetInt(ChannelsKey, channels);
             PlayerPrefs.SetInt(CornerKey, (int)corner);
             PlayerPrefs.SetFloat(ScaleKey, textScale);
+            PlayerPrefs.SetInt(FrameCapKey, frameCap);
             PlayerPrefs.Save();
             Changed?.Invoke();
         }

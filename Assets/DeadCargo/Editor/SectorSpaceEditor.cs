@@ -67,29 +67,30 @@ namespace DeadCargo.EditorTools
                 SerializedProperty centre = region.FindPropertyRelative("centre");
                 SerializedProperty radii = region.FindPropertyRelative("radii");
                 var kind = (SectorRegionKind)region.FindPropertyRelative("kind").enumValueIndex;
+                Quaternion turn = Quaternion.Euler(0f, region.FindPropertyRelative("yaw").floatValue, 0f);
 
                 Handles.color = KindColor(kind);
                 Handles.Label(centre.vector3Value, region.FindPropertyRelative("name").stringValue, EditorStyles.whiteBoldLabel);
 
                 EditorGUI.BeginChangeCheck();
-                Vector3 moved = Handles.PositionHandle(centre.vector3Value, Quaternion.identity);
+                Vector3 moved = Handles.PositionHandle(centre.vector3Value, turn);
                 if (EditorGUI.EndChangeCheck())
                     centre.vector3Value = moved;
 
-                radii.vector3Value = RadiusHandles(centre.vector3Value, radii.vector3Value);
+                radii.vector3Value = RadiusHandles(centre.vector3Value, turn, radii.vector3Value);
             }
 
             serialized.ApplyModifiedProperties();
         }
 
-        // A dot at each end of each axis. Dragging either end changes that axis's radius.
-        private static Vector3 RadiusHandles(Vector3 centre, Vector3 radii)
+        // A dot at each end of each of the region's own axes. Dragging either end changes that axis's radius.
+        private static Vector3 RadiusHandles(Vector3 centre, Quaternion turn, Vector3 radii)
         {
             for (int axis = 0; axis < 3; ++axis)
             {
                 for (int side = -1; side <= 1; side += 2)
                 {
-                    Vector3 direction = Axes[axis] * side;
+                    Vector3 direction = turn * Axes[axis] * side;
                     Vector3 position = centre + direction * radii[axis];
                     float size = HandleUtility.GetHandleSize(position) * HandleSize;
 

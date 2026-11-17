@@ -17,8 +17,8 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.5 | Object pooling | Reuse crates and Authority ships instead of creating and destroying them | Planned |
 | 6.6 | Scene flow performance | Every scene change through one path, load hitches hidden behind the loading screen, load timing | Planned |
 | 6.7 | Polaris sector | The game sector runs launch into, built up from an empty scene. 6.7a: the scene with the star sky. 6.7b: the player starts aboard the ship. 6.7c: pause menu Quit and Restart | Done, tested 2026-11-16 |
-| 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16 |
-| 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test |
+| 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16. Step 2 (asteroid field) built, awaiting test. Detail pass, solid rocks (step 5a), natural placement and field dust built and compile-checked, awaiting test. Step 7a (a new sector every load) built, awaiting test |
+| 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test |
 | 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
 | 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
@@ -596,15 +596,15 @@ Polaris, and every later raid location, is generated from a seed: large, dense, 
 | Step | Delivers | Status |
 |---|---|---|
 | 1. Foundation | Sector definition, seeded random, cell grid, debug view | Done, tested 2026-11-16 |
-| 2. Asteroid field | Rocks from boulders to kilometre-wide giants, generated per cell in Burst jobs from the seed and regions, drawn GPU-instanced in the comic cel style. Adds Unity's Burst and Mathematics packages | Next; packages added |
+| 2. Asteroid field | Rocks from boulders to kilometre-wide giants, generated per cell in Burst jobs from the seed and regions, drawn GPU-instanced in the comic cel style. Adds Unity's Burst and Mathematics packages | Built, compile-checked and self-tested, awaiting test |
 | 3. Far world | A second camera draws a 1:1000 copy of space behind the real one. Planets, giant asteroids, stations and capital ships are seen from hundreds of kilometres away and grow smoothly as you approach, then hand over to the real object up close. Distant parts of the belt show too | Planned |
 | 4. Streaming | Cells load and unload around the ship, spread across frames | Planned |
 | 5. Physical asteroids | Near rocks become pooled objects with colliders and damage. Covers phase 6.5 pooling | Planned |
 | 6. Large-scale precision | Floating origin | Planned |
-| 7. Content placement | Pickups, dark matter, extraction points, points of interest and planets placed by rules | Planned |
+| 7. Content placement | Pickups, dark matter, extraction points, points of interest and planets placed by rules. 7a: a new sector every load (run seed, varied layout, extraction points and pickups placed by rules) | 7a built, compile-checked and self-tested, awaiting test |
 | 8. Optimisation pass | Distance LODs, far impostors, profiling against the target | Planned |
 
-**Why a far world.** The camera draws only 3 km out, so without it a large object appears suddenly at full size instead of growing out of the distance, and planets cannot be shown at all. Perspective does not depend on scale: a 50 km planet 200 km away looks exactly like a 50 m model 200 m away. So distant giants live in a scaled-down copy of space drawn first by a far camera, and the main camera draws the real, near world on top. The far camera can see a thousand times further than the main one, and nothing ever pops in.
+**Why a far world.** The camera draws only 10 km out, so without it a large object appears suddenly at full size instead of growing out of the distance, and planets cannot be shown at all. Perspective does not depend on scale: a 50 km planet 200 km away looks exactly like a 50 m model 200 m away. So distant giants live in a scaled-down copy of space drawn first by a far camera, and the main camera draws the real, near world on top. The far camera can see a thousand times further than the main one, and nothing ever pops in.
 
 ### Implementation (step 1)
 | File | Role |
@@ -632,7 +632,7 @@ Sample points are a preview of generation: each cell tests a fixed number of can
 5. Press **Show All** in the Debug View section. White and grey boxes mark the cells around the ship, and coloured points appear where content would be generated. Around the arrival point there are few or none, because it is a clearing.
 6. Fly towards the Main Belt (ahead and to the right, a few kilometres out). Amber points appear and thicken as the density bar rises. The cell boxes follow the ship.
 7. Stop and start Play again. The points are in the same places. Press **Random Seed**: they all move. Press **Reset Seed**: they return.
-8. The camera sees 3 km, so in the Game view distant bounds and regions are cut off. Look at the Scene view during Play to see the whole sector.
+8. The camera sees 10 km, so in the Game view distant bounds and regions are cut off. Look at the Scene view during Play to see the whole sector.
 
 ### Tuning
 On `Data/Sectors/Polaris.asset`: seed, size, cell size, and each region's centre, radii, density and falloff. Restart Play after changing the size or cell size.
@@ -655,6 +655,231 @@ Added after step 1 passed its first test, to make the foundation as solid as it 
 3. Drag a region partly outside the sector bounds and run the self-test again. It fails with "extends past the bounds". Undo.
 4. In Play Mode, the **Sector** tab's Self-Test section runs the same test and shows the result.
 
+### Design (step 2: asteroid field)
+- **Rock only where the regions say.** Asteroid-field regions hold rock; debris fields wait for wreckage of their own, and clearings thin both. In Polaris that is the Main Belt, with open space round the arrival point and the Wreck Field left empty for now.
+- **Generated per cell, from the seed.** Each 1 km cell tests a fixed number of candidate points and keeps each by the density there, drawing the same random values for every candidate, kept or not. A cell is the same every time it loads, and nothing is saved. Cells no field reaches are skipped without a single test.
+- **Sizes like a real belt.** From 4 m boulders to 1.2 km giants on a power law: the count of rocks over a size falls as the square of that size. At the default 1,000 rocks per cubic kilometre, rocks sit about 100 m apart, mostly small; a full cell holds about 1.6 rocks over 100 m, and a giant over 500 m turns up about once in 19 cubic kilometres.
+- **Giants first.** Rocks of 100 m and up are placed from their own random stream, and smaller rocks keep out of them and of their neighbours' giants, to 1.3 times their radius (stretch included). No boulder sits inside a giant, and a cell can work this out without its neighbours being loaded.
+- **Shapes of its own.** Eight lumpy shapes, built at load from the sector seed: three layers of noise (broad lobes, bumps, grit) set a radius for every direction, with exact normals from the noise's own slope. Each rock turns, stretches up to 30% along each axis and tumbles about its own axis from its seed: a 10 m rock at 4° a second, smaller ones faster, giants barely at all. Rocks never drift, so the layout stays learnable.
+- **Six levels of detail**, from 20 triangles to 20,480, all sampling the same surface. A rock's level comes from its size on screen, so triangle edges stay near 12 pixels. Rocks under 1.5 pixels across are not drawn.
+- **Nothing pops (after the first test).** The first test showed rocks bright white and popping. The rocks' projected texture turned normals into world space in the pixel shader, which never learned which instance it was drawing, so every rock in a batch was lit as the first one. That flipped as batches changed, and lit some rocks flat white. Now:
+  - **Lit right.** The instance is carried to the pixel shader, so every rock is lit as itself.
+  - **Detail morphs.** Each vertex a level of detail adds starts where the level before draws it, halfway along the edge it splits, and slides to its own place as the rock grows on screen. So a change of detail never moves the outline. The culling job and the shader measure a rock's size on screen the same way, from its mean scale and distance, so the morph starts from nothing at the switch.
+  - **Grow in.** The smallest rocks grow in from nothing between 1.5 and 4.5 pixels across, rather than appearing.
+- **The comic rock look.** `Materials/Comic/ComicFieldRock.mat` is the voxel rock's material (projected texture, three tones, outline) with instancing on and a small shade per rock. Field rocks and carved voxel asteroids match, ready for near rocks to become voxel asteroids (6.10 step 3).
+- **Solid near the player.** Added with step 5a, below.
+
+### Performance (step 2)
+- **Streaming.** When the camera enters a new cell, cells within draw distance (plus the reach of the largest rock) that a field reaches are generated in one Burst job, nearest first, up to 128 cells a batch, into fixed slots; cells left behind free theirs. The main thread never waits: a batch still running is picked up next frame, and streaming waits for it.
+- **Drawing.** Each frame three Burst jobs, started in update and finished in late update, decide which rocks are drawn and write their matrices batch by batch: one culls by view, distance and size on screen and picks each rock's batch (shape, detail, shadow), one lays the batches out, one writes the matrices, every cell slot in parallel. Late update draws each batch with GPU instancing, 1,023 rocks a call.
+- **Small data.** A rock is 20 bytes (position, radius, seed); its shape, turn, stretch and tumble come from its seed when drawn. Polaris holds 726 cell slots of 1,004 rocks, about 15 MB, plus 6 MB of matrices for up to 100,000 rocks a frame.
+- **Shadows** only from rocks within the shadow distance; every rock receives them.
+- **Readouts.** The God Menu **Sector** tab and the debug overlay's Sector panel show cells, rocks loaded and drawn, draw calls and main-thread time. Profiler markers: `DeadCargo.Field.Stream` and `DeadCargo.Field.Draw`.
+- **Room to grow.** If draw calls ever cost too much, step 8 can draw each batch with one indirect call from a GPU buffer; the jobs already lay the data out that way.
+
+### Implementation (step 2)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/RegionVolume.cs`, `IRegionSet.cs`, `SectorRegionSet.cs`, `SectorDensity.cs` | Regions as plain values, and the one density implementation behind the definition, the debug view and every job |
+| `Scripts/Sectors/Field/AsteroidFieldDefinition.cs`, `FieldSettings.cs` | Data asset: rock density, sizes, size spread, stretch, keep-out, shapes and tumble; the per-cell counts worked out for jobs |
+| `Scripts/Sectors/Field/FieldGeneration.cs`, `FieldRock.cs`, `IRockBuffer.cs` | The rules: a cell's large rocks, then its small rocks keeping out of them |
+| `Scripts/Sectors/Field/FieldRockShape.cs`, `Icosphere.cs`, `RockShapeJob.cs`, `FieldRockMeshes.cs` | Rock shapes and their six levels of detail; each rock's turn, stretch and tumble |
+| `Scripts/Sectors/Field/FieldCellJob.cs`, `NativeRegionSet.cs`, `SlotRockBuffer.cs` | Generating a batch of cells |
+| `Scripts/Sectors/Field/FieldCullJob.cs`, `FieldOffsetJob.cs`, `FieldScatterJob.cs` | Each frame: what is drawn, in which batch, and where |
+| `Scripts/Sectors/Field/AsteroidField.cs` | On the Sector Space object: streaming, the jobs, drawing, readouts |
+| `Editor/AsteroidFieldSetup.cs` | Setup step **Asteroid Field**: the component, `Data/Sectors/PolarisField.asset`, the material, and the distance fade |
+| `Editor/GodMenu/Tabs/SectorTab.cs`, `Scripts/Debugging/DebugReadouts.cs` | The field's readouts and controls |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Ten new checks: 33 in all |
+| `Shaders/ComicSurface.shader` | **Detail Morph** (`_GEOMORPH`): vertices slide from the coarser level's place as a field rock grows on screen, in the surface, ink and shadow passes. The surface pass carries the instance to the pixel shader |
+
+### Verified outside Unity (step 2)
+- Every Dead Cargo assembly compiles with Unity's own compiler and settings, with no new warnings.
+- The sector self-test, now 31 checks, passes run on its own:
+  - the same seed builds the same rocks, and a new seed moves them
+  - density sets the count: 1,000 of 1,000 rocks at full density and 488 of 500 at half
+  - no rock in a clearing, a debris field or outside the grid
+  - no small rock inside a large one: 978 small rocks checked against 47 large ones
+  - sizes follow the spread: 24.6% of small rocks over twice the smallest, against 24.9% expected
+  - rock shapes stay in bounds, with normals facing out
+  - each rock is placed at its centre and tumbles on the spot
+  - all six mesh levels are closed and wound to face out, which the ink outline needs
+  - after the first test, two more (33 in all): every vertex a level adds splits an edge of the level before, and the culling job's size for detail matches the mean scale the shader reads from the matrix to within 0.0001% of the radius. The comic surface's 64 programs, the detail morph among them, compile with the DirectX compiler
+
+### Test steps (step 2)
+1. Click into Unity and let it compile. The Console should be free of errors.
+2. Open Polaris. The God Menu **Project** tab shows one step missing; press **Set Up Sector**. The `Sector Space` object gains an **Asteroid Field** component, `Data/Sectors/PolarisField.asset` and `Materials/Comic/ComicFieldRock.mat` appear, and a `Space Depth` object appears under `Environment`. Save the scene.
+3. Run **Dead Cargo > Diagnostics > Sector Self-Test**: 35 checks pass.
+4. Press Play. Around the arrival point space is clear. Fly towards the Main Belt (ahead and to the right, a few kilometres out). Rocks come out of the void, dark and dissolving in, and brighten as you close in; nothing pops. They thicken as you go in: mostly small, a few large ones, now and then a giant.
+5. Inside the belt, look around. Rocks of eight shapes, each turned and stretched its own way, in the comic rock look with outlines, each with its own lit side and shadow side; none is flat white. Small rocks tumble slowly; giants barely move. Fly close to a giant: no boulder is buried inside it, and its outline grows smoother as you approach with no jumps.
+6. Open the God Menu **Sector** tab, **Asteroid Field** section: cells loaded, rocks loaded and drawn, draw calls and main-thread time. Fly on: cells load ahead and free behind, and **generating** shows briefly. Untick **Draw Field** to compare.
+7. Stop and press Play again, and fly to the same place: the same rocks are in the same places. Press **Random Seed** in the **Seed** section: the field is rebuilt, with new shapes and new rocks. **Reset Seed** brings the first field back.
+8. Rocks near you are solid from step 5a, below.
+
+### Tuning (step 2)
+- Rocks, on `Data/Sectors/PolarisField.asset`: rocks per cubic kilometre, smallest, largest and "large" size, size spread, stretch, keep-out, number of shapes and tumble. A change rebuilds every rock, so treat it like the seed once a layout has been learned. Press **Rebuild Field** in the Sector tab to see a change in Play Mode.
+- Drawing, on the **Asteroid Field** component: draw distance (0 uses the camera's far clip), detail bias, smallest size drawn, most rocks a frame and shadows.
+- Look, on `Materials/Comic/ComicFieldRock.mat`: every comic rock setting, including **Instance Variation**, the shade each rock takes.
+
+### Design (detail pass, after the 10 km test)
+The test at a 10 km draw distance showed detail arriving too late, worst at speed. Three changes, which supersede the figures above:
+- **Detail looks ahead.** A rock's size on screen is judged from the nearest point of the camera's path over the next 1.5 seconds (**Detail Look Ahead**), not only from where the camera is. At speed, the rocks ahead reach full detail, and the smallest finish growing in, before the camera gets to them. The camera's velocity is eased over a quarter of a second, and a cut to a new place counts as no motion. The shader's detail morph reads the same path (`_FieldDetailAhead`), so both still agree on when a level starts.
+- **Detail never jumps.** A level now morphs from the one before across its whole span on screen, not the first half, so a rock's outline is always easing as it grows.
+- **Finer sooner.** Levels start at 12 pixels across instead of 19, so triangle edges stay near 8 pixels. The coarsest shape, 20 triangles, is now only used under 12 pixels.
+
+### Performance (detail pass)
+- **Cells are kept largest first**, sorted once when generated. Culling skips a cell wholly out of view or range with one test, and inside a cell stops at the first rock too small to draw from the cell's nearest point. A far cell costs a few giants, not a thousand tests, which is what a 10 km draw distance needs: 3,750 cell slots, 75 MB of rock.
+- The matrix job only visits the rocks culling reached.
+
+### Design (step 5a: solid rocks)
+- **Solid near the player.** A rock is solid while its surface is within 200 m of the player's vehicle, plus 20 m for every metre of its radius: a 4 m boulder from 240 m, a 20 m rock from 400 m, a 100 m rock from 1.2 km, and a giant from anywhere in sight. Nearest first, at most 256 at once.
+- **Its own shape.** Each solid rock borrows a pooled stand-in: a kinematic body with a mesh collider of the rock's own shape, stretched and turned as it is drawn, and turning as it tumbles. The collider's detail follows the rock's size, so triangles stay about 3 m long until the finest level: a boulder is 80 triangles, a rock of 50 m radius or more uses the finest, 20,480, the same surface the eye sees up close.
+- **Weapons stop on them.** Stand-ins carry the destruction damage receiver. Hits are raised as `AsteroidField.RockDamaged` with the rock they hit; nothing carves yet. That event is where a field rock becomes a voxel asteroid (6.10 step 3).
+- **Rock on hull** has no friction and little bounce, as trail rocks do. The kit still deals collision damage by impact speed.
+- **Only the player, for now.** Other ships pass through rock that is not near the player. They need to steer round rock before they should hit it.
+
+### Performance (step 5a)
+- **Cooked once.** Every shape's five collider levels are cooked on worker threads when the field is built (40 meshes). A rock turning solid cooks nothing: it is handed a shape already cooked.
+- **Picked by a job** ten times a second, alongside the frame's drawing jobs. Cells being largest first, a far cell costs one test. At most 32 rocks turn solid in one pass, nearest first, so a burst never costs a frame.
+- **No flicker.** A solid rock stays solid 40 m past its range.
+- **Pooled.** 256 stand-ins are made at load and reused; nothing is created or destroyed in flight.
+
+### Implementation (detail pass and step 5a)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/Field/FieldSort.cs` | An in-place heap sort for jobs, and the largest-first order |
+| `Scripts/Sectors/Field/FieldCellJob.cs` | Leaves each cell largest first |
+| `Scripts/Sectors/Field/FieldCullJob.cs`, `FieldScatterJob.cs` | Whole-cell tests, the early exit, and detail judged from the camera's path |
+| `Scripts/Sectors/Field/FieldRockShape.cs` | `DetailDistance`, and `Motion` and `Rotation`, shared by drawing and colliders |
+| `Scripts/Sectors/Field/FieldSolidJob.cs` | Picks the rocks near enough to be solid, nearest first |
+| `Scripts/Sectors/Field/FieldRockColliders.cs`, `FieldRockProxy.cs` | The pool of stand-ins, cooking, and applying each pass |
+| `Scripts/Sectors/Field/AsteroidField.cs` | Camera velocity, the solid pass, `RockDamaged`, and the new settings |
+| `Shaders/ComicSurface.shader` | The detail morph reads the camera's path and the morph's span |
+| `Editor/GodMenu/Tabs/SectorTab.cs`, `Scripts/Debugging/DebugReadouts.cs` | **Solid Rocks** switch and count |
+| `Editor/Diagnostics/SectorSelfTest.cs` | Two new checks: 35 in all |
+
+### Verified outside Unity (detail pass and step 5a)
+Every Dead Cargo assembly compiles with Unity's own compiler, with no new warnings, and the comic surface's 80 programs compile with the DirectX compiler. Nothing here has been run in Unity: Burst compilation of the new jobs, the look in motion and the feel of a collision are for the test.
+
+### Test steps (detail pass)
+1. Click into Unity and let it compile. The Console should be free of errors.
+2. Run **Dead Cargo > Diagnostics > Sector Self-Test**: 35 checks pass.
+3. Press Play in Polaris and fly into the Main Belt at cruising speed. Rocks ahead should already be in full shape when you reach them, and no outline should jump.
+4. Boost through the belt. Detail should hold up as well as at cruising speed.
+5. On the **Asteroid Field** component, set **Detail Look Ahead** to 0 and fly the same line to compare, then back to 1.5. Raise **Detail Bias** if rocks still look coarse; lower **Min Pixels** if small rocks still appear too near.
+6. In the God Menu **Sector** tab, note **Main Thread** and the frame rate against the last test.
+
+### Test steps (step 5a)
+1. In the God Menu **Sector** tab, **Asteroid Field** section, **Solid Now** shows a count once you are in the belt, and changes as you fly.
+2. Fly slowly into a boulder, then a large rock. The ship stops on the surface you see, not short of it and not inside it, and takes collision damage by speed.
+3. Fly along the surface of a giant, close in. The ship follows its lumps.
+4. Shoot a rock near you: shots stop on it. Shoot a small rock 500 m off: shots pass through, as it is not solid from there.
+5. Untick **Solid Rocks**: **Solid Now** drops to 0 and you fly through rock. Tick it again.
+6. Hit a rock at full boost. If the ship ends up inside it, note it: that is the backlog's "Fast ships and small rocks" entry.
+
+### Tuning (detail pass and step 5a)
+On the **Asteroid Field** component: **Detail Look Ahead**, **Solid Rocks**, **Solid Range**, **Solid Range Per Radius** and **Max Solid Rocks**.
+
+### Design (natural placement and field dust)
+The user asked for dust in the field, "so it just doesn't feel like rocks floating in the sky", and for fields that look "more realistic and naturally placed".
+- **Clumps and gaps.** Rock gathers into clumps about 700 m across with gaps between, from two layers of noise taken from the sector seed. Clumps keep the field's full density; gaps thin towards nothing, so at the default **Clumping** of 0.75 the field holds roughly 40% less rock overall. Raise **Rocks Per Cubic Kilometre** to fill it back. Large rocks follow the clumps too.
+- **Rubble round large rocks.** A share of a cell's small rocks (**Rubble**, 0.2) gathers just outside its large rocks, nearer more often than further. Giants of 200 m radius or more gather their full share; a 100 m rock a quarter. Rubble stays with its rock whether that sits in a clump or a gap.
+- **Still one cell at a time.** Both are pure functions of position and seed, so a cell is still built without its neighbours and comes back the same. Rubble that would land outside its cell stays where it was.
+- **The layout changed.** Every rock moved with this change, as it would with a new seed.
+- **Field dust.** Soft banks of dust hang through the fields, thick where the rock is thick, clumps and gaps included, and absent in open space. Banks between the camera and the sun catch a cool grey light; the rest are near black, so the haze reads as dark smoke (the first test's warm tan was too bright for the scene). Rocks behind a bank are veiled, so depth inside the field reads at a glance. Wisps drift slowly. A bank fades out as the camera enters it, so flying through never shows an edge. Soft and un-inked: dust belongs with the sky, not the comic look.
+- **Grit in the air.** Inside a field, more of the space dust's motes show (**Amount In Asteroid Fields**, 0.7 against 0.2 in open space), in step with how thick the field is at the camera.
+
+### Performance (natural placement and field dust)
+- **Placement** costs two noise samples per candidate rock, in the generation job.
+- **Density map.** The fields' density, clumps included, is baked once in a Burst job into a small volume texture (160 × 24 × 160 in Polaris, 0.6 MB) and published to shaders. Any effect can ask how thick the field is anywhere for one lookup.
+- **Field dust** is one static mesh and one draw call, with no CPU work per frame. The vertex shader places each bank, reads the density map, and drops banks in open space before any pixel is drawn. The cost is overdraw: large soft quads over much of the screen. **Bank Count** (1,200) and the material's **Amount** and **Opacity** trade fullness against that cost; it has not been measured.
+
+### Implementation (natural placement and field dust)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/Field/FieldGeneration.cs` | `Clump`, and rubble gathered round large rocks |
+| `Scripts/Sectors/Field/FieldSettings.cs`, `AsteroidFieldDefinition.cs` | **Clumping**, **Clump Size** and **Rubble** |
+| `Scripts/Sectors/Field/FieldDensityMap.cs` | Bakes and publishes the density map; the density at the camera |
+| `Scripts/Sectors/Field/AsteroidField.cs` | Builds the map with the field; `DensityHere` |
+| `Shaders/FieldDust.shader`, `Scripts/Visuals/FieldDust.cs` | The dust banks |
+| `Shaders/SpaceDust.shader` | More motes inside a field |
+| `Editor/FieldDustSetup.cs`, `Editor/AsteroidFieldSetup.cs` | Setup adds a `Field Dust` object and `Materials/FieldDust.mat` |
+| `Editor/GodMenu/Tabs/SectorTab.cs` | **Field here** bar: the density at the camera |
+
+### Verified outside Unity (natural placement and field dust)
+Every Dead Cargo assembly compiles with Unity's own compiler, and the field dust and space dust shaders compile with the DirectX compiler. The look has not been seen: colours, opacity and bank size are first guesses to tune.
+
+### Test steps (natural placement and field dust)
+1. Click into Unity and let it compile. With Polaris open, the God Menu **Project** tab shows one step missing; press **Set Up Sector**. A `Field Dust` object appears under `Environment` and `Materials/FieldDust.mat` is created. Save the scene.
+2. Press Play and fly to the Main Belt. From outside, the belt should show as uneven clumps with gaps, in a faint haze, not an even scatter.
+3. Fly in. Rocks should thin out and thicken as you cross gaps and clumps, and large rocks should have small rocks gathered round them. In the God Menu **Sector** tab, **Field here** rises in clumps and falls in gaps.
+4. Look towards the sun, then away. Dust towards the sun glows; away from it, it is dim. Distant rocks are veiled by it.
+5. Fly through a bank: it thins round you with no edge and no pop. At speed, more motes streak past inside the field than in open space.
+6. Disable the `Field Dust` object to compare, and note the frame rate with and without it.
+
+### Tuning (natural placement and field dust)
+- Placement, on `Data/Sectors/PolarisField.asset`: **Clumping**, **Clump Size**, **Rubble**. Press **Rebuild Field** in the Sector tab to see a change in Play Mode.
+- Dust, on `Materials/FieldDust.mat`: lit and shadow colours, **Opacity**, **Amount**, **Sun Scatter**, **Bank Size**, **Field Size** (how far out banks are drawn), the density where dust starts and is full, wisps and drift. **Bank Count** is on the `Field Dust` object.
+- Motes, on `Materials/SpaceDust.mat`: **Amount In Asteroid Fields**.
+
+### Design (step 7a: a new sector every load)
+The user asked for Polaris to be different every time it loads, extraction included.
+- **A run seed.** Each load of Polaris, from the mothership or by Restart, draws a new seed. Rocks, their shapes, clumps and gaps, the layout, placed content and the sky all come from it, so one number is the whole run. **Pin Seed** in the God Menu keeps a run you liked for every load until **Unpin**: it writes the seed to the sector definition and switches off **New Seed Each Load**.
+- **The layout moves.** Each region carries limits on how far it may change from run to run: **Orbit** swings it round the arrival point to any side while keeping its distance, turning with the swing so it shows the same face to the arrival point; **Drift** moves it a little; **Turn** adds its own turn; **Resize** grows or shrinks each radius. In Polaris the Main Belt and the Wreck Field swing all the way round, so the belt can lie ahead, behind or to either side, while the Arrival Point never moves. A region that would reach out of the sector is moved back inside.
+- **Regions can turn.** A region is now an ellipsoid turned about the vertical axis (**Yaw**), so a belt can lie at any angle. The handles in the Scene view and the debug view follow the turn.
+- **Content is placed by rules.** Every extraction point and pickup in the scene carries a **Sector Placement** with a shared rule: how far from the arrival point, how high, how deep into a field, how far from other content, and whether to face the arrival point. Extraction points go 4 to 9 km out, in open space or at a field's thin edge, 3 km apart, facing the way the player comes, with rock cleared 400 m round the ring. Pickups go 1.2 to 8 km out, anywhere, fields included, 400 m apart, each in a 60 m pocket. Each piece tries up to 96 spots from its own stream and keeps the first that meets its rule, or the closest miss, so content is never lost.
+- **Never buried.** The cleared radius is also a shelter: the field drops any rock whose surface, at its most stretched and lumpiest, could reach into it, giants centred far outside included. So no pickup or gate ever ends up inside rock. Rocks that are not near placed content are unchanged.
+- **Before anything wakes.** The sector space runs first in the scene, so content is already in place when the extraction HUD, the pickups' markers and the asteroid field start. Jettisoned cargo and anything else spawned in play is never moved.
+- **The player still starts at the arrival point**, the sector's origin, in open space. Authority ships already arrive from a random direction each time.
+
+### Performance (step 7a)
+- Building the layout and placing a dozen objects takes well under a millisecond, once per load, behind the loading screen.
+- A region's strength now skips anything outside its bounding box before any other maths, which also pays for the turn on every rock candidate the field tests.
+- Each piece of placed content adds one clearing the field jobs test, 13 in Polaris. A region outside a candidate's reach costs three comparisons, and a shelter test one distance per kept rock.
+
+### Implementation (step 7a)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/RegionVolume.cs`, `SectorDensity.cs` | Regions turn about the vertical axis; bounding box worked out once; early out |
+| `Scripts/Sectors/SectorRegion.cs`, `RegionVariation.cs` | **Yaw**, and the per-run limits: **Orbit**, **Drift**, **Turn**, **Resize** |
+| `Scripts/Sectors/SectorLayout.cs`, `LayoutRegionSet.cs` | The run's regions: varied by the seed, kept in the sector, plus clearings round placed content |
+| `Scripts/Sectors/SectorDefinition.cs` | **New Seed Each Load** and **Vary Layout** |
+| `Scripts/Sectors/SectorSpace.cs` | Draws the run seed, builds the layout and places content first in the scene; again on a seed change |
+| `Scripts/Sectors/Placement/` | `SectorPlacementRule` (the rule asset), `SectorPlacement` (on placed content), `SectorPlacer` (picks the spot), `PlacementSettings` |
+| `Scripts/Sectors/Field/AsteroidField.cs`, `SectorDebugView.cs`, `Scripts/Debugging/DebugReadouts.cs` | Read the run's layout instead of the definition |
+| `Scripts/Sectors/Field/FieldGeneration.cs` | Shelters: no rock reaches into placed content |
+| `Scripts/Visuals/SpaceSkyRandomizer.cs` | The sky follows the sector seed, and bakes again when it changes |
+| `Editor/SectorPlacementSetup.cs`, `Editor/SectorSetup.cs` | Setup step **Content Placement**: the rules in `Data/Sectors/Placement/`, and a Sector Placement on every extraction point and pickup |
+| `Editor/GodMenu/Tabs/SectorTab.cs` | **Seed** section: next load, **Pin Seed** and **Unpin**. **Layout** section: where each region and kind of content lies this run |
+| `Editor/SectorSpaceEditor.cs` | Scene view handles follow a region's turn |
+| `Editor/Diagnostics/SectorSelfTest.cs`, `SectorDiagnostics.cs` | Eleven new checks, and two more for the open sector |
+| `Data/Sectors/Polaris.asset` | The Main Belt and Wreck Field given their limits |
+
+### Verified outside Unity (step 7a)
+- Every Dead Cargo assembly compiles with Unity's own compiler and settings, with no new warnings.
+- The new self-test checks pass, run outside Unity against the compiled code:
+  - a region turned a quarter matches one with its axes swapped, its bounding box holds it at every turn, and its turn matches Unity's yaw
+  - the same seed builds the same layout; a new seed moves and turns the fields; a fixed region and Vary Layout off keep regions as authored
+  - over 500 seeds no varied region reaches outside the sector, the arrival point is always clear, and the belt's centre lies 8.2 to 10.8 km out at every bearing
+  - a clearing added for placed content empties the field round it
+  - over 300 runs of one extraction point and twelve pickups, all 3,900 spots meet their rule's distance, height, density and spacing, every gate faces the arrival point, and none fell back to a miss
+  - of 25,469 rocks round a 150 m shelter in a full field, none reaches into it; 10 would without the shelter
+- The field's own checks give the same rocks as before the change, so turning regions did not disturb generation.
+- Not run in Unity: the load order, the placement in the scene, the sky following the seed, and the God Menu.
+
+### Test steps (step 7a)
+1. Click into Unity and let it compile. With Polaris open, the God Menu **Project** tab shows one step missing, **Content Placement**; press **Set Up Sector**. `Data/Sectors/Placement/` gains **Extraction Points** and **Pickups**, and the extraction point and every pickup gain a **Sector Placement**. Save the scene.
+2. Run **Dead Cargo > Diagnostics > Sector Self-Test**: every check passes, among them the new Turned region, Layout and Placement checks, and "arrival point stays clear" and "content finds room" for Polaris.
+3. From the Mothership, launch into Polaris. Open the God Menu **Sector** tab: **Seed** says "new this load"; **Layout** lists where the Main Belt, the Wreck Field, the extraction point and the pickups lie, by distance and bearing. Turn on **Regions** in **Debug View** to see the belt's outline.
+4. Fly to the extraction point by its HUD marker. It stands 4 to 9 km out, facing you, with no rock on the ring. Fly to a pickup that lies inside the belt: it sits in a small pocket, never inside a rock.
+5. Return to the mothership and launch again, or use the pause menu's **Restart**. The belt lies elsewhere, the rocks, the extraction point, the pickups and the sky have all changed, and the **Layout** numbers are new.
+6. Press **Pin Seed**, then Restart: the same run comes back, sky included. Press **Unpin**, Restart: a new run again.
+7. In Play Mode press **Random Seed**: the field rebuilds and the extraction point and pickups jump to new spots. **Reset Seed** brings this load's run back.
+
+### Tuning (step 7a)
+- Per run, on the sector definition (shown under the `Sector Space` object): **New Seed Each Load**, **Vary Layout**, and on each region **Yaw** and **Variation** (**Orbit**, **Drift**, **Turn**, **Resize**).
+- Placement, on `Data/Sectors/Placement/Extraction Points.asset` and `Pickups.asset`: order, distance, height, field density, spacing, cleared radius and facing. Rules apply at the next load, or straight away with **Random Seed**.
+- To keep one object where it was put, remove its **Sector Placement**.
+
 ---
 
 ## Phase 6.9: Space visuals
@@ -667,7 +892,7 @@ Space feels like deep space: an endless, dark void. Near objects (ships, rocks, 
 |---|---|---|
 | 1. Sky | Procedural deep-space sky: an endless dark void, a soft muted nebula band cut by dust lanes, a far layer and galaxies for depth, sparse stars, cheap shader-only motion. Comic ink and hatching available but off | Built, awaiting test |
 | 2. Sun and light | A stylised sun disc with flat glow rings; the scene light aimed from it, with matching light and shadow colours | Planned |
-| 3. Depth | 3a: space dust streaking past the ship, for speed and scale. 3b: distance fade in colour steps towards the sky colour | 3a built, awaiting test. 3b planned |
+| 3. Depth | 3a: space dust streaking past the ship, for speed and scale. 3b: distance fade in colour steps towards the sky colour | 3a and 3b built, awaiting test |
 | 4. Comic look | Dead Cargo's comic surface for near objects: two-tone light, ink outlines and hatching on the player ship and rocks | Built, awaiting test |
 | 5. Backdrop bodies | Cel-shaded planets, moons and rings, built on sector generation's far world (6.8 step 3) | Planned |
 | 6. Sector identity | A colour palette per sector, with a tint per region | Planned |
@@ -767,6 +992,41 @@ On `Materials/Sky/PolarisSky.mat`: every setting, grouped as Sky, Motion, Backdr
 ### Tuning (step 3a)
 - Look, on `Materials/SpaceDust.mat`: amount, lit and shadow colours and the lit share, brightness, ink (colour, width, strength), field size, width, streak time and caps, fades, rest visibility and full speed. **Amount** is the quickest way to make the dust sparser or thicker; Ink Width 0 removes the rim.
 - Count and layout, on the `Space Dust` object: mote count, seed, velocity response and jump distance.
+
+### Design (step 3b: distance fade)
+- **Why.** Space has no haze, so without help a rock 2 km away reads as a small rock nearby, and anything at the draw distance pops in or out. Depth needs a cue that is cheap and suits the comic look.
+- **Fade towards the void.** From 400 m, every comic surface (ships, field rocks, voxel asteroids, trail rocks) fades towards the sky's void colour, reaching 80% of the way by the time it starts to dissolve. By default the fade is one smooth blend, which the user asked for after the first test. **Band Softness** 0 turns it into four crisp comic bands, each edge one pixel wide.
+- **Dissolve, never pop.** Over the last 700 m before the draw distance (300 m before the first test), objects dissolve into the sky through a fine dither, the same one the detail cross-fade uses, so the two never fight. The fade ends at the main camera's far clip, 10 km in Polaris (2 km before the second test), where the asteroid field also stops.
+- **One switch for the whole scene.** A `Space Depth` object in the Environment folder sets three shader globals that the comic surface reads. Without it, surfaces are unchanged, so the mothership and test range are untouched. It follows the sky's own void colour, so a new sky needs no retuning.
+- **Play Mode only by default.** The Scene view often looks across the whole sector, where everything would dissolve, so the fade shows outside Play Mode only with **Preview In Editor** on.
+- **Cost.** A few instructions per pixel and a dither test; nothing on the CPU beyond three global values a frame.
+
+### Implementation (step 3b)
+| File | Role |
+|---|---|
+| `Shaders/ComicSurface.shader` | `DepthFade` in the surface pass and `DepthDissolve` in every pass (surface, ink, and the shadow caster, which also draws the camera's depth), reading `_SpaceDepth`, `_SpaceDepthColor` and `_SpaceDepthDissolve`. The surface cuts its pixels last, after every texture read and derivative |
+| `Scripts/Visuals/SpaceDepth.cs` | Sets the globals from its settings, the sky's void colour and the camera's far clip |
+| `Editor/SpaceDepthSetup.cs` | Adds the `Space Depth` object; also run by the asteroid field's setup |
+| `Editor/GodMenu/Tabs/ProjectTab.cs` | **Visuals** section: distance fade status, with Add Distance Fade or Edit Fade |
+
+### Verified outside Unity (step 3b)
+All 80 programs of the comic surface compile with the DirectX 11 compiler against Unity's shader includes: every pass (surface, ink, shadow caster for both depth and point-light shadows) with and without the detail cross-fade, instancing, the detail morph and, for the surface, projected texturing. The same check fails on a copy with a deliberate error, so it is not passing by accident.
+
+### Test steps (step 3b)
+1. Open Polaris. If **Set Up Sector** has run for step 2, a `Space Depth` object is already under `Environment`. Otherwise press **Add Distance Fade** in the God Menu **Project** tab's **Visuals** section. Save the scene.
+2. Press Play and fly into the Main Belt. Near rocks look as before. Further out, rocks grow darker towards the void in one smooth blend. At the edge of sight rocks dissolve in and out with no pop.
+3. Watch an Authority ship fly away: it darkens with distance in the same way, and dissolves at the draw distance.
+4. Select `Space Depth` in Play Mode and change **Fade Start**, **Strength**, **Dissolve Range** and **Band Softness**: the look updates at once. Band Softness 0 gives crisp comic bands (as many as **Steps**); Strength 0 turns the colour fade off. Disable the object: every surface is back to the plain look.
+5. Outside Play Mode, tick **Preview In Editor** to see the fade in the Scene view, then untick it.
+
+### Tuning (step 3b)
+On the `Space Depth` object: fade start, steps, band softness, strength, dissolve range, end (0 uses the camera's far clip), sky colour or a colour of your own, and the editor preview.
+
+### Test steps (after the first test: white rocks and popping)
+1. Click into Unity and let it compile. The God Menu **Project** tab shows one step missing again: the field material needs the detail morph. Press **Set Up Sector** and save the scene. `Space Depth` picks up the new defaults by itself: a smooth fade and a 700 m dissolve.
+2. Press Play and fly into the Main Belt. No rock is flat white: each has a lit and a shadow side, and keeps them as it moves across the screen.
+3. Fly slowly towards a large rock from far away. It comes out of the void dark and dissolving, brightens smoothly, and its outline grows smoother without ever jumping.
+4. Watch the small rocks near the edge of sight: they grow in from nothing rather than appearing.
 
 ### Design (step 4: comic look)
 - **One shader for near objects.** `DeadCargo/Comic Surface` gives ships, rocks and later stations a Borderlands-like look with a hint of cel: the painted texture and its normal map lit in three soft tones (a cool charcoal shadow, a mid tone and the lit colour), a highlight band and a flat glint facing the light, a rim along edges seen side-on, and a bold ink outline round the silhouette. **Cel Softness** sets how soft the tone edges are.
@@ -973,6 +1233,7 @@ See what every system is doing while playing, the way a studio's development bui
 ### Design
 - **Frame rate counter.** Always in the corner while the overlay shows: frames per second and frame time, green at 60 fps or better, yellow down to 30, red below. Any error logged this session adds a red error count beside it, so a problem is never missed.
 - **Switching.** **F3** shows or hides the whole overlay. **F4** opens the channel picker; while it is open, keys **1** to **0** and **-** switch the channels. The God Menu **Debug Overlay** tab (GAME group) and the dev console (**F6**, test range) switch the same settings, which are kept between sessions, so channels can be chosen before pressing Play. Only the counter is on by default.
+- **Frame rate cap.** The God Menu **Debug Overlay** tab's **Frame Rate** section caps the frame rate (10 to 360, with presets), kept between sessions and applied in Play Mode. Vsync overrides a cap, so setting one switches vsync off; switching the cap off leaves the frame rate free, and vsync returns when Play stops. The tab shows the live vsync and target values while playing, and the Rendering panel shows the cap.
 - **Channels.** Each shows a panel of readouts; most also draw in the world.
 
   | Key | Channel | Panel | In the world |
@@ -1023,6 +1284,7 @@ See what every system is doing while playing, the way a studio's development bui
 9. With **Physics** on, boxes appear round every rigidbody near the camera, coloured by state. With **Sector** on, the sector's bounds, regions and cells show.
 10. Open the God Menu **Debug Overlay** tab: the same switches, plus corner and size. Change the corner and size and see the overlay follow. Stop and start Play: the settings are kept.
 11. In the test range, press **F6**: the dev console has a Debug overlay section with the same switches.
+12. In the God Menu **Debug Overlay** tab, open **Frame Rate** and press **60** while playing: the counter settles at 60 or below. Press **Off**: it rises again. Stop and start Play: the cap is kept.
 
 ### Tuning
 - Corner and size in the God Menu **Debug Overlay** tab.

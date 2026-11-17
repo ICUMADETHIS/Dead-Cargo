@@ -1,21 +1,36 @@
+using System.Collections.Generic;
 using DeadCargo.EditorTools.Diagnostics;
 using DeadCargo.Sectors;
+using DeadCargo.Sectors.Field;
+using DeadCargo.Sectors.Placement;
 using UnityEditor;
 using UnityEngine;
 
 namespace DeadCargo.EditorTools.GodMenu
 {
-    /// <summary>Inspect the generated sector, change its seed, and switch its debug drawing on and off.</summary>
+    /// <summary>
+    /// Inspect the generated sector, its run layout and its asteroid field, change or pin its seed, and switch its debug
+    /// drawing on and off.
+    /// </summary>
     internal sealed class SectorTab : GodMenuTab
     {
         private const float MetresPerKilometre = 1000f;
+        private const string PinLabel = "Pin Seed";
+        private const string UnpinLabel = "Unpin";
+        private const string SeedProperty = "seed";
+        private const string NewSeedProperty = "newSeedEachLoad";
 
-        private static readonly string[] SeedLabels = { "Random Seed", "Reset Seed" };
         private static readonly string[] ViewLabels = { "Show All", "Hide All" };
         private static readonly string[] TestLabels = { "Run Self-Test" };
+        private static readonly string[] FieldLabels = { "Rebuild Field" };
+
+        private readonly string[] seedLabels = { "Random Seed", "Reset Seed", PinLabel };
+        private readonly bool[] seedEnabled = { true, false, true };
+        private readonly List<SectorPlacementRule> rules = new List<SectorPlacementRule>();
 
         private SectorSpace space;
         private SectorDebugView view;
+        private AsteroidField field;
 
         public override string Title => "Sector";
         public override GodMenuGroup Group => GodMenuGroup.Run;
@@ -31,6 +46,7 @@ namespace DeadCargo.EditorTools.GodMenu
         {
             space = GodMenuContext.IsPlaying ? SectorSpace.Active : null;
             view = space != null ? space.GetComponent<SectorDebugView>() : null;
+            field = space != null ? space.GetComponent<AsteroidField>() : null;
         }
 
         public override void OnGUI()
@@ -40,6 +56,8 @@ namespace DeadCargo.EditorTools.GodMenu
 
             DrawSector();
             DrawSeed();
+            DrawLayout();
+            DrawField();
             DrawView();
             DrawSelfTest();
         }
@@ -60,8 +78,43 @@ namespace DeadCargo.EditorTools.GodMenu
                 GodMenuGUI.Field("Size", $"{size.x:0.#} × {size.y:0.#} × {size.z:0.#} km");
                 GodMenuGUI.Field("Cells", $"{grid.CellCount:N0}  ·  {grid.CellSize:0} m each");
                 GodMenuGUI.Field("Player Cell", grid.Contains(cell) ? cell.ToString() : $"{cell}  outside the sector");
-                GodMenuGUI.Field("Region", regionIndex != SectorDefinition.NoRegion ? space.Definition.Regions[regionIndex].Name : "Open space");
+                GodMenuGUI.Field("Region", regionIndex != SectorDefinition.NoRegion ? space.Layout.NameOf(regionIndex) : "Open space");
                 GodMenuGUI.Bar(density, $"Density here  {density:0.00}", GodMenuGUI.Accent);
+            }
+        }
+
+        private void DrawField()
+        {
+            if (field == null)
+                return;
+
+            using (var section = new GodMenuGUI.SectionScope("Asteroid Field"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                bool drawn = EditorGUILayout.Toggle("Draw Field", field.enabled);
+                if (drawn != field.enabled)
+                    field.enabled = drawn;
+
+                string generating = field.IsGenerating ? "  ·  generating" : string.Empty;
+                GodMenuGUI.Field("Cells", $"{field.LoadedCells} loaded of {field.SlotCount} slots{generating}");
+                GodMenuGUI.Field("Rocks", $"{field.LoadedRocks:N0} loaded  ·  {field.DrawnRocks:N0} drawn");
+                GodMenuGUI.Field("Draw Calls", field.DrawCalls.ToString("N0"));
+                GodMenuGUI.Field("Main Thread", $"{field.MainThreadMilliseconds:0.00} ms");
+
+                bool solid = EditorGUILayout.Toggle("Solid Rocks", field.SolidRocks);
+                if (solid != field.SolidRocks)
+                    field.SolidRocks = solid;
+
+                GodMenuGUI.Field("Solid Now", field.SolidRockCount.ToString("N0"));
+                GodMenuGUI.Bar(field.DensityHere, $"Field here  {field.DensityHere:0.00}  (clumps and gaps)", GodMenuGUI.Accent);
+
+                if (GodMenuGUI.ButtonRow(FieldLabels) == 0)
+                    field.Rebuild();
+
+                GodMenuGUI.Hint("Rocks near the player are solid, large ones from further off. Range and the most at once are on " +
+                                "the Asteroid Field component.");
             }
         }
 
@@ -72,10 +125,15 @@ namespace DeadCargo.EditorTools.GodMenu
                 if (!section.Expanded)
                     return;
 
-                GodMenuGUI.Field("In Use", space.HasSeedOverride ? $"{space.Seed}  (override)" : $"{space.Seed}  (definition)");
+                SectorDefinition definition = space.Definition;
+                bool pinned = !definition.NewSeedEachLoad;
+                string origin = space.HasSeedOverride ? "changed in Play Mode" : pinned ? "pinned" : "new this load";
+                GodMenuGUI.Field("In Use", $"{space.Seed}  ({origin})");
+                GodMenuGUI.Field("Next Load", pinned ? $"seed {definition.Seed} again" : "a new seed");
 
-                bool[] enabled = { true, space.HasSeedOverride };
-                switch (GodMenuGUI.ButtonRow(SeedLabels, enabled))
+                seedLabels[2] = pinned && (uint)definition.Seed == space.Seed ? UnpinLabel : PinLabel;
+                seedEnabled[1] = space.HasSeedOverride;
+                switch (GodMenuGUI.ButtonRow(seedLabels, seedEnabled))
                 {
                     case 0:
                         space.SetSeed(unchecked((uint)Random.Range(int.MinValue, int.MaxValue)));
@@ -83,8 +141,95 @@ namespace DeadCargo.EditorTools.GodMenu
                     case 1:
                         space.ResetSeed();
                         break;
+                    case 2:
+                        if (seedLabels[2] == PinLabel)
+                            Pin(definition, unchecked((int)space.Seed));
+                        else
+                            Unpin(definition);
+                        break;
                 }
+
+                GodMenuGUI.Hint("Pin keeps this sector, its layout, content and sky, for every load until unpinned. The seed and the " +
+                                "switch are on the sector definition.");
             }
+        }
+
+        // The run's regions as varied by the seed, and the content placed in them, measured from the arrival point.
+        private void DrawLayout()
+        {
+            using (var section = new GodMenuGUI.SectionScope("Layout"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                SectorLayout layout = space.Layout;
+                for (int i = 0; i < layout.AuthoredCount; ++i)
+                {
+                    RegionVolume region = layout[i];
+                    GodMenuGUI.Field(layout.NameOf(i), $"{Describe(region.Centre)}  ·  turned {region.Yaw:0}°");
+                }
+
+                rules.Clear();
+                foreach (SectorPlacement placement in space.Placements)
+                {
+                    if (placement != null && !rules.Contains(placement.Rule))
+                        rules.Add(placement.Rule);
+                }
+
+                foreach (SectorPlacementRule rule in rules)
+                    DrawPlaced(rule);
+
+                if (space.MissedPlacements > 0)
+                    GodMenuGUI.Status(false, $"{space.MissedPlacements} placed with the closest miss of their rule");
+
+                if (!space.Definition.VaryLayout)
+                    GodMenuGUI.Hint("Vary Layout is off on the sector definition, so regions stay as authored.");
+            }
+        }
+
+        private void DrawPlaced(SectorPlacementRule rule)
+        {
+            int count = 0;
+            float nearest = float.MaxValue;
+            Vector3 only = Vector3.zero;
+            foreach (SectorPlacement placement in space.Placements)
+            {
+                if (placement == null || placement.Rule != rule)
+                    continue;
+
+                Vector3 spot = space.WorldToSector(placement.transform.position);
+                ++count;
+                only = spot;
+                nearest = Mathf.Min(nearest, spot.magnitude);
+            }
+
+            GodMenuGUI.Field(ObjectNames.NicifyVariableName(rule.name), count == 1
+                ? Describe(only)
+                : $"{count} placed  ·  nearest {nearest / MetresPerKilometre:0.0} km");
+        }
+
+        // Distance from the arrival point and its bearing, clockwise from straight ahead.
+        private static string Describe(Vector3 sectorPosition)
+        {
+            float bearing = Mathf.Repeat(Mathf.Atan2(sectorPosition.x, sectorPosition.z) * Mathf.Rad2Deg, 360f);
+            return $"{sectorPosition.magnitude / MetresPerKilometre:0.0} km at {bearing:0}°";
+        }
+
+        private static void Pin(SectorDefinition definition, int seed)
+        {
+            var serialized = new SerializedObject(definition);
+            serialized.FindProperty(SeedProperty).intValue = seed;
+            serialized.FindProperty(NewSeedProperty).boolValue = false;
+            serialized.ApplyModifiedProperties();
+            AssetDatabase.SaveAssetIfDirty(definition);
+        }
+
+        private static void Unpin(SectorDefinition definition)
+        {
+            var serialized = new SerializedObject(definition);
+            serialized.FindProperty(NewSeedProperty).boolValue = true;
+            serialized.ApplyModifiedProperties();
+            AssetDatabase.SaveAssetIfDirty(definition);
         }
 
         private void DrawView()

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DeadCargo.Sectors;
+using DeadCargo.Sectors.Placement;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -18,6 +19,10 @@ namespace DeadCargo.EditorTools.Diagnostics
         private const int EstimateCandidatesPerCell = SectorDebugView.MaxSamplesPerCell;
         private const int EstimatePoints = 200000;
         private const uint EstimateSeed = 0x5EC7012u;
+
+        // Runs of the open sector built to check its layout and placement, from seeds of their own.
+        private const int RunsChecked = 200;
+        private const uint RunSeed = 0x2A11u;
 
         /// <summary>One line describing the last run, or null before the first.</summary>
         public static string LastSummary { get; private set; }
@@ -80,14 +85,73 @@ namespace DeadCargo.EditorTools.Diagnostics
                 result.Check(region.StrengthAt(region.Centre) > 0f, $"{name} has a density", "greater than zero at its centre");
 
                 // Content is only generated inside the grid, so anything hanging outside is silently lost.
-                Vector3 low = region.Centre - region.Radii;
-                Vector3 high = region.Centre + region.Radii;
+                Vector3 extent = region.Volume.Extent;
+                Vector3 low = region.Centre - extent;
+                Vector3 high = region.Centre + extent;
                 bool inside = low.x >= grid.Min.x && low.y >= grid.Min.y && low.z >= grid.Min.z &&
                     high.x <= gridMax.x && high.y <= gridMax.y && high.z <= gridMax.z;
                 result.Check(inside, $"{name} fits in the sector", inside ? "inside the bounds" : "extends past the bounds, where nothing is generated");
             }
 
             EstimateContent(definition, grid, label, result);
+            CheckRuns(definition, grid, label, result);
+        }
+
+        // Builds many runs of the open sector, as loads would, and places the open scene's content in each.
+        private static void CheckRuns(SectorDefinition definition, SectorGrid grid, string label, SectorSelfTest.Result result)
+        {
+            List<SectorPlacement> placements = FindOpenPlacements();
+            placements.Sort((a, b) => a.Rule.Order.CompareTo(b.Rule.Order));
+
+            var layout = new SectorLayout();
+            var taken = new List<Vector3>();
+            int arrivalNotClear = 0;
+            int placed = 0;
+            int missed = 0;
+
+            for (int run = 0; run < RunsChecked; ++run)
+            {
+                uint seed = SectorHash.Combine(RunSeed, (uint)run);
+                layout.Build(definition.Regions, grid, seed, definition.VaryLayout);
+                if (layout.DensityAt(Vector3.zero, out _) > 0f)
+                    ++arrivalNotClear;
+
+                taken.Clear();
+                for (int i = 0; i < placements.Count; ++i)
+                {
+                    PlacementSettings settings = placements[i].Rule.Settings;
+                    if (!SectorPlacer.TryPlace(layout.Set, grid, seed, i, settings, taken, out Vector3 spot, out _))
+                        ++missed;
+
+                    ++placed;
+                    taken.Add(spot);
+                    layout.AddClearing(placements[i].name, spot, settings.KeepClear);
+                }
+            }
+
+            result.Check(arrivalNotClear == 0, $"{label} arrival point stays clear",
+                $"{arrivalNotClear} of {RunsChecked} runs put field where the player starts");
+
+            if (placements.Count == 0)
+            {
+                result.Note($"{label} content placement", "nothing in the open scene is placed by the run");
+                return;
+            }
+
+            result.Check(missed <= placed / 100, $"{label} content finds room",
+                $"{placed - missed} of {placed} pieces met their rule over {RunsChecked} runs of {placements.Count} pieces");
+        }
+
+        private static List<SectorPlacement> FindOpenPlacements()
+        {
+            var placements = new List<SectorPlacement>();
+            foreach (SectorPlacement placement in SceneSetupUtility.FindInScene<SectorPlacement>(SceneManager.GetActiveScene()))
+            {
+                if (placement.Rule != null)
+                    placements.Add(placement);
+            }
+
+            return placements;
         }
 
         // Samples the whole sector to find how full it is, then scales that up to a count of generated objects.

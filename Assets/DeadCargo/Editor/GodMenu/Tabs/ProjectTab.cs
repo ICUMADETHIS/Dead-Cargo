@@ -28,6 +28,8 @@ namespace DeadCargo.EditorTools.GodMenu
         private const string EditSkyLabel = "Edit Sky";
         private const string AddDustLabel = "Add Space Dust";
         private const string EditDustLabel = "Edit Dust";
+        private const string AddFadeLabel = "Add Distance Fade";
+        private const string EditFadeLabel = "Edit Fade";
         private const string ComicShipLabel = "Comic Ship";
         private const string EditShipLabel = "Edit Ship Look";
         private const string PlaceRockLabel = "Place Test Rock";
@@ -49,11 +51,13 @@ namespace DeadCargo.EditorTools.GodMenu
         private bool hasSpaceSky;
         private bool skyIsCurrent;
         private SpaceDust dust;
+        private SpaceDepth depth;
         private bool shipIsComic;
         private GameObject testRock;
 
-        // The Visuals section's buttons, one each for the sky, the dust, the ship and the test rock, chosen in OnUpdate.
-        private readonly string[] visualLabels = new string[4];
+        // The Visuals section's buttons, one each for the sky, the dust, the distance fade, the ship and the test rock,
+        // chosen in OnUpdate.
+        private readonly string[] visualLabels = new string[5];
 
         public override string Title => "Project";
         public override GodMenuGroup Group => GodMenuGroup.Editor;
@@ -95,12 +99,14 @@ namespace DeadCargo.EditorTools.GodMenu
             hasSpaceSky = SpaceSkySetup.IsInstalled(scene);
             skyIsCurrent = hasSkyMaterial && SpaceSkyBaker.IsCurrent(RenderSettings.skybox);
             dust = SpaceDustSetup.Find(scene);
+            depth = SpaceDepthSetup.Find(scene);
             shipIsComic = hasPlayer && ComicLookSetup.IsShipComic(scene);
             testRock = ComicLookSetup.FindTestRock(scene);
             visualLabels[0] = !hasSpaceSky ? ApplySkyLabel : skyIsCurrent ? EditSkyLabel : BakeNebulaLabel;
             visualLabels[1] = dust == null ? AddDustLabel : EditDustLabel;
-            visualLabels[2] = shipIsComic ? EditShipLabel : ComicShipLabel;
-            visualLabels[3] = testRock == null ? PlaceRockLabel : RemoveRockLabel;
+            visualLabels[2] = depth == null ? AddFadeLabel : EditFadeLabel;
+            visualLabels[3] = shipIsComic ? EditShipLabel : ComicShipLabel;
+            visualLabels[4] = testRock == null ? PlaceRockLabel : RemoveRockLabel;
         }
 
         public override void OnGUI()
@@ -181,6 +187,8 @@ namespace DeadCargo.EditorTools.GodMenu
 
                 bool hasDust = dust != null;
                 GodMenuGUI.Status(hasDust, hasDust ? "Space dust: on" : "Space dust: none");
+                bool hasDepth = depth != null;
+                GodMenuGUI.Status(hasDepth, hasDepth ? "Distance fade: on" : "Distance fade: none");
                 GodMenuGUI.Status(shipIsComic, shipIsComic ? "Ship: comic look" : "Ship: Flat Kit look");
 
                 int clicked = GodMenuGUI.ButtonRow(visualLabels);
@@ -224,6 +232,12 @@ namespace DeadCargo.EditorTools.GodMenu
                         break;
                     case EditDustLabel when hasDust:
                         SelectAndPing(dust.gameObject);
+                        break;
+                    case AddFadeLabel:
+                        EditorApplication.delayCall += () => SpaceDepthSetup.Apply();
+                        break;
+                    case EditFadeLabel when hasDepth:
+                        SelectAndPing(depth.gameObject);
                         break;
                 }
             }

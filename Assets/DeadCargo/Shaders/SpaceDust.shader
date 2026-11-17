@@ -13,6 +13,7 @@ Shader "DeadCargo/Space Dust"
         _LitShare ("Lit Share", Range(0, 1)) = 0.65
         _Brightness ("Brightness", Range(0, 4)) = 0.7
         _Amount ("Amount", Range(0, 1)) = 0.2
+        _FieldAmount ("Amount In Asteroid Fields", Range(0, 1)) = 0.7
         _InkColor ("Ink", Color) = (0.03, 0.025, 0.04, 1)
         _InkWidth ("Ink Width (px at 1080p)", Range(0, 2)) = 0.8
         _InkStrength ("Ink Strength", Range(0, 1)) = 0.6
@@ -51,6 +52,11 @@ Shader "DeadCargo/Space Dust"
             float _LitShare;
             float _Brightness;
             float _Amount;
+            float _FieldAmount;
+
+            // How thick the asteroid field is at the camera, 0 to 1, set for the whole scene by the field. Zero in open
+            // space and in scenes without one.
+            float _FieldDensityHere;
             float4 _InkColor;
             float _InkWidth;
             float _InkStrength;
@@ -142,9 +148,12 @@ Shader "DeadCargo/Space Dust"
                     * (1 - smoothstep(halfField * _FarFade, halfField, length(head - camera)));
 
                 // Motes show more with speed, so moving fast feels fast. Amount shows only the motes ranked below it.
+                // (A mote ranked between the two amounts appears as the camera goes deeper into a field.)
                 float speed = saturate(length(_Velocity.xyz) / _FullSpeed);
                 float opacity = lerp(0.35, 1, input.random.y) * lerp(_RestVisibility, 1, speed) * fade;
-                opacity *= step(input.random.z, _Amount);
+
+                // Inside an asteroid field the air is full of grit: more motes show the deeper in the camera is.
+                opacity *= step(input.random.z, lerp(_Amount, max(_Amount, _FieldAmount), saturate(_FieldDensityHere)));
 
                 // A fixed share of the flecks catch the sun; the rest are in shadow. The spot in the cube is uniform,
                 // so it doubles as the roll.

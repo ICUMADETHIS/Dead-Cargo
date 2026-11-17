@@ -8,6 +8,7 @@ using DeadCargo.Extraction;
 using DeadCargo.Flow;
 using DeadCargo.Heat;
 using DeadCargo.Sectors;
+using DeadCargo.Sectors.Field;
 using UnityEngine;
 using VSX.UniversalVehicleCombat;
 
@@ -378,7 +379,11 @@ namespace DeadCargo.Debugging
 
             SectorDefinition definition = space.Definition;
             text.Append(DebugText.Muted).Append("  ").Append(definition.DisplayName).Append(DebugText.End);
-            text.Row("seed").Integer(space.Seed, false).Append(space.HasSeedOverride ? DebugText.Warn + "  override" + DebugText.End : string.Empty);
+            text.Row("seed").Integer(space.Seed, false);
+            if (space.HasSeedOverride)
+                text.Append(DebugText.Warn).Append("  override").Append(DebugText.End);
+            else
+                text.Append(DebugText.Muted).Append(definition.NewSeedEachLoad ? "  new this load" : "  pinned").Append(DebugText.End);
             CellCoord cell = space.FocusCell;
             text.Row("cell").Integer(cell.X, false).Append(", ").Integer(cell.Y, false).Append(", ").Integer(cell.Z, false)
                 .Append(DebugText.Muted).Append("  size ").Append(DebugText.End).Number(definition.CellSize).Append(" m");
@@ -386,12 +391,23 @@ namespace DeadCargo.Debugging
             Vector3 sectorPosition = space.WorldToSector(context.Focus);
             float density = space.DensityAt(sectorPosition, out int region);
             text.Row("region");
-            if (region >= 0 && region < definition.Regions.Count)
-                text.Append(definition.Regions[region].Name);
+            if (region >= 0 && region < space.Layout.Count)
+                text.Append(space.Layout.NameOf(region));
             else
                 text.Append(DebugText.Muted).Append("open space").Append(DebugText.End);
 
             text.Append(DebugText.Muted).Append("  density ").Append(DebugText.End).Number(density, 2);
+
+            AsteroidField field = AsteroidField.Active;
+            if (field == null)
+                return;
+
+            text.Row("field").Integer(field.DrawnRocks).Append(" drawn").Append(DebugText.Muted).Append(" of ").Append(DebugText.End)
+                .Integer(field.LoadedRocks).Append(DebugText.Muted).Append("  in ").Append(DebugText.End).Integer(field.LoadedCells)
+                .Append(" cells");
+            text.Row("field cost").Number(field.MainThreadMilliseconds, 2).Append(" ms").Append(DebugText.Muted).Append("  ")
+                .Append(DebugText.End).Integer(field.DrawCalls).Append(" draw calls");
+            text.Row("solid rocks").Integer(field.SolidRockCount);
         }
 
         private static void WriteDestruction(StringBuilder text)

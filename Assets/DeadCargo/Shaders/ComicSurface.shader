@@ -1,7 +1,8 @@
 // Dead Cargo's comic surface: the look for near objects such as ships, rocks and stations. A painted texture lit in
 // three soft tones (shadow, mid and lit), with a highlight band and a flat glint facing the light, a rim, a bold ink
 // outline round the silhouette, and ink drawn into the texture's darkest details. Hatching is available for a
-// harder comic look. Ink fades out with distance, so far objects read as flat and far, matching the sky.
+// harder comic look. Ink fades out with distance, so far objects read as flat and far, matching the sky. With a Space
+// Depth in the scene, colour also steps towards the void with distance, and objects dissolve before the draw distance.
 // GPU instancing is supported, so an asteroid field draws thousands of rocks in a few batches. Property names follow
 // Flat Kit's where they mean the same thing, so a Flat Kit material converts by copying it with this shader.
 Shader "DeadCargo/Comic Surface"
@@ -49,6 +50,11 @@ Shader "DeadCargo/Comic Surface"
         // Cross-fade between two meshes of one object, such as voxel rock changing detail. x: share shown, 0 to 1;
         // y: 1 for the mesh fading in, -1 for the one fading out. Only read with the _DITHER_FADE keyword.
         [HideInInspector] _DitherFade ("Dither Fade", Vector) = (1, 1, 0, 0)
+
+        // Meshes whose vertices also carry where they sit on the next coarser level of detail, such as asteroid field
+        // rocks, morph between the two as they grow on screen, so a change of detail never pops. Set by the field.
+        [Toggle(_GEOMORPH)] _Geomorph ("Detail Morph (field rock)", Float) = 0
+        [HideInInspector] _FieldMorph ("Field Morph", Vector) = (0, 0, 0, 0)
     }
 
     CGINCLUDE
@@ -60,8 +66,31 @@ Shader "DeadCargo/Comic Surface"
     float4 _InkFade;
     float4 _DitherFade;
 
+    // x: on-screen size, in pixels across, where this mesh's level of detail starts; 0 for the coarsest level, which
+    // has nothing to morph from. y: the share of the level's span the morph takes, 1 for all of it. Set per draw by the
+    // asteroid field (Scripts/Sectors/Field/AsteroidField.cs).
+    float4 _FieldMorph;
+
+    // xyz: from the camera to where it will be shortly, in world space. Detail is judged from the nearest point of
+    // that path, so a fast camera finds the rocks ahead already detailed. Set for the whole scene by the asteroid field.
+    float4 _FieldDetailAhead;
+
+    // Distance fade, set for every comic surface at once by Space Depth (Scripts/Visuals/SpaceDepth.cs), which names
+    // these. x: where the fade starts, y: where it is complete, both in metres; z: steps; w: how far the last step goes
+    // towards the colour. All zero, as with no Space Depth in the scene, leaves surfaces unchanged.
+    float4 _SpaceDepth;
+
+    // rgb: the colour far surfaces fade towards; a: band softness, 0 for crisp bands up to 1 for a smooth blend.
+    float4 _SpaceDepthColor;
+
+    // x: where objects start to dissolve, y: where they are gone, in metres. Zero y: no dissolve.
+    float4 _SpaceDepthDissolve;
+
     static const float ReferenceHeight = 1080.0;
     static const float MinWidth = 1e-4;
+
+    // The bits of a float that is not a number; a vertex placed there takes its triangles out of the draw.
+    static const uint NotANumber = 0x7fc00000;
 
     // How much ink survives at a distance: all of it up close, none beyond the fade's end.
     float InkAtDistance(float distance)
@@ -81,14 +110,71 @@ Shader "DeadCargo/Comic Surface"
         return saturate((value - threshold) / width + 0.5);
     }
 
+    // A per-pixel threshold from 0 to 1 for dithering. Interleaved gradient noise spreads the pattern evenly, too fine to
+    // read as a pattern while it lasts.
+    float DitherThreshold(float2 pixel)
+    {
+        return frac(52.9829189 * frac(dot(floor(pixel), float2(0.06711056, 0.00583715))));
+    }
+
     // Dithered cross-fade: the mesh fading in keeps the pixels whose threshold is below the share shown, the mesh fading
-    // out keeps the rest, so the two together cover every pixel exactly once and nothing pops. Interleaved gradient
-    // noise spreads the pattern evenly, too fine to read as a pattern while it lasts.
+    // out keeps the rest, so the two together cover every pixel exactly once and nothing pops.
     void DitherClip(float2 pixel)
     {
     #if defined(_DITHER_FADE)
-        float threshold = frac(52.9829189 * frac(dot(floor(pixel), float2(0.06711056, 0.00583715))));
-        clip((_DitherFade.x - threshold) * _DitherFade.y);
+        clip((_DitherFade.x - DitherThreshold(pixel)) * _DitherFade.y);
+    #endif
+    }
+
+    // Near the draw distance an object dissolves into the sky through the same dither, so nothing pops in or out at
+    // the edge of sight. It shares the cross-fade's thresholds, so the two never fight.
+    void DepthDissolve(float viewDistance, float2 pixel)
+    {
+        if (_SpaceDepthDissolve.y <= 0)
+            return;
+
+        float shown = 1 - saturate((viewDistance - _SpaceDepthDissolve.x) / max(_SpaceDepthDissolve.y - _SpaceDepthDissolve.x, MinWidth));
+        clip(shown - DitherThreshold(pixel) - MinWidth);
+    }
+
+    // How far a surface has faded towards the void, from 0 up to the fade's strength: a staircase over distance. Band
+    // softness widens each riser from one pixel, for crisp comic bands, to a whole band, for one smooth blend.
+    float DepthFade(float viewDistance)
+    {
+        float steps = max(_SpaceDepth.z, 1);
+        float scaled = saturate((viewDistance - _SpaceDepth.x) / max(_SpaceDepth.y - _SpaceDepth.x, MinWidth)) * steps;
+        float riser = max(lerp(fwidth(scaled), 1, saturate(_SpaceDepthColor.a)), MinWidth);
+        float stepped = floor(scaled) + saturate((frac(scaled) - 1 + riser) / riser);
+        return stepped / steps * _SpaceDepth.w;
+    }
+
+    // How far a field rock's vertices have moved from where the next coarser level puts them, from 0 just after the
+    // switch to 1 at the end of the morph's span, by default as the level itself ends, so the outline is always easing
+    // and never jumps. The rock's size on screen is worked out exactly as the field's culling job works it out
+    // (FieldRockShape.DetailDistance and Pixels), from the rock's mean scale and its distance from the camera's path,
+    // so the morph starts from nothing at the moment the detail changes.
+    float GeomorphShare()
+    {
+        if (_FieldMorph.x <= 0)
+            return 1;
+
+        float4x4 objectToWorld = unity_ObjectToWorld;
+        float size = (length(objectToWorld._m00_m10_m20) + length(objectToWorld._m01_m11_m21) + length(objectToWorld._m02_m12_m22)) / 3;
+        float3 toRock = objectToWorld._m03_m13_m23 - _WorldSpaceCameraPos;
+        float3 ahead = _FieldDetailAhead.xyz;
+        float along = saturate(dot(toRock, ahead) / max(dot(ahead, ahead), MinWidth));
+        float away = max(length(toRock - ahead * along), size);
+        float pixels = size * _ScreenParams.y * abs(UNITY_MATRIX_P[1][1]) / away;
+        return saturate((pixels - _FieldMorph.x) / max(_FieldMorph.x * _FieldMorph.y, MinWidth));
+    }
+
+    // Moves a vertex, and turns its normal, between its coarser and its own place. Only with the _GEOMORPH keyword.
+    void Geomorph(inout float4 vertex, inout float3 normal, float3 coarseVertex, float3 coarseNormal)
+    {
+    #if defined(_GEOMORPH)
+        float share = GeomorphShare();
+        vertex.xyz = lerp(coarseVertex, vertex.xyz, share);
+        normal = normalize(lerp(coarseNormal, normal, share));
     #endif
     }
     ENDCG
@@ -109,6 +195,7 @@ Shader "DeadCargo/Comic Surface"
             #pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
             #pragma multi_compile_instancing
             #pragma shader_feature_local _TRIPLANAR
+            #pragma shader_feature_local _GEOMORPH
             #pragma multi_compile_local _ _DITHER_FADE
 
             #include "Lighting.cginc"
@@ -167,9 +254,15 @@ Shader "DeadCargo/Comic Surface"
                 float4 tangent : TANGENT;
                 float2 uv : TEXCOORD0;
             #endif
+            #if defined(_GEOMORPH)
+                float3 coarseVertex : TEXCOORD1;
+                float3 coarseNormal : TEXCOORD2;
+            #endif
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
+            // Carries the instance on to the fragment, which reads the object's own matrices when it turns projected
+            // normals into world space; without it every instance of a batch would be lit with the first one's.
             struct Varyings
             {
                 // Named pos, as the shadow macros expect.
@@ -189,6 +282,7 @@ Shader "DeadCargo/Comic Surface"
                 float3 worldTangent : TEXCOORD7;
                 float3 worldBitangent : TEXCOORD8;
             #endif
+                UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -197,7 +291,11 @@ Shader "DeadCargo/Comic Surface"
             {
                 Varyings o;
                 UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+            #if defined(_GEOMORPH)
+                Geomorph(v.vertex, v.normal, v.coarseVertex, v.coarseNormal);
+            #endif
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
@@ -278,7 +376,8 @@ Shader "DeadCargo/Comic Surface"
 
             half4 Fragment(Varyings i) : SV_Target
             {
-                DitherClip(i.pos.xy);
+                UNITY_SETUP_INSTANCE_ID(i);
+                float viewDistance = length(_WorldSpaceCameraPos - i.worldPos);
             #if defined(_TRIPLANAR)
                 float3 texel;
                 float3 normal;
@@ -328,12 +427,19 @@ Shader "DeadCargo/Comic Surface"
 
                 // Texture ink: the texture's darkest details, such as cracks and crater rims, are drawn in ink, like
                 // line work painted into the texture. Hatching, when used, is ink too. Both fade with distance.
-                float ink = InkAtDistance(length(_WorldSpaceCameraPos - i.worldPos));
+                float ink = InkAtDistance(viewDistance);
                 float shade = Luminance(texel);
                 float lines = CrispStep(-_TextureInk, -shade, max(fwidth(shade), MinWidth)) * saturate(_TextureInk / MinWidth);
                 float hatch = Hatching(i.metricPos, i.objectNormal, light, pixelScale) * _Hatching;
                 color = lerp(color, _InkColor.rgb, max(lines, hatch) * ink);
 
+                // Distance: far surfaces fade towards the void, so depth reads at a glance.
+                color = lerp(color, _SpaceDepthColor.rgb, DepthFade(viewDistance));
+
+                // Pixels are cut for the dissolve and the cross-fade only now, after every texture read and screen-space
+                // derivative: cut earlier, some GPUs work those out from pixels already gone, and the rock came out white.
+                DepthDissolve(viewDistance, i.pos.xy);
+                DitherClip(i.pos.xy);
                 return half4(color, 1);
             }
             ENDCG
@@ -351,18 +457,24 @@ Shader "DeadCargo/Comic Surface"
             #pragma fragment InkFragment
             #pragma target 3.5
             #pragma multi_compile_instancing
+            #pragma shader_feature_local _GEOMORPH
             #pragma multi_compile_local _ _DITHER_FADE
 
             struct InkAttributes
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+            #if defined(_GEOMORPH)
+                float3 coarseVertex : TEXCOORD1;
+                float3 coarseNormal : TEXCOORD2;
+            #endif
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct InkVaryings
             {
                 float4 pos : SV_POSITION;
+                float viewDistance : TEXCOORD0;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -371,6 +483,9 @@ Shader "DeadCargo/Comic Surface"
                 InkVaryings o;
                 UNITY_SETUP_INSTANCE_ID(v);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+            #if defined(_GEOMORPH)
+                Geomorph(v.vertex, v.normal, v.coarseVertex, v.coarseNormal);
+            #endif
 
                 // Meshes with hard edges have split normals, which open gaps in the outline at corners. Gap Fill pushes
                 // out from the object's centre instead, which closes them on rounded shapes such as rocks.
@@ -384,18 +499,22 @@ Shader "DeadCargo/Comic Surface"
                 float clipLength = length(clipNormal);
                 clipNormal = clipLength > MinWidth ? clipNormal / clipLength : float2(0, 0);
 
-                float widthPixels = _InkWidth * (_ScreenParams.y / ReferenceHeight) * InkAtDistance(length(_WorldSpaceCameraPos - worldPos));
+                o.viewDistance = length(_WorldSpaceCameraPos - worldPos);
+                float widthPixels = _InkWidth * (_ScreenParams.y / ReferenceHeight) * InkAtDistance(o.viewDistance);
                 o.pos.xy += clipNormal * (widthPixels * 2 / _ScreenParams.xy) * o.pos.w;
 
-                // With no ink to draw, the outline collapses to nothing.
+                // With no ink to draw, the outline is dropped. A position that is not a number makes the GPU discard
+                // every triangle the vertex belongs to. Moving the vertex to one spot instead would stretch the
+                // triangles of a rock that straddles the fade's end into black slivers reaching across the screen.
                 if (widthPixels <= 0)
-                    o.pos = float4(0, 0, 0, 1);
+                    o.pos = asfloat(NotANumber).xxxx;
 
                 return o;
             }
 
             half4 InkFragment(InkVaryings i) : SV_Target
             {
+                DepthDissolve(i.viewDistance, i.pos.xy);
                 DitherClip(i.pos.xy);
                 return half4(_InkColor.rgb, 1);
             }
@@ -413,6 +532,7 @@ Shader "DeadCargo/Comic Surface"
             #pragma target 3.5
             #pragma multi_compile_shadowcaster
             #pragma multi_compile_instancing
+            #pragma shader_feature_local _GEOMORPH
             #pragma multi_compile_local _ _DITHER_FADE
 
             // Position and normal only, so meshes without texture coordinates, such as voxel rock, cast shadows too.
@@ -420,12 +540,19 @@ Shader "DeadCargo/Comic Surface"
             {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+            #if defined(_GEOMORPH)
+                float3 coarseVertex : TEXCOORD1;
+                float3 coarseNormal : TEXCOORD2;
+            #endif
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
+            // This pass also draws the camera's depth, which deferred rendering and screen-space effects read. It
+            // dissolves exactly as the surface does, so the depth has the same holes and the sky shows through them.
             struct ShadowVaryings
             {
                 V2F_SHADOW_CASTER;
+                float viewDistance : TEXCOORD1;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -435,12 +562,17 @@ Shader "DeadCargo/Comic Surface"
                 ShadowVaryings o;
                 UNITY_SETUP_INSTANCE_ID(v);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+            #if defined(_GEOMORPH)
+                Geomorph(v.vertex, v.normal, v.coarseVertex, v.coarseNormal);
+            #endif
+                o.viewDistance = length(_WorldSpaceCameraPos - mul(unity_ObjectToWorld, v.vertex).xyz);
                 TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
                 return o;
             }
 
             float4 ShadowFragment(ShadowVaryings i) : SV_Target
             {
+                DepthDissolve(i.viewDistance, i.pos.xy);
                 DitherClip(i.pos.xy);
                 SHADOW_CASTER_FRAGMENT(i)
             }

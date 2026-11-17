@@ -46,6 +46,8 @@ namespace DeadCargo.EditorTools
             new Step("Extraction Point", ExtractionPointSetup.Apply, ExtractionPointSetup.IsInstalled),
             new Step("Sector Space", SectorSpaceSetup.Apply, SectorSpaceSetup.IsInstalled),
             new Step("Destruction", DestructionSetup.Apply, DestructionSetup.IsInstalled),
+            new Step("Asteroid Field", AsteroidFieldSetup.Apply, AsteroidFieldSetup.IsInstalled),
+            new Step("Content Placement", SectorPlacementSetup.Apply, SectorPlacementSetup.IsInstalled),
             new Step("Scene Flow", MothershipPhaseSetup.Apply, MothershipPhaseSetup.IsSector)
         };
 
