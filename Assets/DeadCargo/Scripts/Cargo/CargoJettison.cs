@@ -186,6 +186,8 @@ namespace DeadCargo.Cargo
 
             if (crate.TryGetComponent(out Rigidbody crateBody))
             {
+                // Drawn between physics steps, so the crate glides rather than steps under the smooth chase camera.
+                crateBody.interpolation = RigidbodyInterpolation.Interpolate;
                 Vector3 inherited = body != null ? body.linearVelocity : Vector3.zero;
                 Vector3 eject = ejectDirection * ejectSpeed + lateral * scatterSpeed;
                 crateBody.linearVelocity = inherited + transform.rotation * eject;

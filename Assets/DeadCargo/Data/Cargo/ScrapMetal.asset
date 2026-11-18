@@ -14,5 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cargo.CargoItemDefinition
   id: ScrapMetal
   displayName: Scrap Metal
+  shortName: Scrap
+  slot: 0
   unitMass: 2
   unitValue: 40
+  size: {x: 1, y: 1}
+  blockColor: {r: 0.61960787, g: 0.7137255, b: 0.7254902, a: 1}

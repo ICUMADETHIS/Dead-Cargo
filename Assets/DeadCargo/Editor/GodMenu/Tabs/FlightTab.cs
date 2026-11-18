@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DeadCargo.Cameras;
 using DeadCargo.Flight;
 using DeadCargo.Sectors;
 using DeadCargo.Sectors.Far;
@@ -9,10 +10,15 @@ using VSX.UniversalVehicleCombat;
 
 namespace DeadCargo.EditorTools.GodMenu
 {
-    /// <summary>The cruise drive and where the player is in the star system, with jumps to a planet's orbit and home.</summary>
+    /// <summary>
+    /// The chase camera, the cruise drive and where the player is in the star system, with jumps to a planet's orbit and home.
+    /// </summary>
     internal sealed class FlightTab : GodMenuTab
     {
         private const double MetresPerKilometre = 1000.0;
+
+        private static readonly string[] CameraLabels = { "Smooth Camera", "Kit Camera" };
+        private static readonly bool[] CameraEnabled = { true, true };
 
         // Height above the top of the autopilot's arrival where an orbit jump puts the ship, in metres.
         private const double OrbitAbove = 10000.0;
@@ -81,11 +87,45 @@ namespace DeadCargo.EditorTools.GodMenu
             if (drive == null || space == null)
                 return;
 
+            DrawCamera();
             DrawCruise();
             DrawWhere();
             DrawAir();
             DrawGround();
             DrawJumps();
+        }
+
+        // Which camera follows the ship, for comparing the smooth chase camera with the kit's, and the ship's physics.
+        private static void DrawCamera()
+        {
+            ChaseCamera chase = ChaseCamera.Active;
+            if (chase == null)
+                return;
+
+            using (var section = new GodMenuGUI.SectionScope("Camera"))
+            {
+                if (!section.Expanded)
+                    return;
+
+                GodMenuGUI.Status(chase.IsSmooth, chase.IsSmooth
+                    ? "Smooth: follows every frame, ship interpolated"
+                    : "Kit: follows on the 50 Hz physics step, ship not interpolated");
+
+                int clicked = GodMenuGUI.ButtonRow(CameraLabels, CameraEnabled, chase.IsSmooth ? 0 : 1, GodMenuGUI.Accent);
+                if (clicked >= 0)
+                    chase.SetSmooth(clicked == 0);
+
+                Rigidbody body = chase.Body;
+                if (body != null)
+                {
+                    GodMenuGUI.Field("Interpolation", body.interpolation.ToString());
+                    GodMenuGUI.Field("Collision", body.collisionDetectionMode.ToString());
+                }
+
+                float frameTime = Time.smoothDeltaTime;
+                GodMenuGUI.Field("Frame Rate", frameTime > 0f ? $"{1f / frameTime:N0} fps  ·  physics {1f / Time.fixedDeltaTime:N0} Hz" : "-");
+                GodMenuGUI.Hint("The difference shows most above 50 fps, flying past rock or alongside a hunter.");
+            }
         }
 
         // The air of the planet the ship is near: how high it reaches, how thick it is here, how fast the ship may go, and

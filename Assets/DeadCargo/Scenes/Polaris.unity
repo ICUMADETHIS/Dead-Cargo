@@ -2643,8 +2643,18 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 54219335505582196, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}
+      propertyPath: m_Interpolate
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 54219335505582196, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
       propertyPath: m_IsKinematic
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 54219335505582196, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      propertyPath: m_CollisionDetection
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 114290421733573952, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}
@@ -3405,6 +3415,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cargo.CargoHold
   massCapacity: 40
+  gridColumns: 8
+  gridRows: 5
   darkMatterCapacity: 200
 --- !u!114 &1576657395
 MonoBehaviour:
@@ -4220,6 +4232,7 @@ MonoBehaviour:
     mouseButton: 0
     getAxisRaw: 0
     axis: 
+  dumpAllHoldTime: 0.6
 --- !u!1 &2039958102
 GameObject:
   m_ObjectHideFlags: 0
@@ -4926,6 +4939,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4532171620660241}
   - component: {fileID: 114532173142987043}
+  - component: {fileID: 114532173142987044}
   m_Layer: 0
   m_Name: SpacefighterCameraController
   m_TagString: Untagged
@@ -5328,7 +5342,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1907774002624791}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e8839a198bef1bd45a2a3a25d5172a58, type: 3}
   m_Name: 
@@ -5340,6 +5354,26 @@ MonoBehaviour:
   - {fileID: 11400000, guid: a3338a580e5cf9240b73308ecde7dd9b, type: 2}
   boostFieldOfView: 80
   boostFieldOfViewLerpSpeed: 0.1
+--- !u!114 &114532173142987044
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1907774002624791}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 228ff95181cf2794aa957e6c12dc50bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cameras.ChaseCamera
+  startingView: {fileID: 11400000, guid: 9efc350944286e84b8bd3cf358dbd5df, type: 2}
+  defaultToFirstAvailableView: 1
+  specifyCompatibleVehicleClasses: 1
+  compatibleVehicleClasses:
+  - {fileID: 11400000, guid: a3338a580e5cf9240b73308ecde7dd9b, type: 2}
+  kitCamera: {fileID: 114532173142987043}
+  boostFieldOfView: 80
+  fieldOfViewRate: 6
 --- !u!114 &114773344283965787
 MonoBehaviour:
   m_ObjectHideFlags: 0

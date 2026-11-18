@@ -80,6 +80,11 @@ Every scene follows one layout, so it stays readable as the game grows.
 - **Packing is first fit.** `CargoGrid` packs row by row from the top-left, upright before turned. `GetFreeUnits` counts with the same packing, so every unit it promises finds a space.
 - **A screen that needs the mouse in flight borrows it through `KitControlsPause`.** It frees the cursor, holds the kit's steering and weapon triggers, and gives back only what it took. Screens never lock the cursor or switch kit input themselves.
 
+## Camera
+- **The player's camera moves every rendered frame.** `ChaseCamera` follows the ship's interpolated pose, early in the frame, in place of the kit's camera, which followed on the 50 Hz physics step.
+- **Anything the player sees moving must not step.** A rigidbody that moves interpolates, and code-driven motion goes through an interpolated rigidbody (`MovePosition`) or happens in Update. Never set a visible object's transform in FixedUpdate.
+- **Teleport by `Rigidbody.position`**, as `RigShift` does, so no in-between frame is drawn. Move the camera rig with the ship. The chase camera cuts on any jump over 200 m.
+
 ## Units
 | Quantity | Unit |
 |---|---|

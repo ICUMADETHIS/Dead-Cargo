@@ -14,5 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cargo.CargoItemDefinition
   id: FuelCells
   displayName: Fuel Cells
+  shortName: Fuel
+  slot: 0
   unitMass: 4
   unitValue: 150
+  size: {x: 1, y: 2}
+  blockColor: {r: 1, g: 0.4745098, b: 0.35686275, a: 1}

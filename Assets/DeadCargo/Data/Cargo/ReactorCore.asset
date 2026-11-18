@@ -14,5 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Cargo.CargoItemDefinition
   id: ReactorCore
   displayName: Reactor Core
+  shortName: Reactor
+  slot: 0
   unitMass: 12
   unitValue: 900
+  size: {x: 2, y: 2}
+  blockColor: {r: 0.9490196, g: 0.6392157, b: 0.22745098, a: 1}

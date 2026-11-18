@@ -135,6 +135,10 @@ namespace DeadCargo.Authority
                 Pilot = Instantiate(pilotPrefab)
             };
 
+            // Drawn between physics steps, so hunters glide rather than step under the smooth chase camera.
+            if (unit.Ship.TryGetComponent(out Rigidbody shipBody))
+                shipBody.interpolation = RigidbodyInterpolation.Interpolate;
+
             unit.Pilot.EnterVehicle(unit.Ship);
             unit.Brain = unit.Pilot.GetComponentInChildren<PilotBrain>();
             if (unit.Brain != null)

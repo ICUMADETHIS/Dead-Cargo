@@ -25,6 +25,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Steps 1 (status strip) and 2 (pop-up tags) built and fixed after a first look, step 2 tested; step 3 (markers and reticle) built, awaiting test |
 | 6.14 | Authority AI | Authority pilots that fly well, fight well and can be shaken off, in six steps: 1 Dead Cargo's own pilot, 2 flight, 3 dogfight skill, 4 sight and memory, 5 heat that follows sight, 6 arrival and ship types | Steps 1 (Authority pilot) and 2 (flight) tested 2026-11-17. Step 3 (dogfight skill) built and compile-checked, awaiting test |
 | 6.15 | Hold grid | The hold as a grid you pack (concept B, Flight Panel, of three, chosen 2026-11-18): every unit takes cells as well as tonnes, and the hold panel on I takes the mouse to select, drag, turn and dump. 1 the grid and the hold panel | Step 1 built and compile-checked, awaiting test |
+| 6.16 | Flight feel | Flight that looks and handles better (chosen 2026-11-18 from six groups of options: D2, B1, D1): 1 smooth flight, 2 mouse aim, 3 camera feel | Step 1 built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -2345,3 +2346,66 @@ The kit's steering is held through its public `DisableSteering` and `EnableSteer
 ### Verified outside Unity (step 1)
 - Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code. Unity's own recompile in the open editor was clean too, with only the kit's 8 known warnings.
 - Not run in Unity: the setup, the panel, the mouse, packing, moving, dumping, and holding the steering and guns.
+
+---
+
+## Phase 6.16: Flight feel
+
+### Goal
+Flight that looks and handles better. On 2026-11-18 the user was offered six groups of flight options and chose three: the smoothness fix (D2), mouse aim (B1) and camera feel (D1).
+
+The smoothness fix turned out to be more than interpolation. The kit's camera follows the ship on the physics step, 50 times a second, while the screen draws at 60 to 144 frames a second. So the whole view stepped, and interpolating the ship alone would have made it shake against the camera. Mouse aim needs a camera that follows the aim, so the camera comes first, and the camera's feel comes last, on top of both.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Smooth flight | Dead Cargo's own chase camera in place of the kit's, moving every rendered frame with the same framing. The player's ship, Authority ships and jettisoned crates are drawn between physics steps. The player's ship gets continuous collision, so fast flight no longer passes through small rock (Backlog: fast ships and small rocks). The God Menu switches between this camera and the kit's to compare | Built and compile-checked, awaiting test |
+| 2. Mouse aim | The mouse moves an aim point and the camera looks along it, while the ship turns to follow, flown by the same `PilotFlight` as the Authority's pilots: tightest turns at combat speed, banking into hard turns. Today's virtual stick stays as an option | Planned |
+| 3. Camera feel | The view widens with speed as well as boost, the camera shakes on hits and boost, and it lags and leads into turns, each with a strength setting | Planned |
+
+### Design (step 1: smooth flight)
+- **The chase camera** (`ChaseCamera`) sits beside the kit's space fighter camera on the kit's VehicleCamera and takes over from it. The kit camera is switched off, not edited.
+- **Every frame, early.** It moves the camera every rendered frame from the ship's interpolated pose, before the HUD's scripts run, so markers and the reticle project from where the camera is.
+- **The same framing.** It follows the kit's view targets exactly as the kit camera did:
+  - It eases towards the selected view, and drifts sideways with roll and yaw.
+  - It looks along the ship's nose, with only the roll trailing.
+  - It locks to the cockpit in first person, and widens to 80° while boosting.
+
+  The kit's strengths are fractions per physics step, so they become rates per second, and the look is the same at any frame rate.
+- **Cuts, not chases.** A move of more than 200 m between frames, such as a debug jump, cuts the camera there. The cruise drive's recentring already moves the camera with the ship.
+- **Interpolated bodies.** The player's ship is interpolated by the setup and by the camera. Authority ships are interpolated as they spawn, and jettisoned crates as they leave. Voxel rocks and rock trails already were.
+- **Continuous collision.** The player's ship uses continuous speculative collision.
+- **Unchanged:** the kit's free look (Left Shift), which turns a gimbal inside the camera rig; the views ([ and ]); first person (C); the death camera; and the camera on foot.
+- **God Menu.** The **Flight** tab gains a **Camera** section. It switches between **Smooth Camera** and **Kit Camera**, the kit's old camera with the ship uninterpolated, exactly as before. It also shows the ship's interpolation and collision mode, and the frame rate against the 50 Hz physics rate.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Cameras/ChaseCamera.cs` | The chase camera: a `VehicleCameraController`, following every frame from the interpolated ship, with the boost view; `SetSmooth` for comparing |
+| `Scripts/Authority/AuthorityResponse.cs` | Spawned Authority ships are interpolated |
+| `Scripts/Cargo/CargoJettison.cs` | Jettisoned crates are interpolated |
+| `Editor/SmoothFlightSetup.cs`, `Editor/SectorSetup.cs` | Setup step **Smooth Flight**: adds the chase camera with the kit camera's views, vehicle classes and boost view, switches the kit camera off, and sets the ship's interpolation and collision |
+| `Editor/GodMenu/Tabs/FlightTab.cs` | The **Camera** section |
+
+The chase camera derives from the kit's public `VehicleCameraController`, as the Authority's brain derives from `VehicleInput`. No kit file is changed.
+
+### Test (step 1)
+1. Stop Play Mode before Unity compiles these scripts. If Unity recompiles while the game runs, every script loses its state and the Console fills with errors for the rest of that session. That happened at 00:53 on 2026-11-18, when the hold grid's scripts arrived mid-play. To stop it for good: **Edit > Preferences > General > Script Changes While Playing > Recompile After Finished Playing**.
+2. Open Polaris. The God Menu **Project** tab reads Missing: Smooth Flight. Press **Set Up Sector**. VehicleCamera gains a **Chase Camera**, its **Space Fighter Camera Controller** is switched off, and the ship's Rigidbody reads Interpolate and Continuous Speculative. Save the scene.
+3. Press Play and fly past rock at speed. The framing is as before, but nothing steps.
+4. In the God Menu **Flight** tab, open **Camera** and press **Kit Camera**: the old stepping is back, most visible above 50 fps flying past rock. Press **Smooth Camera** to return.
+5. Boost with **Tab**: the view widens and settles back. Roll and yaw: the camera drifts sideways as before.
+6. Press **C** for first person, and **[** / **]** for the other views. Hold **Left Shift** to look around. All work as before.
+7. Raise heat until hunters come, and fly alongside one: it glides. Jettison a crate: it drifts smoothly.
+8. Cruise to Ixara with **B** and back. Leaving and returning to Polaris, the camera neither jumps nor swings. The Flight tab's jumps cut the camera cleanly.
+9. Fly fast into a small rock or a rock trail: the ship hits it rather than passing through.
+10. Leave the ship with **F**, walk, and board again: the camera follows each time.
+11. In the test range, run **Set Up Sector**, then save the range as the template from the **Range** tab, so the template has the chase camera.
+
+### Tuning
+- On VehicleCamera's **Chase Camera**: `Boost Field Of View` and `Field Of View Rate`.
+- Follow strengths, offsets and locks stay on the kit's camera view targets on the ship, as before.
+
+### Verified outside Unity (step 1)
+- Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code.
+- Not run in Unity: the setup, the camera in any view, the interpolation, collision and the God Menu switch.
