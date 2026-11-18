@@ -48,16 +48,18 @@ namespace DeadCargo.UI
         private const float PickupFadeSteps = 10f;
         private const int MarkerCapacity = 48;
 
-        private const string PointMarkerDormant = "EXTRACTION";
+        private const string PointMarker = "EXTRACT";
+        private const string PointMarkerDormant = "DORMANT";
         private const string PointMarkerUplink = "UPLINK";
         private const string PointMarkerOpen = "OPEN";
         private const string HunterMarker = "AUTHORITY";
 
-        private static readonly HudMarkerStyle PointMarkerStyle = new HudMarkerStyle(26f, true);
-        private static readonly HudMarkerStyle HunterMarkerStyle = new HudMarkerStyle(20f, true);
-        private static readonly HudMarkerStyle PickupMarkerStyle = new HudMarkerStyle(11f, false);
-        private static readonly HudMarkerStyle PlanetMarkerStyle = new HudMarkerStyle(18f, true, true);
-        private static readonly HudMarkerStyle HomeMarkerStyle = new HudMarkerStyle(22f, true, true);
+        // Loud markers for what the player heads for or runs from; quiet ones for places merely nearby.
+        private static readonly HudMarkerStyle PointMarkerStyle = new HudMarkerStyle(26f, true, HudMarkerLook.Loud);
+        private static readonly HudMarkerStyle HunterMarkerStyle = new HudMarkerStyle(22f, true, HudMarkerLook.Loud);
+        private static readonly HudMarkerStyle PickupMarkerStyle = new HudMarkerStyle(13f, false, HudMarkerLook.Plain);
+        private static readonly HudMarkerStyle PlanetMarkerStyle = new HudMarkerStyle(18f, true, HudMarkerLook.Quiet, true);
+        private static readonly HudMarkerStyle DestinationMarkerStyle = new HudMarkerStyle(28f, true, HudMarkerLook.Loud, true);
 
         private const int CruiseReady = 0;
         private const int CruiseAltitude = 1;
@@ -101,6 +103,10 @@ namespace DeadCargo.UI
         private float noticeStarted;
         private bool noticeVisible;
         private bool noticeUrgent;
+        private readonly KitPrompts prompts = new KitPrompts();
+        private bool promptShown;
+        private string shownPromptKey;
+        private string shownPromptAction;
 
         /// <summary>Installs a single HUD in a loaded scene. Use on a scene object to add it in the editor.</summary>
         public static void Install(Scene scene)
@@ -175,6 +181,7 @@ namespace DeadCargo.UI
 
             UpdatePoint();
             UpdateHunters();
+            UpdatePrompt();
 
             StatusStrip strip = StatusStrip.Active;
             view.Tick(Time.unscaledDeltaTime, strip != null ? strip.CoveredHeight : 0f);
@@ -220,6 +227,7 @@ namespace DeadCargo.UI
             }
 
             vehicle.onDestroyed.AddListener(OnVehicleDestroyed);
+            prompts.Bind(vehicle);
 
             hold = vehicle.GetComponent<CargoHold>();
             if (hold != null)
@@ -263,6 +271,7 @@ namespace DeadCargo.UI
         {
             if (vehicle != null)
                 vehicle.onDestroyed.RemoveListener(OnVehicleDestroyed);
+            prompts.Unbind();
             if (hold != null)
             {
                 hold.Changed -= RefreshCargo;
@@ -384,6 +393,21 @@ namespace DeadCargo.UI
             view.SetHunters(hunters);
         }
 
+        // The kit's own prompts on the ship, such as PRESS L TO LAUNCH, as a tag with the key in its cap.
+        private void UpdatePrompt()
+        {
+            bool shown = vehicle != null && prompts.Read();
+            string key = shown ? prompts.Key : null;
+            string action = shown ? prompts.Action : null;
+            if (shown == promptShown && ReferenceEquals(key, shownPromptKey) && ReferenceEquals(action, shownPromptAction))
+                return;
+
+            promptShown = shown;
+            shownPromptKey = key;
+            shownPromptAction = action;
+            view.SetPrompt(shown, key, action);
+        }
+
         // Markers show only while the player flies a ship with a hold. Indexed loops, so no enumerators are allocated.
         private void UpdateMarkers()
         {
@@ -401,8 +425,8 @@ namespace DeadCargo.UI
             for (int i = 0; i < points.Count; ++i)
             {
                 ExtractionPoint point = points[i];
-                markers.Add(point.transform.position, PointMarkerStyle, PointColor(point.State), PointMarkerLabel(point.State),
-                    RoundDistance(point.DistanceTo(ship)));
+                markers.Add(point.transform.position, PointMarkerStyle, PointColor(point.State), PointMarker,
+                    RoundDistance(point.DistanceTo(ship)), 1f, PointMarkerLabel(point.State));
             }
 
             if (authority != null)
@@ -460,8 +484,10 @@ namespace DeadCargo.UI
                         continue;
 
                     double altitude = CruiseMath.Altitude(position, bodies.CentreOf(i), bodies.RadiusOf(i));
-                    Color color = i == heading ? HudFactory.CruiseColor : HudFactory.Muted;
-                    markers.Add(planet.position, PlanetMarkerStyle, color, planetLabels[i], Kilometres(altitude));
+                    if (i == heading)
+                        markers.Add(planet.position, DestinationMarkerStyle, HudFactory.CruiseColor, planetLabels[i], Kilometres(altitude));
+                    else
+                        markers.Add(planet.position, PlanetMarkerStyle, HudFactory.Muted, planetLabels[i], Kilometres(altitude));
                 }
             }
 
@@ -472,8 +498,11 @@ namespace DeadCargo.UI
             Vector3 centre = grid.Min + grid.Size * 0.5f;
             double3 min = (double3)(float3)grid.Min;
             double distance = CruiseMath.DistanceToBox(position, min, min + (double3)(float3)grid.Size);
-            Color homeColor = heading == CruiseDrive.HomeHeading ? HudFactory.CruiseColor : HudFactory.JumpColor;
-            markers.Add(space.SystemToWorld((double3)(float3)centre), HomeMarkerStyle, homeColor, homeLabel, Kilometres(distance));
+            Vector3 home = space.SystemToWorld((double3)(float3)centre);
+            if (heading == CruiseDrive.HomeHeading)
+                markers.Add(home, DestinationMarkerStyle, HudFactory.CruiseColor, homeLabel, Kilometres(distance));
+            else
+                markers.Add(home, PlanetMarkerStyle, HudFactory.JumpColor, homeLabel, Kilometres(distance));
         }
 
         // Labels are built once per system, so markers allocate nothing per frame.

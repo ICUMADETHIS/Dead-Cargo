@@ -1,12 +1,12 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace DeadCargo.UI
 {
     /// <summary>
-    /// A pool of screen markers placed over world positions each frame. Targets on screen get a diamond; targets
-    /// off screen, when their style allows, get an arrow clamped to the screen edge, pointing the way.
+    /// A pool of screen markers placed over world positions each frame, in the comic look: an inked diamond over a target
+    /// on screen, or an inked arrowhead on the screen edge pointing the way to one off screen, when its style allows. Each
+    /// can carry a sticker label (<see cref="HudMarkerLabel"/>) with its name, state and distance.
     /// Call <see cref="Begin"/>, then <see cref="Add"/> per target, then <see cref="End"/>. No per-frame allocations:
     /// a label is only rebuilt when its text or number changes.
     /// </summary>
@@ -14,13 +14,12 @@ namespace DeadCargo.UI
     {
         // Distance of edge arrows from the screen border, in reference pixels.
         private const float EdgeInset = 56f;
-        private const float LabelWidth = 220f;
-        private const float LabelHeight = 20f;
-        private const int LabelSize = 15;
-        private const float LabelGap = 6f;
 
-        // Off-screen labels sit this far in from the arrow, towards the screen centre, in reference pixels.
-        private const float EdgeLabelOffset = 46f;
+        // Gap between a glyph and its label, in reference pixels.
+        private const float LabelGap = 8f;
+
+        // A label on screen goes to the glyph's left when it would come this close to the screen's right edge.
+        private const float LabelEdgeMargin = 16f;
 
         // Gap between an edge arrow and the HUD plates, in reference pixels.
         private const float PlateClearance = 30f;
@@ -32,9 +31,10 @@ namespace DeadCargo.UI
         {
             public RectTransform Root;
             public HudMarkerGlyph Glyph;
-            public Text Label;
+            public HudMarkerLabel Label;
             public string ShownText;
             public int ShownNumber = int.MinValue;
+            public string Figure;
         }
 
         private readonly RectTransform layer;
@@ -54,8 +54,8 @@ namespace DeadCargo.UI
         }
 
         /// <summary>
-        /// Sets the size of the bottom-right screen corner covered by HUD plates, in reference pixels.
-        /// Edge arrows stop short of it, so the plates never hide them. Zero when nothing is covered.
+        /// Sets the size of the bottom-right screen corner covered by HUD tags, in reference pixels.
+        /// Edge arrows stop short of it, so the tags never hide them. Zero when nothing is covered.
         /// </summary>
         internal void SetCoveredCorner(Vector2 size)
         {
@@ -81,10 +81,12 @@ namespace DeadCargo.UI
         }
 
         /// <summary>
-        /// Places the next marker over a world position. The label reads "<paramref name="text"/>  <paramref name="metres"/> m", or km when the style says so,
-        /// or is hidden when <paramref name="text"/> is null. Returns false when the target is not shown.
+        /// Places the next marker over a world position. Its label names the target, adds <paramref name="detail"/> when
+        /// the style is loud, and gives the distance in metres, or kilometres when the style says so. A null
+        /// <paramref name="text"/> or a plain style shows the glyph alone. Returns false when the target is not shown.
         /// </summary>
-        internal bool Add(Vector3 worldPosition, in HudMarkerStyle style, Color color, string text, int metres, float alpha = 1f)
+        internal bool Add(Vector3 worldPosition, in HudMarkerStyle style, Color color, string text, int metres, float alpha = 1f,
+            string detail = null)
         {
             if (used >= markers.Count)
                 return false;
@@ -116,15 +118,17 @@ namespace DeadCargo.UI
                 marker.Root.gameObject.SetActive(true);
 
             marker.Root.anchoredPosition = position;
-            marker.Glyph.SetArrow(!onScreen);
-            marker.Glyph.rectTransform.localRotation = Quaternion.Euler(0f, 0f, angle);
+            HudMarkerGlyph glyph = marker.Glyph;
+            glyph.SetShape(!onScreen, style.Outline);
+            glyph.rectTransform.localRotation = Quaternion.Euler(0f, 0f, angle);
             Vector2 size = new Vector2(style.Size, style.Size);
-            if (marker.Glyph.rectTransform.sizeDelta != size)
-                marker.Glyph.rectTransform.sizeDelta = size;
-            color.a *= alpha;
-            marker.Glyph.color = color;
+            if (glyph.rectTransform.sizeDelta != size)
+                glyph.rectTransform.sizeDelta = size;
 
-            PlaceLabel(marker, text, metres, style.InKilometres, onScreen, position, style.Size, color);
+            color.a *= alpha;
+            glyph.color = color;
+
+            PlaceLabel(marker, style, color, text, detail, metres, onScreen, position);
             return true;
         }
 
@@ -146,8 +150,8 @@ namespace DeadCargo.UI
         }
 
         // How far along its bearing from the screen centre an edge arrow sits. It stops at the screen border, above the
-        // status strip or, towards the lower right, short of the plates. The clear area is two overlapping rectangles:
-        // everything left of the plates, and everything above them. The arrow goes to the farther of the two exits.
+        // status strip or, towards the lower right, short of the tags. The clear area is two overlapping rectangles:
+        // everything left of the tags, and everything above them. The arrow goes to the farther of the two exits.
         private float EdgeScale(Vector2 direction)
         {
             Vector2 half = canvasSize * 0.5f - new Vector2(EdgeInset, EdgeInset);
@@ -172,27 +176,41 @@ namespace DeadCargo.UI
             return Mathf.Min(x, y);
         }
 
-        private static void PlaceLabel(Marker marker, string text, int figure, bool inKilometres, bool onScreen, Vector2 position, float glyphSize,
-            Color color)
+        // On screen the label sits beside the glyph, to its right unless that runs off the screen. Off screen it sits
+        // inwards of the arrow, towards the screen centre, clear of the arrow whichever edge it is on.
+        private void PlaceLabel(Marker marker, in HudMarkerStyle style, Color color, string text, string detail, int metres,
+            bool onScreen, Vector2 position)
         {
-            bool visible = text != null;
-            marker.Label.enabled = visible;
+            HudMarkerLabel label = marker.Label;
+            bool visible = text != null && style.Look != HudMarkerLook.Plain;
+            label.SetVisible(visible);
             if (!visible)
                 return;
 
-            // Kilometre figures are stored negated, so a marker that changes unit always rebuilds its label.
-            int shown = inKilometres ? -figure - 1 : figure;
-            if (!ReferenceEquals(text, marker.ShownText) || shown != marker.ShownNumber)
+            // Kilometre figures are stored negated, so a marker that changes unit always rebuilds its figure.
+            int shown = style.InKilometres ? -metres - 1 : metres;
+            if (!ReferenceEquals(text, marker.ShownText) || shown != marker.ShownNumber || marker.Figure == null)
             {
                 marker.ShownText = text;
                 marker.ShownNumber = shown;
-                marker.Label.text = inKilometres ? $"{text}  {figure:N0} km" : $"{text}  {figure} m";
+                marker.Figure = style.InKilometres ? $"{metres:N0} KM" : $"{metres:N0} M";
             }
 
-            marker.Label.color = color;
-            marker.Label.rectTransform.anchoredPosition = onScreen
-                ? new Vector2(0f, -(glyphSize * 0.5f + LabelGap + LabelHeight * 0.5f))
-                : -position.normalized * EdgeLabelOffset;
+            color.a = 1f;
+            label.Set(style.Look, color, text, detail, marker.Figure);
+
+            Vector2 size = label.Size;
+            float reach = marker.Glyph.Reach + LabelGap;
+            if (onScreen)
+            {
+                float side = position.x + reach + size.x > canvasSize.x * 0.5f - LabelEdgeMargin ? -1f : 1f;
+                label.SetPosition(new Vector2(side * (reach + size.x * 0.5f), 0f));
+                return;
+            }
+
+            Vector2 inward = -position.normalized;
+            float extent = Mathf.Abs(inward.x) * size.x * 0.5f + Mathf.Abs(inward.y) * size.y * 0.5f;
+            label.SetPosition(inward * (reach + extent));
         }
 
         private Marker CreateMarker(int index)
@@ -200,9 +218,7 @@ namespace DeadCargo.UI
             RectTransform root = HudFactory.Anchored($"Marker {index}", layer, new Vector2(0.5f, 0.5f), 0f, 0f);
             RectTransform glyphRect = HudFactory.Anchored("Glyph", root, new Vector2(0.5f, 0.5f), 16f, 16f);
             var glyph = glyphRect.gameObject.AddComponent<HudMarkerGlyph>();
-            glyph.raycastTarget = false;
-
-            Text label = HudFactory.CentredLabel("Label", root, LabelWidth, LabelHeight, LabelSize, HudFactory.Ink, true);
+            var label = new HudMarkerLabel(root);
             root.gameObject.SetActive(false);
             return new Marker { Root = root, Glyph = glyph, Label = label };
         }

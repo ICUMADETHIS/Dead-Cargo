@@ -289,23 +289,29 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7c8f5d749884dcb45b4a34b0886239f5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Authority.AuthorityResponse
-  pilotPrefab: {fileID: 8324808041890626422, guid: 2e8788f6c9cb96f4b8bab8c85b5a8dfc,
+  pilotPrefab: {fileID: 8821232640832807570, guid: a8d030834288792418997c04b5049999,
     type: 3}
   shipPrefab: {fileID: 5013588106213289073, guid: 0cf3581f1155fb84f8eca656a6870178,
     type: 3}
   tierResponses:
   - maxShips: 0
     spawnInterval: 10
+    pilotSkill: {fileID: 0}
   - maxShips: 1
     spawnInterval: 10
+    pilotSkill: {fileID: 11400000, guid: 56f34c1411bece54b9a37043ff0a8910, type: 2}
   - maxShips: 2
     spawnInterval: 7
+    pilotSkill: {fileID: 11400000, guid: 384f9df4d59db444a950f24262d43eb0, type: 2}
   - maxShips: 4
     spawnInterval: 5
+    pilotSkill: {fileID: 11400000, guid: f2e8de72b565eff42a2e3becce451d92, type: 2}
   escalationDelay: 2
   standDownDelay: 10
   spawnDistance: 400
   wreckLifetime: 6
+  leaveDistance: 2500
+  vanishDistance: 600
   heatPerShipDestroyed: 10
 --- !u!4 &47229607
 Transform:
@@ -475,6 +481,24 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 1576657372}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &142132414 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8412069297333549521, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &142132418
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 142132414}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1001 &211176399
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -553,6 +577,104 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 211176399}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &220705687
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 220705688}
+  - component: {fileID: 220705691}
+  - component: {fileID: 220705690}
+  - component: {fileID: 220705689}
+  m_Layer: 5
+  m_Name: Status Strip
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &220705688
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220705687}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 283108238}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 100, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &220705689
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220705687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1effed67fb4cd7044a0e81addb0bcd74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.UI.StatusStrip
+  shieldType: {fileID: 11400000, guid: 716de87c03e835a46bc33f430efeae91, type: 2}
+  hullType: {fileID: 11400000, guid: bce233b00f3b8cf46bcbec887b28cd04, type: 2}
+--- !u!114 &220705690
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220705687}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.CanvasScaler
+  m_UiScaleMode: 0
+  m_ReferencePixelsPerUnit: 100
+  m_ScaleFactor: 1
+  m_ReferenceResolution: {x: 800, y: 600}
+  m_ScreenMatchMode: 0
+  m_MatchWidthOrHeight: 0
+  m_PhysicalUnit: 3
+  m_FallbackScreenDPI: 96
+  m_DefaultSpriteDPI: 96
+  m_DynamicPixelsPerUnit: 1
+  m_PresetInfoIsWorld: 0
+--- !u!223 &220705691
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 220705687}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 0
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 0
+  m_TargetDisplay: 0
 --- !u!1001 &282583814
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -714,6 +836,7 @@ Transform:
   m_Children:
   - {fileID: 486199867}
   - {fileID: 950721900}
+  - {fileID: 220705688}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &298954971
@@ -830,6 +953,24 @@ MonoBehaviour:
   settingMode: 0
   layerNames:
   - UIManagedFOV
+--- !u!1 &412854091 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7822398279770957678, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &412854096
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 412854091}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!114 &483093247
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1807,6 +1948,24 @@ Transform:
   - {fileID: 2062700014}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1076695236 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8432364479308235873, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &1076695240
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1076695236}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1001 &1111594771
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2175,6 +2334,42 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 69a3eef45e36c4c4e80c0b86a1c3382f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DeadCargo.Flight.SectorPresence
+--- !u!1 &1293718441 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5468262928506731988, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &1293718444
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1293718441}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
+--- !u!1 &1352997776 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1967540928925032, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &1352997779
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1352997776}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1 &1367120785
 GameObject:
   m_ObjectHideFlags: 0
@@ -3146,6 +3341,30 @@ PrefabInstance:
         type: 3}
       insertIndex: -1
       addedObject: {fileID: 1576657438}
+    - targetCorrespondingSourceObject: {fileID: 1967540928925032, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1352997779}
+    - targetCorrespondingSourceObject: {fileID: 1978087727763566, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2126387561}
+    - targetCorrespondingSourceObject: {fileID: 8432364479308235873, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1076695240}
+    - targetCorrespondingSourceObject: {fileID: 8412069297333549521, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 142132418}
+    - targetCorrespondingSourceObject: {fileID: 5468262928506731988, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1293718444}
+    - targetCorrespondingSourceObject: {fileID: 7822398279770957678, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 412854096}
   m_SourcePrefab: {fileID: 100100000, guid: bfb4e62c148bb074b91ba5ccba7d04a1, type: 3}
 --- !u!114 &1576657373 stripped
 MonoBehaviour:
@@ -4463,6 +4682,24 @@ Transform:
   m_Children: []
   m_Father: {fileID: 966233201}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &2126387559 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 1978087727763566, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
+    type: 3}
+  m_PrefabInstance: {fileID: 1576657372}
+  m_PrefabAsset: {fileID: 0}
+--- !u!225 &2126387561
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2126387559}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 0
+  m_BlocksRaycasts: 0
+  m_IgnoreParentGroups: 0
 --- !u!1 &1002916369401671
 GameObject:
   m_ObjectHideFlags: 0

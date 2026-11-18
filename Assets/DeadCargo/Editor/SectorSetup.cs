@@ -42,6 +42,7 @@ namespace DeadCargo.EditorTools
             new Step("Jettison", JettisonPhaseSetup.Apply, Has<CargoJettison>),
             new Step("Heat", HeatPhaseSetup.Apply, Has<HeatTracker>),
             new Step("Authority", AuthorityPhaseSetup.Apply, Has<AuthorityResponse>),
+            new Step("Authority Pilot", AuthorityPilotSetup.Apply, AuthorityPilotSetup.IsInstalled),
             new Step("Extraction", ExtractionPhaseSetup.Apply, scene => Has<RunTracker>(scene) && DarkMatterSetup.HasPickups(scene)),
             new Step("Extraction Point", ExtractionPointSetup.Apply, ExtractionPointSetup.IsInstalled),
             new Step("Sector Space", SectorSpaceSetup.Apply, SectorSpaceSetup.IsInstalled),

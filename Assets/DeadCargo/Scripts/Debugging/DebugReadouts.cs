@@ -1,6 +1,7 @@
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
 using System.Collections.Generic;
 using System.Text;
+using DeadCargo.AI;
 using DeadCargo.Authority;
 using DeadCargo.Destruction;
 using DeadCargo.Destruction.Voxels;
@@ -347,22 +348,51 @@ namespace DeadCargo.Debugging
             text.Row("authority").Integer(authority.ActiveShipCount).Append(DebugText.Muted).Append(" / ").Append(DebugText.End)
                 .Integer(authority.CurrentResponse.MaxShips).Append(" ships").Append(DebugText.Muted).Append(authority.SpawningEnabled ? "  spawning" : "  spawning off")
                 .Append(DebugText.End);
+            if (authority.WithdrawingShips.Count > 0)
+                text.Row("withdrawing").Integer(authority.WithdrawingShips.Count).Append(" ships");
 
             int rows = 0;
-            foreach (Vehicle ship in authority.ActiveShips)
+            WriteShips(text, context, authority, authority.ActiveShips, ref rows);
+            WriteShips(text, context, authority, authority.WithdrawingShips, ref rows);
+        }
+
+        // One row per ship: its label, what its pilot is doing, range and speed.
+        private static void WriteShips(StringBuilder text, DebugContext context, AuthorityResponse authority, IReadOnlyList<Vehicle> ships, ref int rows)
+        {
+            // Indexed, because a foreach over the interface would box its enumerator.
+            for (int i = 0; i < ships.Count; ++i)
             {
+                Vehicle ship = ships[i];
                 if (ship == null || ship.Destroyed)
                     continue;
 
                 if (rows++ == MaxShipRows)
                 {
                     text.Append('\n').Append(DebugText.Muted).Append("...").Append(DebugText.End);
-                    break;
+                    return;
                 }
 
                 Rigidbody body = ship.CachedRigidbody;
-                text.Append('\n').Append(DebugText.Info).Append(ship.Label).Append(DebugText.End).Append("  ")
-                    .Number(Vector3.Distance(context.Focus, ship.transform.position)).Append(" m  ")
+                text.Append('\n').Append(DebugText.Info).Append(ship.Label).Append(DebugText.End).Append("  ");
+
+                PilotBrain pilot = authority.PilotOf(ship);
+                if (pilot != null)
+                {
+                    text.Append(DebugText.Muted).Append(pilot.SkillName).Append(DebugText.End).Append("  ").Append(PilotStateNames.Of(pilot.State));
+                    if (pilot.State == PilotState.Engaging)
+                        text.Append(DebugText.Muted).Append(' ').Append(PilotStateNames.Of(pilot.Manoeuvre)).Append(DebugText.End);
+                    else if (pilot.State == PilotState.Holding)
+                        text.Append(DebugText.Muted).Append(' ').Number(pilot.HoldTimeLeft).Append(" s").Append(DebugText.End);
+                    if (pilot.IsHoldingFire)
+                        text.Append(DebugText.Muted).Append(" holding fire").Append(DebugText.End);
+                    if (pilot.IsAvoiding)
+                        text.Append(DebugText.Warn).Append(" avoiding").Append(DebugText.End);
+                    if (pilot.IsBoosting)
+                        text.Append(DebugText.Info).Append(" boost").Append(DebugText.End);
+                    text.Append("  ");
+                }
+
+                text.Number(Vector3.Distance(context.Focus, ship.transform.position)).Append(" m  ")
                     .Number(body != null ? body.linearVelocity.magnitude : 0f).Append(" m/s");
             }
         }

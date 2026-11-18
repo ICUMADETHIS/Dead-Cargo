@@ -109,17 +109,42 @@ namespace DeadCargo.EditorTools
         /// <summary>Closes the window, remembers where it was, and gives the other Game views their displays back.</summary>
         internal static void Close()
         {
-            if (window != null)
+            EditorWindow closing = Release();
+            if (closing != null)
+                closing.Close();
+        }
+
+        // Unity is still telling every Game view that Play is ending, the pop-out among them, and a view closed now is told
+        // anyway and throws. So the window closes on the editor's next update; the other views get their displays back now.
+        private static void CloseAfterPlay()
+        {
+            EditorWindow closing = Release();
+            if (closing != null)
+                EditorApplication.delayCall += () => CloseIfOpen(closing);
+        }
+
+        private static void CloseIfOpen(EditorWindow view)
+        {
+            if (view != null)
+                view.Close();
+        }
+
+        // Remembers where the window was, gives the other Game views their displays back, and forgets the window, which
+        // the caller closes.
+        private static EditorWindow Release()
+        {
+            EditorWindow released = window;
+            if (released != null)
             {
-                Rect rect = window.position;
+                Rect rect = released.position;
                 EditorPrefs.SetFloat(XKey, rect.x);
                 EditorPrefs.SetFloat(YKey, rect.y);
                 EditorPrefs.SetBool(PlacedKey, true);
-                window.Close();
                 window = null;
             }
 
             RestoreOtherViews();
+            return released;
         }
 
         /// <summary>Opens the window centred over the editor next time, rather than where it was left.</summary>
@@ -133,7 +158,7 @@ namespace DeadCargo.EditorTools
             if (change == PlayModeStateChange.EnteredPlayMode && Enabled)
                 Open();
             else if (change == PlayModeStateChange.ExitingPlayMode)
-                Close();
+                CloseAfterPlay();
             else if (change == PlayModeStateChange.EnteredEditMode)
                 RecoverLostViews();
         }

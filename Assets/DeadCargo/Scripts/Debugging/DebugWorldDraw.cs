@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using DDT;
+using DeadCargo.AI;
 using DeadCargo.Authority;
 using DeadCargo.Cargo;
 using DeadCargo.Destruction;
@@ -32,6 +33,8 @@ namespace DeadCargo.Debugging
         private static readonly Color VelocityColor = new Color(0.43f, 0.85f, 0.54f);
         private static readonly Color TargetColor = new Color(1f, 0.42f, 0.37f);
         private static readonly Color AiColor = new Color(1f, 0.6f, 0.3f);
+        private static readonly Color GoalColor = new Color(1f, 0.85f, 0.45f);
+        private static readonly Color HeadingColor = new Color(0.45f, 0.85f, 1f);
         private static readonly Color DormantColor = new Color(0.56f, 0.59f, 0.64f);
         private static readonly Color UplinkColor = new Color(1f, 0.82f, 0.3f);
         private static readonly Color OpenColor = new Color(0.43f, 0.85f, 0.54f);
@@ -46,6 +49,7 @@ namespace DeadCargo.Debugging
         private readonly StringBuilder label = new StringBuilder(64);
         private readonly List<Vehicle> ships = new List<Vehicle>();
         private readonly List<string> shipLabels = new List<string>();
+        private readonly List<PilotBrain> shipPilots = new List<PilotBrain>();
         private readonly List<ExtractionPoint> points = new List<ExtractionPoint>();
         private readonly List<string> pointLabels = new List<string>();
         private readonly List<CargoPickup> pickups = new List<CargoPickup>();
@@ -128,20 +132,46 @@ namespace DeadCargo.Debugging
         {
             ships.Clear();
             shipLabels.Clear();
+            shipPilots.Clear();
             AuthorityResponse authority = AuthorityResponse.Active;
             if (authority == null)
                 return;
 
-            foreach (Vehicle ship in authority.ActiveShips)
+            AddShips(context, authority, authority.ActiveShips);
+            AddShips(context, authority, authority.WithdrawingShips);
+        }
+
+        private void AddShips(DebugContext context, AuthorityResponse authority, IReadOnlyList<Vehicle> list)
+        {
+            for (int i = 0; i < list.Count; ++i)
             {
+                Vehicle ship = list[i];
                 if (ship == null || ship.Destroyed || (ship.transform.position - context.Focus).sqrMagnitude > Range * Range)
                     continue;
 
+                PilotBrain pilot = authority.PilotOf(ship);
                 Rigidbody body = ship.CachedRigidbody;
-                label.Clear().Append(ship.Label).Append('\n').Number(body != null ? body.linearVelocity.magnitude : 0f).Append(" m/s  ")
+                label.Clear().Append(ship.Label);
+                if (pilot != null)
+                {
+                    label.Append("  ").Append(pilot.SkillName).Append('\n').Append(PilotStateNames.Of(pilot.State));
+                    if (pilot.State == PilotState.Engaging)
+                        label.Append("  ").Append(PilotStateNames.Of(pilot.Manoeuvre));
+                    if (pilot.IsHoldingFire)
+                        label.Append("  holding fire");
+                    if (pilot.IsAvoiding)
+                        label.Append("  avoiding");
+                    if (pilot.IsBoosting)
+                        label.Append("  boost");
+                }
+
+                label.Append('\n').Number(body != null ? body.linearVelocity.magnitude : 0f).Append(" m/s  ")
                     .Number(Vector3.Distance(context.Focus, ship.transform.position)).Append(" m");
+                if (pilot != null && pilot.ShieldShare >= 0f)
+                    label.Append("  shield ").Number(pilot.ShieldShare * 100f).Append('%');
                 ships.Add(ship);
                 shipLabels.Add(label.ToString());
+                shipPilots.Add(pilot);
             }
         }
 
@@ -160,9 +190,16 @@ namespace DeadCargo.Debugging
                 if (body != null && body.linearVelocity.sqrMagnitude > 0.01f)
                     DrawDebugTools.DrawDirectionalArrow(position, position + body.linearVelocity, size, AiColor);
 
-                // Authority ships hunt the player, so the line shows who is closing in.
-                if (context.Player != null)
+                // Fighting, the line shows who is closing in on the player; otherwise, where the pilot is flying.
+                PilotBrain pilot = shipPilots[i];
+                if (pilot != null && pilot.State != PilotState.Engaging)
+                    DrawDebugTools.DrawLine(position, pilot.FlightGoal, new Color(GoalColor.r, GoalColor.g, GoalColor.b, 0.6f));
+                else if (context.Player != null)
                     DrawDebugTools.DrawLine(position, player, new Color(AiColor.r, AiColor.g, AiColor.b, 0.35f));
+
+                // The heading the pilot is turning to, after avoidance: where the nose is going next.
+                if (pilot != null)
+                    DrawDebugTools.DrawDirectionalArrow(position, position + pilot.Heading * (size * 40f), size, HeadingColor);
 
                 DrawDebugTools.DrawString3D(position + Vector3.up * (size * 3f), shipLabels[i], TextAnchor.LowerCenter, AiColor, size);
             }

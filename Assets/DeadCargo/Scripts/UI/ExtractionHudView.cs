@@ -8,7 +8,7 @@ namespace DeadCargo.UI
     /// The run HUD as pop-up tags (<see cref="HudTag"/>) stacked up the screen's right edge, above the status strip, each
     /// shown only while it matters: cargo when it changes or the hold is full, heat while there is any, the jump drive while
     /// it is ready, spooling or taking on fuel, the extraction point near or in use, cruise while a destination is ahead,
-    /// and notices on top. The manifest is an inked panel on the left while it is open. The stack eases as tags come and go.
+    /// the ship's own prompts (such as launching) while they apply, and notices on top. The manifest is an inked panel on the left while it is open. The stack eases as tags come and go.
     /// </summary>
     internal sealed class ExtractionHudView
     {
@@ -30,6 +30,8 @@ namespace DeadCargo.UI
         private const float ManifestRowsTop = 74f;
         private const float RowHeight = 24f;
 
+        private const string PromptLabel = "SHIP";
+
         private static readonly Color PanelFace = new Color32(24, 27, 34, 245);
 
         private readonly HudTag cargoTag;
@@ -37,6 +39,7 @@ namespace DeadCargo.UI
         private readonly HudTag jumpTag;
         private readonly HudTag pointTag;
         private readonly HudTag cruiseTag;
+        private readonly HudTag promptTag;
         private readonly HudTag noticeTag;
         private readonly HudTag[] stack;
 
@@ -79,8 +82,9 @@ namespace DeadCargo.UI
             jumpTag = new HudTag(parent, "Jump Tag", TagWidth, "H");
             pointTag = new HudTag(parent, "Extraction Tag", TagWidth, "U");
             cruiseTag = new HudTag(parent, "Cruise Tag", TagWidth, "B");
+            promptTag = new HudTag(parent, "Prompt Tag", TagWidth, "");
             noticeTag = new HudTag(parent, "Notice Tag", NoticeWidth, null);
-            stack = new[] { cargoTag, heatTag, jumpTag, pointTag, cruiseTag, noticeTag };
+            stack = new[] { cargoTag, heatTag, jumpTag, pointTag, cruiseTag, promptTag, noticeTag };
 
             manifest = HudFactory.Anchored("Cargo Manifest", parent, Vector2.zero, ManifestWidth, 160f);
             manifestBody = manifest.gameObject.AddComponent<HudSticker>();
@@ -89,6 +93,7 @@ namespace DeadCargo.UI
             Text title = HudFactory.Label("Manifest Title", manifest, "CARGO MANIFEST", 22f, 10f, 220f, 30f, 24, HudFactory.CargoColor);
             title.font = HudFactory.FigureFont;
             title.fontStyle = FontStyle.Italic;
+            HudFactory.Unclipped(title);
             handling = Caption("Handling Penalties", manifest, "", 200f, 16f, 168f, 20f, 12, HudFactory.CargoColor, TextAnchor.MiddleRight);
             Caption("Item Column", manifest, "ITEM", 24f, 48f, 140f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleLeft);
             Caption("Quantity Column", manifest, "QTY", 170f, 48f, 34f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
@@ -192,6 +197,22 @@ namespace DeadCargo.UI
         internal void SetCruiseProgress(float fraction, Color color)
         {
             cruiseTag.SetProgress(fraction > 0f ? fraction : -1f);
+        }
+
+        /// <summary>
+        /// The ship's own prompt, such as launching from a pad: the key to press, or null when it names none, and what the
+        /// key does. Held while <paramref name="shown"/>.
+        /// </summary>
+        internal void SetPrompt(bool shown, string key, string action)
+        {
+            promptTag.SetHeld(shown);
+            if (!shown)
+                return;
+
+            promptTag.SetKeyName(key);
+            promptTag.SetKeyVisible(!string.IsNullOrEmpty(key));
+            promptTag.SetContent(PromptLabel, action, null, StatusStripView.Figure);
+            promptTag.SetProgress(-1f);
         }
 
         /// <summary>The hold: shown while full or while the manifest is open, and for a while after it changes.</summary>
@@ -341,6 +362,7 @@ namespace DeadCargo.UI
         {
             Text text = HudFactory.Label(name, parent, content, x, y, width, height, size, tint, alignment);
             text.font = HudFactory.StickerFont;
+            HudFactory.Unclipped(text);
             return text;
         }
 
@@ -348,6 +370,7 @@ namespace DeadCargo.UI
         {
             Text text = HudFactory.Label(name, parent, "", x, y, width, RowHeight, 16, HudFactory.Ink, TextAnchor.MiddleRight);
             text.font = HudFactory.FigureFont;
+            HudFactory.Unclipped(text);
             return text;
         }
     }

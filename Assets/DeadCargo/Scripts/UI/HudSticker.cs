@@ -6,16 +6,19 @@ namespace DeadCargo.UI
     /// <summary>
     /// The comic HUD's building block: a sticker leaning like italic type, filled flat, with a bold ink outline and a hard
     /// ink shadow. Below a fill of 1 it is a bar: the face colour up to that share of its width, the track colour after.
-    /// Its rect is the outline's outer edge; the shadow falls outside it, down and to the right.
+    /// Its rect is the outline's outer edge; the shadow falls outside it, down and to the right. Edges are anti-aliased.
     /// </summary>
-    [RequireComponent(typeof(CanvasRenderer))]
-    internal sealed class HudSticker : MaskableGraphic
+    internal sealed class HudSticker : HudShapeGraphic
     {
         /// <summary>The ink of every outline and shadow.</summary>
         internal static readonly Color Ink = new Color32(4, 4, 6, 255);
 
         /// <summary>Lean for each unit of height, tan 14°, as the strip's stickers lean.</summary>
         internal const float DefaultSlant = 0.25f;
+
+        // Corners and edge softness of the shape being added; the HUD is built on the main thread only.
+        private static readonly Vector2[] Corners = new Vector2[4];
+        private static readonly float[] Soft = new float[4];
 
         private Color face = new Color32(24, 27, 34, 245);
         private Color track = new Color32(10, 11, 14, 255);
@@ -63,24 +66,15 @@ namespace DeadCargo.UI
             SetVerticesDirty();
         }
 
-        protected override void Awake()
+        protected override void Build(VertexHelper mesh, Rect rect, float feather)
         {
-            base.Awake();
-            useLegacyMeshGeneration = false;
-            raycastTarget = false;
-        }
-
-        protected override void OnPopulateMesh(VertexHelper mesh)
-        {
-            mesh.Clear();
-            Rect rect = GetPixelAdjustedRect();
             float lean = rect.height * slant;
 
             if (shadow != Vector2.zero)
-                AddLeaning(mesh, rect.xMin + shadow.x, rect.yMin + shadow.y, rect.width, rect.height, lean, Ink);
+                AddLeaning(mesh, rect.xMin + shadow.x, rect.yMin + shadow.y, rect.width, rect.height, lean, Ink, feather, true, true);
 
             if (outline > 0f)
-                AddLeaning(mesh, rect.xMin, rect.yMin, rect.width, rect.height, lean, Ink);
+                AddLeaning(mesh, rect.xMin, rect.yMin, rect.width, rect.height, lean, Ink, feather, true, true);
 
             // The face sits inside the outline, its edges parallel to the outline's.
             float height = rect.height - outline * 2f;
@@ -93,23 +87,38 @@ namespace DeadCargo.UI
             float bottom = rect.yMin + outline;
             float faceLean = height * slant;
             float filled = width * fill;
+
+            // Where fill meets track the edge stays hard, so the two meet without a seam.
             if (filled > 0f)
-                AddLeaning(mesh, left, bottom, filled + faceLean, height, faceLean, face);
+                AddLeaning(mesh, left, bottom, filled + faceLean, height, faceLean, face, feather, true, filled >= width);
 
             if (filled < width)
-                AddLeaning(mesh, left + filled, bottom, width - filled + faceLean, height, faceLean, track);
+                AddLeaning(mesh, left + filled, bottom, width - filled + faceLean, height, faceLean, track, feather, filled <= 0f, true);
         }
 
-        // A parallelogram in the box from (x, y), leaning right by lean at the top.
-        private static void AddLeaning(VertexHelper mesh, float x, float y, float width, float height, float lean, Color tint)
+        // A parallelogram in the box from (x, y), leaning right by lean at the top. Its left or right edge can be left hard.
+        private static void AddLeaning(VertexHelper mesh, float x, float y, float width, float height, float lean, Color tint,
+            float feather, bool softLeft, bool softRight)
         {
-            int index = mesh.currentVertCount;
-            mesh.AddVert(new Vector2(x, y), tint, Vector2.zero);
-            mesh.AddVert(new Vector2(x + lean, y + height), tint, Vector2.zero);
-            mesh.AddVert(new Vector2(x + width, y + height), tint, Vector2.zero);
-            mesh.AddVert(new Vector2(x + width - lean, y), tint, Vector2.zero);
-            mesh.AddTriangle(index, index + 1, index + 2);
-            mesh.AddTriangle(index, index + 2, index + 3);
+            float span = width - lean;
+            if (height <= 0f || span <= 0f)
+                return;
+
+            // Left, top, right and bottom edges, in that order.
+            Corners[0] = new Vector2(x, y);
+            Corners[1] = new Vector2(x + lean, y + height);
+            Corners[2] = new Vector2(x + width, y + height);
+            Corners[3] = new Vector2(x + width - lean, y);
+
+            // A sliver thinner than the feather keeps a solid core at least half its thickness.
+            float across = span * height / Mathf.Sqrt(height * height + lean * lean);
+            float sides = Mathf.Min(feather * 0.5f, across * 0.25f);
+            float ends = Mathf.Min(feather * 0.5f, height * 0.25f);
+            Soft[0] = softLeft ? sides : 0f;
+            Soft[1] = ends;
+            Soft[2] = softRight ? sides : 0f;
+            Soft[3] = ends;
+            HudShapes.AddPolygon(mesh, Corners, 4, tint, Soft);
         }
     }
 }

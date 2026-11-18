@@ -41,7 +41,7 @@ namespace DeadCargo.Debugging
             "Camera position, facing, field of view, clip planes and speed.",
             "The player's ship: speed, health, target, cargo. In the world: velocity, facing and target line.",
             "The run: heat, cargo, jump drive, extraction points, scene. In the world: extraction points and cargo pickups.",
-            "Authority ships: count, tier limits, each ship's state. In the world: each ship's label and line to its target.",
+            "Authority ships: count, tier limits, each pilot's state. In the world: each ship's label, and a line to the player while it fights or to where it is flying.",
             "The sector: seed, cell and region at the camera. In the world: sector bounds, regions and cells.",
             "Voxel rock: bodies, cost, memory. In the world: each rock's centre of mass, drift, spin and mass.",
             "Warnings and errors, with the latest messages."

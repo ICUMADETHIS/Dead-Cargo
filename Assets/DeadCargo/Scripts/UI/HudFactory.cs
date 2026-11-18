@@ -129,12 +129,24 @@ namespace DeadCargo.UI
             return text;
         }
 
-        /// <summary>Lets a label shrink down to a minimum size to fit long content.</summary>
+        /// <summary>Lets a label shrink down to a minimum size to fit long content inside its box.</summary>
         internal static void Fit(Text text, int minSize)
         {
             text.resizeTextForBestFit = true;
             text.resizeTextMinSize = minSize;
             text.resizeTextMaxSize = text.fontSize;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
+        /// <summary>
+        /// Lets a label's line stand taller than its box, so the box can fit the letters rather than the whole line. The HUD
+        /// faces have tall lines (Saira Condensed 1.57 times its size, Chakra Petch 1.3), and Unity drops a line that does
+        /// not fit its box, which leaves the label blank.
+        /// </summary>
+        internal static void Unclipped(Text text)
+        {
+            text.verticalOverflow = VerticalWrapMode.Overflow;
         }
 
         internal static HudMeter Meter(string name, RectTransform parent, float x, float y, float width, float height)

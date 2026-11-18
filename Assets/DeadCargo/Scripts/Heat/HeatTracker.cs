@@ -40,6 +40,10 @@ namespace DeadCargo.Heat
         public event Action<int> TierChanged;
 
         public float Heat { get; private set; }
+
+        /// <summary>True while heat is held: it does not decay. Set by test tools through <see cref="HoldDecay"/>.</summary>
+        public bool IsDecayHeld { get; private set; }
+
         public float MaxHeat => maxHeat;
         public float NormalizedHeat => Heat / maxHeat;
         public int TierIndex { get; private set; }
@@ -67,6 +71,12 @@ namespace DeadCargo.Heat
             SetHeat(0f);
         }
 
+        /// <summary>Stops heat decaying while held, so a tier stays put. For debug tools; heat can still be raised or set.</summary>
+        public void HoldDecay(bool hold)
+        {
+            IsDecayHeld = hold;
+        }
+
         private void Awake()
         {
             if (tiers == null || tiers.Length == 0)
@@ -86,7 +96,7 @@ namespace DeadCargo.Heat
 
         private void Update()
         {
-            if (Heat > 0f && Time.time >= lastGainTime + decayDelay)
+            if (Heat > 0f && !IsDecayHeld && Time.time >= lastGainTime + decayDelay)
                 SetHeat(Heat - decayPerSecond * Time.deltaTime);
         }
 

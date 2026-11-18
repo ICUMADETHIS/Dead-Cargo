@@ -159,6 +159,19 @@ The God Menu (`Dead Cargo > God Menu`, Ctrl+Alt+G) is the editor control panel f
 - **Budgets per second, not per frame**, where the cost or the look must not depend on frame rate (chips). Per-frame budgets are for work that must finish within the frame it was asked for (cuts, meshing).
 - **Tested core.** A change to the voxel core comes with checks in `VoxelSelfTest`. Run **Dead Cargo > Diagnostics > Destruction Self-Test** before handing a change over, and the **Smoke Test** in the God Menu Destruction tab for anything touching the pipeline.
 
+## AI
+- **Dead Cargo pilots fly Dead Cargo ships.** Anything Dead Cargo spawns to fly is flown by a `PilotBrain` on a Dead Cargo pilot prefab in `Prefabs/<Feature>/`, never by the kit's demo pilots. Setup tools build these prefabs from the kit's, copying its tuning; the kit's prefabs are only read.
+- **One brain, readable states.** The brain flies one `PilotState` at a time and starts and stops its behaviours itself, so behaviours keep **Update Every Frame** off.
+- **Behaviours say where, `PilotFlight` flies.** A behaviour derives from the kit's `AIVehicleBehaviour` and tells the pilot's `PilotFlight` where to point and how fast to go, once a frame: speed as a share of top speed, boost as a request. Only `PilotFlight` sets engine inputs; no behaviour calls the kit's `Maneuvring` or sets steering or thrust itself. The kit's own behaviours are used only where nothing steers through them (the avoidance scan).
+- **Ability is skill.** Anything that should differ between a rookie and a veteran (aim, reactions, steering used, gun discipline, missiles, when to break off) is a `PilotSkill` field, set per heat tier through a `PilotSkillDefinition`. Behaviours read the pilot's skill; they do not keep their own copies. The kit's guns aim themselves onto the lead within 3.3° of the nose, so aim error matters only beyond that.
+- **Pilots fight as a wing.** Whoever sends pilots owns their `PilotWing`. Pilots join when they arrive and leave when they go, and coordination (fanning out, the line of fire) goes through the wing, never through pilots finding each other.
+- **Avoidance blends, it does not take over.** `PilotFlight` bends every heading by the kit avoidance's risk, in every state. Readouts show it as a flag (`PilotBrain.IsAvoiding`), not a state.
+- **No home at the origin, no flat arena.** Steer in full 3D, relative to the target, a remembered position or the ship itself. Never use the world's origin or a level plane as a reference: the cruise drive moves the world, and fights happen over planets.
+- **Pure steering maths in `PilotMath`.** It is managed vector maths only, no engine calls, so it can be checked outside Unity.
+- **Ships leave, they do not vanish.** A ship that stops hunting withdraws and is removed only out of view or far away. Only debug tools remove ships on the spot.
+- **Switch a ship off before destroying it.** The kit's radar never forgets a trackable, and destroying one that any radar tracks makes that radar throw every frame from then on. The kit switches a ship off when it is killed; anything else that removes a trackable (a ship leaving, a despawn, a pool) calls `SetActive(false)` first and destroys it a moment later.
+- **Show what each pilot is doing.** A new state or manoeuvre gets a name in `PilotStateNames`, which the debug overlay's AI channel and the God Menu's Authority tab show.
+
 ## Debugging
 - Use Draw Debug Tools (`using DDT;`, `DrawDebugTools.DrawLine(...)`) for in-game debug drawing. Its calls are compiled out of release builds.
 - **On-screen debugging goes through the debug overlay** (`Scripts/Debugging/`, phase 6.11). A system gets debug information by adding to it: a value in `DebugChannel` with its name, description and picker key in `DebugChannels`, a panel in `DebugReadouts`, and world drawing in `DebugWorldDraw`. Do not add separate debug canvases or OnGUI readouts.

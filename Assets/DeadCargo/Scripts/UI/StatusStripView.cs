@@ -178,6 +178,7 @@ namespace DeadCargo.UI
         {
             Text text = HudFactory.Label(name, parent, content, x, y, width, height, size, tint);
             text.font = HudFactory.StickerFont;
+            HudFactory.Unclipped(text);
             return text;
         }
 

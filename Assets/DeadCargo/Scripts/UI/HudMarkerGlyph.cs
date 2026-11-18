@@ -4,71 +4,68 @@ using UnityEngine.UI;
 namespace DeadCargo.UI
 {
     /// <summary>
-    /// A HUD marker shape drawn as a mesh: an outlined diamond over a target, or an arrow on the screen edge
-    /// pointing towards one. The arrow points along +x; the marker layer rotates it.
+    /// A HUD marker shape in the comic look: a diamond over a target, or a notched arrowhead on the screen edge pointing
+    /// towards one, filled with the graphic's colour inside a bold ink outline. The arrow points along +x; the marker layer
+    /// rotates it. The outline fades with the colour's alpha.
     /// </summary>
-    [RequireComponent(typeof(CanvasRenderer))]
-    internal sealed class HudMarkerGlyph : MaskableGraphic
+    internal sealed class HudMarkerGlyph : HudShapeGraphic
     {
-        // Inner corner of the diamond outline, as a share of the outer size.
-        private const float OutlineInner = 0.5f;
+        // The arrow's notch, as a share of its length back from the tip, and its height against its length.
+        private const float ArrowNotch = 0.71f;
+        private const float ArrowSpread = 1.25f;
 
-        // How far back the arrow's notch sits, as a share of its half-length.
-        private const float ArrowNotch = 0.35f;
+        private static readonly Vector2[] Shape = new Vector2[4];
+        private static readonly Vector2[] Outline = new Vector2[4];
 
         private bool isArrow;
+        private float outline = 3f;
 
-        internal void SetArrow(bool arrow)
+        /// <summary>Half the glyph's extent along its longest side, ink included, in local units.</summary>
+        internal float Reach => rectTransform.rect.width * 0.5f * (isArrow ? ArrowSpread : 1f) + outline;
+
+        internal void SetShape(bool arrow, float outlineWidth)
         {
-            if (isArrow == arrow)
+            outlineWidth = Mathf.Max(0f, outlineWidth);
+            if (isArrow == arrow && Mathf.Approximately(outline, outlineWidth))
                 return;
 
             isArrow = arrow;
+            outline = outlineWidth;
             SetVerticesDirty();
         }
 
-        protected override void Awake()
+        protected override void Build(VertexHelper mesh, Rect rect, float feather)
         {
-            base.Awake();
-            useLegacyMeshGeneration = false;
-        }
-
-        protected override void OnPopulateMesh(VertexHelper mesh)
-        {
-            mesh.Clear();
-            Rect rect = GetPixelAdjustedRect();
             Vector2 centre = rect.center;
-            float halfWidth = rect.width * 0.5f;
-            float halfHeight = rect.height * 0.5f;
-            Color32 tint = color;
+            float half = rect.width * 0.5f;
 
             if (isArrow)
             {
-                mesh.AddVert(centre + new Vector2(halfWidth, 0f), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(-halfWidth, halfHeight), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(-halfWidth * ArrowNotch, 0f), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(-halfWidth, -halfHeight), tint, Vector2.zero);
-                mesh.AddTriangle(0, 1, 2);
-                mesh.AddTriangle(0, 2, 3);
-                return;
+                // Tip first, so the notched shape fans from it.
+                float spread = half * ArrowSpread;
+                Shape[0] = centre + new Vector2(half, 0f);
+                Shape[1] = centre + new Vector2(-half, spread);
+                Shape[2] = centre + new Vector2(half - 2f * half * ArrowNotch, 0f);
+                Shape[3] = centre + new Vector2(-half, -spread);
+            }
+            else
+            {
+                Shape[0] = centre + new Vector2(0f, half);
+                Shape[1] = centre + new Vector2(half, 0f);
+                Shape[2] = centre + new Vector2(0f, -half);
+                Shape[3] = centre + new Vector2(-half, 0f);
             }
 
-            // Outer corners 0-3 and inner corners 4-7, top, right, bottom, left; the centre stays open.
-            for (int ring = 0; ring < 2; ++ring)
+            Color fill = color;
+            if (outline > 0f)
             {
-                float scale = ring == 0 ? 1f : OutlineInner;
-                mesh.AddVert(centre + new Vector2(0f, halfHeight * scale), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(halfWidth * scale, 0f), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(0f, -halfHeight * scale), tint, Vector2.zero);
-                mesh.AddVert(centre + new Vector2(-halfWidth * scale, 0f), tint, Vector2.zero);
+                Color ink = HudSticker.Ink;
+                ink.a *= fill.a;
+                HudShapes.Expand(Shape, 4, outline, Outline);
+                HudShapes.AddPolygon(mesh, Outline, 4, ink, feather);
             }
 
-            for (int side = 0; side < 4; ++side)
-            {
-                int next = (side + 1) % 4;
-                mesh.AddTriangle(side, next, next + 4);
-                mesh.AddTriangle(side, next + 4, side + 4);
-            }
+            HudShapes.AddPolygon(mesh, Shape, 4, fill, feather);
         }
     }
 }

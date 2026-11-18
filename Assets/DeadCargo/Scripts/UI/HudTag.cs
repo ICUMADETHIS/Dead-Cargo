@@ -19,6 +19,15 @@ namespace DeadCargo.UI
         private const float Tilt = 1.5f;
         private const float KeySize = 30f;
 
+        // The value and the figure share one line, centred this far down the tag, under the label or on its own. Their boxes
+        // are taller than the letters: Saira Condensed's line at 25 is 39 high, and Unity drops a line that does not fit.
+        private const float LineHeight = 44f;
+        private const float LineCentreUnderLabel = 35f;
+        private const float LineCentreAlone = 28f;
+        private const float FigureRight = 22f;
+        private const float FigureWidth = 128f;
+        private const float FigureGap = 14f;
+
         private static readonly Color InkText = new Color32(11, 12, 16, 255);
         private static readonly Color ProgressTrack = new Color(0f, 0f, 0f, 0.22f);
 
@@ -30,13 +39,17 @@ namespace DeadCargo.UI
         private readonly Text value;
         private readonly Text figure;
         private readonly RectTransform key;
+        private readonly Text keyText;
         private readonly float width;
+        private readonly float valueLeft;
+        private readonly float valueWidth;
 
         private float shown;
         private float pulseLeft;
         private bool held;
         private bool available = true;
         private float y = float.NaN;
+        private bool lineUnderLabel = true;
         private string shownLabel;
         private string shownValue;
         private string shownFigure;
@@ -58,24 +71,30 @@ namespace DeadCargo.UI
             if (keyName != null)
             {
                 key = HudFactory.Place("Key", root, 18f, (Height - KeySize) * 0.5f, KeySize, KeySize);
-                key.gameObject.AddComponent<Image>().color = InkText;
-                Text keyText = HudFactory.Label("Key Name", key, keyName, 0f, 0f, KeySize, KeySize, 20, StatusStripView.Figure,
+                key.gameObject.AddComponent<HudSticker>().Configure(InkText, 0f, Vector2.zero, 0f);
+                keyText = HudFactory.Label("Key Name", key, keyName, 0f, 0f, KeySize, KeySize, 20, StatusStripView.Figure,
                     TextAnchor.MiddleCenter);
                 keyText.font = HudFactory.FigureFont;
+                HudFactory.Unclipped(keyText);
                 left = 18f + KeySize + 10f;
             }
 
-            float textWidth = width - left - 22f;
-            label = HudFactory.Label("Label", root, "", left, 6f, textWidth, 16f, 12, InkText);
+            valueLeft = left;
+            valueWidth = width - left - FigureRight;
+            float lineTop = LineCentreUnderLabel - LineHeight * 0.5f;
+            label = HudFactory.Label("Label", root, "", left, 6f, valueWidth, 16f, 12, InkText);
             label.font = HudFactory.StickerFont;
-            value = HudFactory.Label("Value", root, "", left, 19f, textWidth, 32f, 25, InkText);
+            HudFactory.Unclipped(label);
+            value = HudFactory.Label("Value", root, "", left, lineTop, valueWidth, LineHeight, 25, InkText);
             value.font = HudFactory.FigureFont;
             value.fontStyle = FontStyle.Italic;
             HudFactory.Fit(value, 14);
-            figure = HudFactory.Label("Figure", root, "", width - 150f, 12f, 128f, 34f, 25, InkText, TextAnchor.MiddleRight);
+            figure = HudFactory.Label("Figure", root, "", FigureLeft, lineTop, FigureWidth, LineHeight, 25, InkText,
+                TextAnchor.MiddleRight);
             figure.font = HudFactory.FigureFont;
             figure.fontStyle = FontStyle.Italic;
             figure.horizontalOverflow = HorizontalWrapMode.Overflow;
+            HudFactory.Unclipped(figure);
 
             progress = HudFactory.Place("Progress", root, left, Height - 12f, width - left - 30f, 5f).gameObject.AddComponent<HudSticker>();
             progress.Configure(InkText, 0f, Vector2.zero, HudSticker.DefaultSlant);
@@ -93,7 +112,12 @@ namespace DeadCargo.UI
 
         internal float Width => width;
 
-        /// <summary>The tag's text. A null or empty label leaves the value centred on its own.</summary>
+        private float FigureLeft => width - FigureRight - FigureWidth;
+
+        /// <summary>
+        /// The tag's text. The value and the figure share a line, under the label, or centred when there is no label. The
+        /// value shrinks to stay clear of the figure.
+        /// </summary>
         internal void SetContent(string labelText, string valueText, string figureText, Color face)
         {
             body.SetFace(face);
@@ -101,8 +125,22 @@ namespace DeadCargo.UI
             {
                 shownLabel = labelText;
                 label.text = labelText ?? "";
-                bool hasLabel = !string.IsNullOrEmpty(labelText);
-                HudFactory.SetOffset(value.rectTransform, value.rectTransform.anchoredPosition.x, hasLabel ? 19f : 12f);
+            }
+
+            bool underLabel = !string.IsNullOrEmpty(labelText);
+            if (underLabel != lineUnderLabel)
+            {
+                lineUnderLabel = underLabel;
+                float top = (underLabel ? LineCentreUnderLabel : LineCentreAlone) - LineHeight * 0.5f;
+                HudFactory.SetOffset(value.rectTransform, valueLeft, top);
+                HudFactory.SetOffset(figure.rectTransform, FigureLeft, top);
+            }
+
+            bool figureChanged = figureText != shownFigure;
+            if (figureChanged)
+            {
+                shownFigure = figureText;
+                figure.text = figureText ?? "";
             }
 
             if (valueText != shownValue)
@@ -111,10 +149,10 @@ namespace DeadCargo.UI
                 value.text = valueText ?? "";
             }
 
-            if (figureText != shownFigure)
+            if (figureChanged)
             {
-                shownFigure = figureText;
-                figure.text = figureText ?? "";
+                float figureRoom = string.IsNullOrEmpty(figureText) ? 0f : figure.preferredWidth + FigureGap;
+                value.rectTransform.sizeDelta = new Vector2(Mathf.Max(KeySize, valueWidth - figureRoom), LineHeight);
             }
         }
 
@@ -138,6 +176,14 @@ namespace DeadCargo.UI
         internal void Pulse(float seconds)
         {
             pulseLeft = Mathf.Max(pulseLeft, seconds);
+        }
+
+        /// <summary>The key cap's letter, for a tag whose key changes, such as the ship's prompts.</summary>
+        internal void SetKeyName(string name)
+        {
+            name ??= "";
+            if (keyText != null && keyText.text != name)
+                keyText.text = name;
         }
 
         /// <summary>Shows or hides the key cap.</summary>

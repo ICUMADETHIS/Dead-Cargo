@@ -22,7 +22,11 @@ namespace DeadCargo.EditorTools.GodMenu
             get
             {
                 HeatTracker tracker = GodMenuContext.IsPlaying ? HeatTracker.Active : null;
-                return tracker != null ? $"{tracker.CurrentTier.Label}  {tracker.Heat:0}" : null;
+                if (tracker == null)
+                    return null;
+
+                string level = $"{tracker.CurrentTier.Label}  {tracker.Heat:0}";
+                return tracker.IsDecayHeld ? $"{level}  ·  held" : level;
             }
         }
 
@@ -55,6 +59,10 @@ namespace DeadCargo.EditorTools.GodMenu
                 float heat = EditorGUILayout.Slider("Heat", tracker.Heat, 0f, tracker.MaxHeat);
                 if (!Mathf.Approximately(heat, tracker.Heat))
                     tracker.Set(heat);
+
+                bool hold = EditorGUILayout.Toggle(new GUIContent("Hold Heat", "Heat does not decay, so the tier and its hunters stay while you test."), tracker.IsDecayHeld);
+                if (hold != tracker.IsDecayHeld)
+                    tracker.HoldDecay(hold);
 
                 switch (GodMenuGUI.ButtonRow(AdjustLabels))
                 {

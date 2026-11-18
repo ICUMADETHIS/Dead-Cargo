@@ -22,7 +22,8 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.10 | Destruction | Rock that breaks the way you hit it, in five steps, built so later kinds of destruction plug in. Step 1: voxel asteroids that weapons carve and split, with ore veins for mining | Step 1 built and smoke-tested, awaiting test. Step 1b (random breaks, asteroid motion) built, awaiting test. Step 1c (rock trails, optimisation) built, awaiting test. Step 1d (performance pass) built, awaiting test |
 | 6.11 | Debug overlay | A frame rate counter always on screen, and switchable channels of live readouts and world drawing for every main system, on Draw Debug Tools | Built and compile-checked, awaiting test |
 | 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen: 1 a cruise drive, 2 the descent to the ground, 2b an autopilot cruise, 2c a long atmospheric descent, 2d a real star system, 3 the sun's and planets' look. First person on C | Steps 1, 2 and 2b and first person on C tested 2026-11-17. Step 2c (atmospheric descent) built; in its test the ship kept rolling itself, fixed with level flight, tested 2026-11-17 ("a lot better") |
-| 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Step 1 (status strip) built and fixed after a first look; step 2 (pop-up tags) built and compile-checked, awaiting test |
+| 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Steps 1 (status strip) and 2 (pop-up tags) built and fixed after a first look, step 2 tested; step 3 (markers and reticle) built, awaiting test |
+| 6.14 | Authority AI | Authority pilots that fly well, fight well and can be shaken off, in six steps: 1 Dead Cargo's own pilot, 2 flight, 3 dogfight skill, 4 sight and memory, 5 heat that follows sight, 6 arrival and ship types | Steps 1 (Authority pilot) and 2 (flight) tested 2026-11-17. Step 3 (dogfight skill) built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -1739,8 +1740,8 @@ Redo the on-screen UI so it fits Dead Cargo's comic art and stops cluttering the
 | Step | Delivers | Status |
 |---|---|---|
 | 1. Status strip | One leaning, ink-outlined strip at the bottom centre: shield and hull, speed and throttle, both weapons with their rounds. The kit's health bars, weapon boxes and reticle arcs are hidden | Built and compile-checked, awaiting test |
-| 2. Pop-up tags | The plates on the right become sticker tags that pop in only when they matter: cruise while a destination is ahead, cargo when it changes, heat when it rises, jump while spooling, then slide away. Extraction moves onto its marker; notices become tags | Built and compile-checked, awaiting test |
-| 3. Markers and reticle | Chunky inked diamonds and chevrons with sticker labels for planets, extraction, hunters and pickups; an inked chevron reticle | Planned |
+| 2. Pop-up tags | The plates on the right become sticker tags that pop in only when they matter: cruise while a destination is ahead, cargo when it changes, heat when it rises, jump while spooling, then slide away. Extraction moves onto its marker; notices become tags | Done, tested 2026-11-17 after a fix (rough edges, blank figures) |
+| 3. Markers and reticle | Chunky inked diamonds and chevrons with sticker labels for planets, extraction, hunters and pickups; an inked chevron reticle | Built and compile-checked, awaiting test |
 | 4. Cockpit | In first person the strip sits on the dash lip like a visor readout; the console screens show hull and shield, and the hold beside the radar; tags pop on the glass | Planned |
 
 ### Design (step 1: status strip)
@@ -1848,3 +1849,406 @@ The user asked for the game to play in a pop-out window. The God Menu **Play Win
 8. Press **H** with enough dark matter: the jump tag counts down. Cruise with **B**: **AUTOPILOT  IXARA**, then the notice **ARRIVED  IXARA** on top.
 9. Stop Play: the window closes. Next Play it opens where you left it.
 10. While the window is open, the docked Game tab reads Display 8 and draws nothing. After Play it shows the game again on Display 1.
+
+### Fix (after the first look at step 2)
+The user's first look at the tags, on 2026-11-17, found three problems:
+- **The tags' edges looked rough.** Every sticker was a plain polygon, and screen-space canvases get no multisampling, so the leaning edges stair-stepped. The 1.5° tilt made the long top and bottom edges worse. `HudSticker` now fades each edge over one screen pixel, half inside and half outside, and rebuilds when the screen changes size so the fade stays one pixel. Where a bar's fill meets its track the edge stays hard, so the two meet without a seam. This applies to every sticker: the tags, the status strip and the manifest. The tags' key caps are now stickers too, so they are smooth as well.
+- **The cruise tag did not say which planet it had picked.** It shows READY with the planet's name on the right, but the name never appeared. Saira Condensed's line is 1.57 times its size, about 39 pixels at 25, and the figure's box was 34 high. Unity drops a line that does not fit its box, so **every tag's right-hand figure was blank**: the planet, the cargo's value, the heat score, the jump seconds and the extraction distance. The same fault hid the strip's weapon capacity, the manifest's title and its quantity and mass columns, and, at some window sizes, the key letter on a tag.
+  - Labels in the HUD faces now let their line stand taller than the box (`HudFactory.Unclipped`). Labels that shrink to fit (`HudFactory.Fit`) still fit inside their box.
+  - The tag's value box is now tall enough for its full 25-point size. Before, it was squeezed down to about 20.
+  - The figure now sits on the same line as the value, and the value shrinks rather than run into the figure.
+- **Unity's Game view threw a NullReferenceException when Play stopped with the play window open.** The window was closed while Unity was still telling every Game view that Play was ending, and the closed view was told anyway. The window now closes on the editor's next update; the other Game views get their displays back at once, as before.
+
+| File | Role |
+|---|---|
+| `Scripts/UI/HudSticker.cs` | Anti-aliased edges, one screen pixel wide, rebuilt when the canvas scale changes |
+| `Scripts/UI/HudFactory.cs` | `Unclipped` for labels whose line is taller than their box; `Fit` keeps shrinking labels inside theirs |
+| `Scripts/UI/HudTag.cs` | Smooth key cap; value and figure on one line in boxes that fit the face; the value shrinks to stay clear of the figure |
+| `Scripts/UI/StatusStripView.cs`, `ExtractionHudView.cs` | Captions, manifest title and numbers no longer dropped |
+| `Editor/PlayWindow.cs` | Closes the window after Unity has told the Game views that Play stopped |
+
+Verified outside Unity: every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code. Not run in Unity: how the edges and text look.
+
+#### Test steps (fix)
+1. Click into Unity and let it compile. Press Play; nothing needs setting up again.
+2. Point near Halonix or Ixara: the cruise tag reads **READY** with the planet's name on the right, on the same line, and that planet's marker is teal. Turn to the other planet: the name changes.
+3. Look closely at a tag's edges, its key cap and the status strip: the leaning edges are smooth, with no stair steps. Resize the play window or the Game tab: they stay smooth.
+4. Pick up cargo: the cargo tag shows the value in credits on the right. Raise heat: the heat score shows on the right.
+5. Press **I**: the manifest shows its **CARGO MANIFEST** title and every column. The strip shows each weapon's capacity beside its rounds.
+6. Stop Play with the play window open: the window closes and the Console shows no `GameView.OnPlayModeStateChanged` error.
+
+### Design (step 3: markers and reticle)
+Taken from concept C's chase view: inked diamonds with sticker labels, an inked arrowhead at the screen edge, and four inked chevrons round the aim.
+- **Markers are filled and inked.** A diamond over a target on screen, filled with the marker's colour inside a bold ink outline. Off screen it becomes a notched arrowhead on the edge, pointing the way, as before. Sharp corners of the ink stay blunt (a miter limit of twice the outline), so the arrowhead's back corners do not spike.
+- **Labels are stickers sized to their text.** A leaning sticker beside the diamond holds the name, an optional state and the distance (`1,620 M`, `2,821 KM`). On screen it sits to the right, or to the left when that would run off the screen. Off screen it sits inwards of the arrow, clear of it on whichever edge. Each label reads one of three ways:
+
+  | Look | Used for | Reads |
+  |---|---|---|
+  | Loud | The cruise destination (planet or Polaris), the extraction point, Authority ships | Sticker in the marker's colour with ink text, 3-pixel ink, 28 high: **IXARA  2,821 KM**, **EXTRACT  DORMANT  1,620 M**, **AUTHORITY  420 M** |
+  | Quiet | Other planets, and Polaris while it is not the destination | Charcoal sticker, the name in the marker's colour and the distance in grey, 22 high |
+  | Plain | Cargo and dark matter pickups | The small diamond alone, fading with distance as before |
+
+  The destination's label is the cruise tag's teal, so the tag and the planet it names match. The extraction label's state is DORMANT, UPLINK or OPEN, and its colour follows the state as before.
+- **The reticle was four inked chevrons** (replaced by a small ring after the second look, below) round the screen centre, pointing in: light strokes over ink with round ends, as in the concept. An amber dot ringed in ink is the steering cursor. It sits inside the chevrons while you fly straight and follows the mouse when you steer, with a faint inked line out to it once it clears them.
+- **The kit's cursor still steers.** Its script sits on the ship's whole HUD; its cursor, the cursor's line and its centre dot share one canvas, `HUDCursor`, below it. While the player flies the ship, the status strip puts a CanvasGroup at zero alpha on that canvas, reads the kit cursor's position each frame for the dot, and takes the CanvasGroup off again when the player leaves the ship. It is done at runtime, so nothing needs setting up again. The kit's target boxes and radar are untouched.
+- **Shared shapes.** The anti-aliased edges from the step 2 fix moved into `HudShapes` (polygons, outlines, strokes and discs) and a base graphic, `HudShapeGraphic`, which rebuilds when the screen changes size. The stickers, markers, labels and reticle all use them. The reticle's chevrons are one mesh that never changes; the steering cursor is a small mesh of its own that is rebuilt only when the cursor moves.
+
+### Implementation (step 3)
+| File | Role |
+|---|---|
+| `Scripts/UI/HudShapes.cs` | Anti-aliased polygons, outlines with a miter limit, square- and round-ended strokes, discs |
+| `Scripts/UI/HudShapeGraphic.cs` | Base of the HUD's mesh graphics: a one-pixel feather, rebuilt when the canvas scale changes |
+| `Scripts/UI/HudSticker.cs` | Now built on the shared shapes; looks the same |
+| `Scripts/UI/HudMarkerGlyph.cs` | Filled diamond or notched arrowhead inside an ink outline |
+| `Scripts/UI/HudMarkerLabel.cs` | The marker's sticker label: name, state and distance, loud or quiet |
+| `Scripts/UI/HudMarkerStyle.cs` | Marker looks: plain, quiet and loud |
+| `Scripts/UI/HudMarkerLayer.cs` | Places the labels beside their diamonds, or inwards of their arrows |
+| `Scripts/UI/HudReticle.cs`, `HudSteeringCursor.cs` | The inked chevrons; the amber steering dot and its line |
+| `Scripts/UI/StatusStrip.cs` | Draws the reticle, follows the kit's cursor, and hides the kit's cursor canvas while the player flies |
+| `Scripts/UI/ExtractionHud.cs` | Each marker's look: the destination, extraction point and hunters loud; other places quiet; pickups plain |
+
+### Verified outside Unity (step 3)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The compiled shape code was run outside Unity on a diamond in both windings, the arrowhead and a sticker. Every outline grows outwards, every solid core sits inside its shape, every fade sits outside it, and a disc's rim stays round.
+- Not run in Unity: the look of the markers, labels and reticle; the hiding of the kit's cursor; the dot following the mouse.
+
+### Test steps (step 3)
+1. Click into Unity and let it compile. Press Play; nothing needs setting up again.
+2. The old white circle cursor and its line are gone. At the screen centre are four inked chevrons with an amber dot between them.
+3. Steer with the mouse: the dot follows the cursor, and once it is outside the chevrons a faint line runs out to it. Let go: it comes back to the centre.
+4. Point near Ixara: its marker is a big teal diamond in ink, with a teal sticker **IXARA  … KM**, matching the cruise tag. Halonix has a small grey diamond with a charcoal label. Turn to Halonix: the two swap.
+5. Find the extraction point: a blue diamond with **EXTRACT  DORMANT  … M**. Turn away: it becomes an inked arrowhead on the screen edge, with its label inwards of it. Move it to each edge in turn: the label never covers the arrow.
+6. Fly so a marker is near the right edge of the screen: its label moves to the left of the diamond.
+7. Raise heat until Authority ships come: each has a red diamond with **AUTHORITY  … M**.
+8. Fly near cargo: small amber diamonds with ink outlines, fading with distance, and no labels.
+9. Resize the play window or the Game tab: every edge stays smooth.
+10. Leave the ship on foot, then board again: the reticle goes and comes back, and the kit's cursor stays hidden while you fly.
+
+### Fix (after the first look at step 3)
+The user's first look, on 2026-11-17, showed text with nothing behind it: the label text looked black, and no diamonds, stickers, strip or tag backgrounds, or reticle were drawn. The kit's white cursor still showed. There were two faults:
+- **No shape was drawn.** When the stickers moved onto the shared base graphic, `HudShapeGraphic`, they lost their `RequireComponent(CanvasRenderer)`. Unity's `Graphic` does not require one, unlike Image and Text. So the meshes were built but nothing drew them, and only the text, which has its own CanvasRenderer, showed. The base graphic now requires a CanvasRenderer. Unity checks base classes for this, so every sticker, marker, label and the reticle get one.
+- **The kit's cursor was not hidden.** The kit's `CameraViewParenter` moves the cursor's canvas off the ship and onto the camera when the view is set, so it was not found under the ship. The status strip now reads the canvas from the kit cursor's own serialized field, `canvas`. It is protected and has no public accessor, so this uses reflection. If that ever fails, a warning names the ship.
+
+| File | Role |
+|---|---|
+| `Scripts/UI/HudShapeGraphic.cs` | Requires a CanvasRenderer |
+| `Scripts/UI/StatusStrip.cs` | Finds the kit cursor's canvas through the cursor itself, wherever the kit has moved it |
+
+Verified outside Unity: every Dead Cargo assembly compiles with no warnings from Dead Cargo code, and the shape checks still pass. In the ship prefab, the kit cursor's `canvas` field points at the `HUDCursor` canvas, which holds only the cursor, its line and the centre dot.
+
+#### Test steps (fix)
+1. Click into Unity and let it compile. Press Play.
+2. The status strip, the tags and the label stickers have their backgrounds again. The label text is dark on a coloured sticker (loud) or coloured on charcoal (quiet).
+3. Every marker has its inked diamond. The kit's white circle cursor is gone, and the comic chevrons and amber dot are at the centre.
+4. Then carry on with the step 3 test steps above.
+
+### Changes (after the second look at step 3)
+On 2026-11-17 the user asked for three changes: the kit's launch prompt in the comic style, a simpler reticle that takes up little of the screen, and a way to hide the steering line.
+- **The ship's prompts are tags.** PRESS L TO LAUNCH and the kit's other ship prompts (land, and leave the ship) now show as a cream tag in the stack on the right: key cap **L**, label **SHIP**, value **LAUNCH**. It sits above the cruise tag and below notices, and slides in and out with the prompt. The kit still decides when to prompt and keeps writing its texts. `KitPrompts` reads those texts from the components that write them (`HUDShipLander`, the ship's `ShipEnterExitManager`, or `HUDVehicleEnterExit`), splits **PRESS <key> TO <action>** into key and action, and hides the kit's texts with an alpha-0 CanvasGroup while the player is in the ship. The kit moves its HUD canvases onto the camera, so the texts are reached through the components' own `promptText` field. A prompt in any other form is shown whole, with no key.
+- **The reticle is one small ring.** The four chevrons are gone. The reticle is now a single inked ring about 23 reference pixels across, light over ink. The steering dot is smaller, amber with a thin ink ring, and sits inside the ring while the ship flies straight.
+- **The steering line is optional, and off by default.** A new God Menu tab, **HUD** (Game group), has **Line out to the steering cursor** under Reticle. It takes effect at once and is kept between sessions in PlayerPrefs (`HudSettings.ShowSteeringLine`), so a later options menu can use the same setting. Off, only the dot shows where you steer.
+
+| File | Role |
+|---|---|
+| `Scripts/UI/KitPrompts.cs` | Reads and hides the kit's ship prompts; splits them into key and action |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs`, `HudTag.cs` | The prompt tag, with a key cap whose letter can change |
+| `Scripts/UI/HudReticle.cs`, `HudShapes.cs` | The small inked ring, and anti-aliased rings |
+| `Scripts/UI/HudSteeringCursor.cs` | A smaller dot; the line only when the option is on |
+| `Scripts/UI/HudSettings.cs` | HUD options kept in PlayerPrefs |
+| `Editor/GodMenu/Tabs/HudTab.cs` | The God Menu's HUD tab |
+
+Verified outside Unity: every Dead Cargo assembly compiles with no warnings from Dead Cargo code. The compiled ring was checked for its radii and its fade at both edges. The prompt splitting was checked on PRESS L TO LAUNCH, PRESS L TO LAND, mixed case with spaces, a two-word key, and text with no key. Not run in Unity: the look of the tag, ring and dot, and the hiding of the kit's prompt.
+
+#### Test steps (changes)
+1. Click into Unity and let it compile. Press Play while landed on the pad.
+2. The kit's PRESS L TO LAUNCH text is gone. On the right is a cream tag with an **L** key cap, **SHIP** and **LAUNCH**. Press **L**: the ship launches and the tag slides away.
+3. At the screen centre is one small inked ring with the amber dot inside it. Steer with the mouse: the dot moves, with no line.
+4. In the God Menu, open **HUD** and tick **Line out to the steering cursor**: steer, and the line runs out to the dot. Untick it: the line goes at once. Stop and start Play: the choice is kept.
+5. Fly back over a landing pad, if one is in reach: the tag reads **L  LAND**.
+
+---
+
+## Phase 6.14: Authority AI
+
+### Goal
+Authority hunters that fight like pilots and can be shaken off. Until now they ran the kit's demo pilot, which fights on a flat plane round the world's origin. When it lost you beyond its 2 km radar it flew back to the origin and waited there, still counted against the tier's limit, so no replacement came.
+
+On 2026-11-17 the user was offered five directions: hunters you can shake, tactics and the blockade, pursuit out of the sector, a living sector, and better dogfights. They chose hunters you can shake, with better dogfights as well. After testing step 1 they asked for better flying too, which became step 2, ahead of dogfight skill, since skill is built on how the ship flies. The blockade at HUNTED and Authority ships out of the sector stay in the backlog's Later list.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Authority pilot | Dead Cargo's own pilot with readable states. Dogfights in full 3D round the target that never carry it out of the fight. A lost target is pursued to where it was heading and searched for by circling there; after 20 s the pilot gives up. Ships leaving the hunt fly away and leave once out of sight, instead of vanishing | Done, tested 2026-11-17 |
+| 2. Flight | Dead Cargo's own flight controller in place of the kit's steering: damped turns in full 3D with no cap on climbs and dives, banking into hard turns, speed held rather than throttled (slowing to turn tight, sitting on a tail at gun range, boosting to close and escape), side and vertical thrusters, and avoidance that bends the course instead of taking over | Done, tested 2026-11-17, after a fix for radar errors |
+| 3. Dogfight skill | Pilot skill by heat tier: aim error, reaction time, burst discipline, missile use. Wingmen spread their attack angles and hold fire when a friend is in the way. Damaged ships break off and come back when their shields recover | Built and compile-checked, awaiting test |
+| 4. Sight and memory | Hunters must see you: sensor range, and rock along the line of sight blocks it (the field's density, as the cruise drive reads it). The Authority shares where you were last seen, and pursuit and search use it | Planned |
+| 5. Heat follows sight | Heat decays only while no hunter sees you, and the heat tag reads SEEN or HIDDEN. Reinforcements arrive near where you were last seen, not on top of you | Planned |
+| 6. Arrival and ship types | Warp-in arrivals instead of appearing 400 m away; a ship type per tier | Planned |
+
+### Design (step 1: Authority pilot)
+- **Dead Cargo's own pilot.** The Authority sends `Prefabs/Authority/AuthorityPilot.prefab` instead of the kit's demo pilot.
+  - Set Up Sector builds it from the kit's enemy pilot. It keeps the kit pilot's team, collision avoidance and attack runs (lead aim, bursts, missiles once locked).
+  - The new behaviours start from the kit's own steering tuning for this ship.
+  - The kit's prefab is only read, never changed. The ship is still the kit's enemy fighter.
+- **One state at a time.** The pilot's brain (`PilotBrain`) replaces the kit's behaviour selector:
+
+  | State | What it does |
+  |---|---|
+  | ENGAGING | Fights the target its ship's radar tracks: attack runs and break-aways |
+  | PURSUING | Has lost the target, which is out of its 2 km radar range. Flies at full throttle to where it was last tracked, led by up to 4 s of its motion |
+  | HOLDING | Has arrived, or has nothing to chase: circles 250 m out at half throttle. After 20 s with no target it gives up |
+  | AVOIDING | Steering clear of something in its path. Takes over in every state |
+  | WITHDRAWING | Off the hunt: flies straight away from you with boost, still avoiding collisions |
+
+  It never falls back to the world's origin.
+- **Dogfights in 3D.**
+  - An attack run lasts 10 to 20 s, and breaks off early inside 100 m of the target.
+  - A break-away lasts 4 to 8 s. It heads away from the target up to 75° off the straight line in any direction, above and below as well as to the sides, with a slow weave. It turns back early once 800 m out.
+  - The kit's evade flattened every escape onto a level plane and pulled the ship towards the world's origin; that is gone.
+  - A run that ends while the target is still beyond 800 m carries on closing instead of breaking.
+- **Withdrawing, not vanishing.**
+  - When heat has been at CLEAR for 10 s, the hunters withdraw instead of disappearing.
+  - A pilot that gives up its search withdraws too, and its replacement waits out the tier's reinforcement interval.
+  - A withdrawing ship leaves the scene once it is out of view and 600 m from the camera, or 2.5 km away even in view.
+  - It is off the hunt at once: no AUTHORITY marker, no place in the tier's limit, no firing. Destroying one still adds heat and counts as a kill.
+  - **Despawn All** in the God Menu still removes ships at once.
+- **Not in this step.** Sight is still the kit's: any hostile within 2 km of a hunter's radar, through rock. New ships still arrive 400 m from you, wherever you are. Heat still decays on its own timer. Steps 4 and 5 change these.
+- **God Menu and overlay.**
+  - The **Authority** tab gains **Withdraw All** and a **Ships** section: each ship's state, its manoeuvre or hold time, and its range. The tab's header counts ships leaving.
+  - The **Heat** tab gains **Hold Heat**, which stops heat decaying so a tier and its hunters stay while you test.
+  - Debug overlay channel **8 (AI)** shows each pilot's state. In the world it draws a line to the player while a ship fights, or to where it is flying otherwise.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/AI/PilotBrain.cs` | The pilot: states, memory of the last target, pursuit, holding, giving up, withdrawal |
+| `Scripts/AI/PilotState.cs`, `DogfightManoeuvre.cs`, `PilotStateNames.cs` | The states and manoeuvres, and their display names |
+| `Scripts/AI/DogfightBehaviour.cs` | Attack runs and break-aways against the tracked target |
+| `Scripts/AI/BreakAwayBehaviour.cs` | The 3D break-away with its weave |
+| `Scripts/AI/FlyToBehaviour.cs` | Flies at a goal, easing the throttle in hard turns: pursuit, holding, withdrawal |
+| `Scripts/AI/PilotMath.cs` | Break headings, the holding circle, the pursuit lead, the turn throttle: pure maths |
+| `Scripts/Authority/AuthorityResponse.cs` | Withdrawal instead of removal; a give-up frees a place in the hunt; `WithdrawAll`, `WithdrawingShips`, `PilotOf`, `ShipWithdrawing` |
+| `Scripts/Heat/HeatTracker.cs` | `HoldDecay` for test tools |
+| `Editor/AuthorityPilotSetup.cs`, `Editor/SectorSetup.cs` | Setup step **Authority Pilot**: builds the prefab and points the Authority Response at it |
+| `Editor/GodMenu/Tabs/AuthorityTab.cs`, `HeatTab.cs` | Withdraw All and the Ships section; Hold Heat |
+| `Scripts/Debugging/DebugReadouts.cs`, `DebugWorldDraw.cs`, `DebugChannel.cs` | Pilot states in channel 8, and the line to where each pilot flies |
+
+It is built on the kit's public AI API:
+- `VehicleInput` for the brain.
+- `AIVehicleBehaviour` and `AISpaceshipBehaviour` for the new behaviours.
+- The kit's own `ObstacleAvoidanceBehaviour`, `SpaceshipAttackBehaviour` and `Maneuvring` helpers.
+
+No kit file is changed.
+
+### Verified outside Unity (step 1)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The pilot maths was checked outside Unity against the same source:
+  - Break headings are unit length and exactly the off angle from straight away, in any direction, including straight up.
+  - The weave turns the heading by the angle asked.
+  - The holding goal is always on the circle and in its plane, the lead angle ahead, turning one way.
+  - The pursuit lead and the turn throttle clamp as they should.
+- Not run in Unity: the prefab build, the fights, pursuit, holding, giving up, withdrawal, and the God Menu and overlay readouts.
+
+### Test steps (step 1)
+1. Click into Unity and let it compile. In Polaris, the God Menu **Project** tab shows one step missing, **Authority Pilot**: press **Set Up Sector**. `Assets/DeadCargo/Prefabs/Authority/AuthorityPilot.prefab` appears, and the **Authority Response** object's **Pilot Prefab** points at it. Save the scene.
+2. Open the prefab. It is an **AuthorityPilot** with a Game Agent and a Pilot Brain, and children **Avoidance**, **Attack Run**, **Break Away**, **Fly To** and **Dogfight**.
+3. Press Play and launch. In the God Menu:
+   - In the **Player** tab, tick **Invulnerable**.
+   - In the **Heat** tab, tick **Hold Heat** and click **NOTICED**. One hunter arrives.
+   - In the **Authority** tab, open **Ships**: it reads **ENGAGING  attack run** with its range.
+   - Press **F3** and turn on channel **8 (AI)** to see the same over the ship.
+4. Watch a few passes. Inside about 100 m the hunter switches to **break away** and peels off up, down or sideways, not only level. It weaves, then turns back for another run within about 800 m. It never heads off towards the sector's centre.
+5. Get more than 2 km away: point the Scene view somewhere 3 km off and press **Teleport To Scene View** in the **Player** tab. The hunter reads **PURSUING**, and its overlay line points to where you were. When it gets there it reads **HOLDING** with a countdown, circling.
+6. Fly back towards it. Inside 2 km it reads **ENGAGING** again.
+7. Teleport away again and wait out the countdown.
+   - At 0 the hunter reads **WITHDRAWING**, boosts away, and loses its AUTHORITY marker. The tab's header reads **0 / 1 ships · 1 leaving**.
+   - Look away from it: once it is out of view and 600 m off, it is gone.
+   - The next hunter arrives after the tier's interval, about 10 s.
+8. Click **WANTED**: two hunters. Untick **Hold Heat** and click **Clear**. About 10 s later both withdraw and fly off instead of vanishing. Shoot one as it leaves: heat jumps by 10, and the kill counts on the run report.
+9. **Withdraw All** sends every hunter off at once. **Despawn All** still removes them on the spot.
+10. Fly into the asteroid belt with a hunter on you. It reads **AVOIDING** near rocks and goes back to the fight afterwards.
+
+### Tuning (step 1)
+- On the **AuthorityPilot** prefab:
+  - **Pilot Brain:** Pursuit Lead, Arrival Distance, Pursuit Throttle, Hold Radius, Hold Throttle, Give Up Time, Boost While Withdrawing.
+  - **Dogfight:** Min and Max Engage Distance, Attack Time, Break Time.
+  - **Break Away:** Break Cone, Throttle, Weave Rate, Weave Angle.
+  - **Fly To:** Turning Throttle.
+  - **Attack Run** and **Avoidance** keep the kit's settings.
+- On the **Authority Response** object: **Leave Distance** and **Vanish Distance** for withdrawing ships.
+
+### Design (step 2: flight)
+The user tested step 1 on 2026-11-17 and asked for better flying. The kit's steering, which the step 1 pilot still used, held hunters back in three ways:
+- **It measured every turn against the world's horizon.** It capped pitch at 45° from level, so a hunter could never climb or dive steeply, and the step 1 break-aways stayed fairly flat.
+- **It steered on the angle alone.** Nothing damped the turn rate, so turns were slow to start and wobbled at the end.
+- **It used only forward thrust,** although the fighter's side and vertical thrusters are as strong as its main engine. Every run went at full throttle, so a hunter overshot its target.
+
+Step 2 replaces it with Dead Cargo's own flight controller, `PilotFlight`. Behaviours now say only where to point and how fast to go. Every state flies through it.
+- **Turns in the ship's own axes.**
+  - Each axis turns as fast as the ship's steering allows, and brakes so the nose stops on the heading. A turn rate is planned from the angle left, then held against the ship's damping.
+  - Nothing is measured against the world: a hunter climbs or dives as steeply as it turns.
+  - With the kit fighter's steering, a 90° turn takes about 1 s, a near-vertical climb or dive about 1 s, and a full reversal about 1.9 s. Each settles within 1° of the heading without overshooting.
+- **Banking.** Turns past 20° bank into the turn, fully past 70°, so the ship pulls through like a fighter (a target below is reached by rolling over and pulling). Straight flight rolls back to level: the planet's horizon near a planet, the sector's up elsewhere.
+- **Speed, not throttle.** The pilot holds a speed, as a share of the ship's top speed (133 m/s for the fighter, 267 m/s on boost).
+  - Off the nose the speed falls to 45%, which tightens the turn.
+  - Boost runs only while asked for and the nose is within 15° of the heading.
+- **Thrusters.** The side and vertical thrusters cancel sideslip, so the ship stops drifting wide, and push towards the new heading as it turns.
+- **Attack runs are Dead Cargo's.** The kit's attack behaviour aimed through the same capped steering, so it is replaced by `AttackRunBehaviour`, with the same lead aim, bursts and missiles, and the same timings carried over.
+  - Beyond 900 m it boosts to close.
+  - Nearer, it matches the target's speed and settles on its tail at 250 m, closing or easing off by up to 40 m/s, instead of overshooting at full throttle.
+- **Boost where it counts.** Break-aways extend on boost. A pursuit boosts while it is more than 800 m from where the target should be. Withdrawals boost, as before.
+- **Avoidance bends the course.** The kit's collision avoidance still scans the way ahead, but no longer takes over the controls.
+  - From a risk of 0.1 it starts bending the heading towards its way out, and sheds up to 60% of the speed.
+  - At 0.5 it has the heading entirely.
+  - So a hunter swerves round a rock and carries on fighting. AVOIDING is no longer a state: it shows as an **avoiding** flag beside whatever the pilot is doing.
+- **Readouts.** Channel **8 (AI)** draws a blue arrow along the heading each pilot is turning to (after avoidance), and adds **avoiding** and **boost** flags. The God Menu **Ships** rows add each ship's speed and the same flags.
+- **Set Up Sector upgrades the prefab.** The **Authority Pilot** step adds the parts an older prefab lacks and keeps the tuning on the parts it has.
+
+### Implementation (step 2)
+| File | Role |
+|---|---|
+| `Scripts/AI/PilotFlight.cs` | The flight controller: turning, banking, speed, thrusters, boost, blended avoidance |
+| `Scripts/AI/PilotMath.cs` | Gains the attitude error with banking, the per-axis steering, thrust for a speed, the tail speed, blending: pure maths |
+| `Scripts/AI/AttackRunBehaviour.cs` | Dead Cargo's attack run: lead aim, bursts, missiles, closing on and sitting on a tail |
+| `Scripts/AI/BreakAwayBehaviour.cs`, `FlyToBehaviour.cs` | Fly through the controller; break-aways boost |
+| `Scripts/AI/DogfightBehaviour.cs` | Runs Dead Cargo's attack run |
+| `Scripts/AI/PilotBrain.cs`, `PilotState.cs`, `PilotStateNames.cs` | Avoidance is a flag, not a state; speeds as shares of top speed; pursuit boost |
+| `Editor/AuthorityPilotSetup.cs` | Builds or upgrades the prefab part by part |
+| `Editor/GodMenu/Tabs/AuthorityTab.cs`, `Scripts/Debugging/DebugReadouts.cs`, `DebugWorldDraw.cs` | Speed, avoiding and boost; the heading arrow |
+
+The controller drives the kit's own `VehicleEngines3D` through its public inputs and reads the kit avoidance's public obstacle data. No kit file is changed.
+
+### Verified outside Unity (step 2)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The pilot maths checks pass outside Unity against the same source. Each one uses the kit fighter's numbers: steering of 8, 8 and 14, damping 3, thrust 400 on each axis.
+  - On one axis, turns of 17°, 115° and 178° settle in 0.5, 1.3 and 1.8 s, overshooting by 0.01° at most.
+  - A full 3D simulation turns the ship from level flight onto six headings: 90° right, a steep climb, a steep dive, almost straight behind, straight behind, and back-left-up. The nose is on each within 1.9 s and stays within 1° after.
+  - The steering signs match Unity's axes: a heading above pitches the nose up, a hard right yaws right and banks the roof into the turn, straight behind loops up, and straight flight rolls back towards level.
+  - Thrust holds an exact speed against the damping, cancels sideslip, slows to corner speed off the nose, and settles on the wanted speed. The tail speed matches, closes and eases off as it should.
+- Not run in Unity: the prefab upgrade, and how the new flying looks and fights.
+
+### Test steps (step 2)
+1. Click into Unity and let it compile. In Polaris, the **Project** tab shows **Authority Pilot** missing: press **Set Up Sector** and save the scene. The **AuthorityPilot** prefab gains a **Flight** child. **Attack Run** now holds Dead Cargo's attack run, with the kit's gun timings carried over, and the kit's attack behaviour is gone.
+2. Press Play and launch. Tick **Invulnerable** (Player tab) and **Hold Heat** (Heat tab), then click **NOTICED**. Turn on overlay channel **8 (AI)**: each hunter has a blue arrow showing the heading it is turning to.
+3. Watch it come round. It banks into hard turns and pulls through them, then rolls level, and its nose stops on the arrow without wobbling.
+4. Pull up and climb straight up, then dive straight down. The hunter follows you steeply both ways. It could not go more than 45° from level before.
+5. Fly straight at a steady speed. The hunter settles on your tail about 250 m back, matching your speed instead of overshooting, and fires in bursts. Slow down or speed up: it follows suit. The **Ships** row shows its speed.
+6. Boost away until you are more than 900 m off. The hunter boosts after you, and its label shows **boost**. On break-aways it also boosts off along its heading.
+7. Teleport more than 2 km away, as in step 1. Pursuing, it boosts while it is more than 800 m out, then circles at half speed.
+8. Lead it into the asteroid belt. Near rocks its label shows **avoiding** and the blue arrow bends away from the rock. It swerves round and carries on fighting, without the sudden lurch of before.
+9. Watch it from behind in a hard turn. It slides into the turn on its thrusters instead of drifting wide.
+10. **Withdraw All**: they boost away, and leave as in step 1.
+
+### Tuning (step 2)
+On the **AuthorityPilot** prefab:
+- **Flight:**
+  - Avoidance Start, Avoidance Full, Avoidance Slowdown.
+  - Turn Response, Braking Share, Rate Gain.
+  - Bank Start, Bank Full, Levelling.
+  - Corner Speed, Speed Gain, Thruster Assist, Boost Angle.
+- **Attack Run:** Tail Distance, Boost Distance, Closing Speed, Max Firing Angle, Max Firing Distance, Burst Time, Burst Pause, Missile Interval.
+- **Pilot Brain:** Pursuit Speed, Pursuit Boost Distance, Hold Speed (shares of top speed).
+- **Break Away:** Speed, Boost.
+
+**Fly To**'s Turning Throttle from step 1 is replaced by the controller's Corner Speed.
+
+### Fix (radar errors, after the first look at step 2)
+On 2026-11-17, testing step 2, the Console filled with tens of thousands of `MissingReferenceException` errors from the kit's `Tracker`. A few more came from the HUD's target boxes and radar.
+- **The cause.** The kit's radar never forgets a trackable. When an object one of its trackers was tracking is destroyed, the tracker's next update fails on it, and that update stops before it has let go, so it fails again every frame from then on.
+  - A kill is safe: the kit switches a ship off when it detonates, so every tracker lets go before the wreck is destroyed 6 s later.
+  - A ship leaving alive was destroyed while still switched on, and every radar in range broke: yours and the other hunters'. Two things did this: withdrawn ships leaving out of sight (since step 1), and **Despawn All**.
+- **The fix.** A ship that leaves alive is now switched off first, the way the kit does on a kill, and destroyed 1 s later, once every radar has let go of it.
+
+| File | Role |
+|---|---|
+| `Scripts/Authority/AuthorityResponse.cs` | Switches a ship leaving alive off before destroying it |
+
+Verified outside Unity: every Dead Cargo assembly compiles with no warnings from Dead Cargo code. The kit's trackers were checked: they skip switched-off trackables and let go of them cleanly. Not run in Unity yet.
+
+#### Test steps (fix)
+1. Click into Unity, let it compile, clear the Console, and press Play.
+2. Click **NOTICED** with **Hold Heat** on, and let the hunter fight you for a bit. Then press **Withdraw All** and look away until it is gone. Spawn another and press **Despawn All**. The Console stays clear, and your radar and target boxes keep working.
+3. Shoot a hunter down: still no errors when its wreck goes.
+4. Then carry on with the step 2 test steps above.
+
+The user tested the fix and step 2 on 2026-11-17 ("all clear").
+
+### Design (step 3: dogfight skill)
+- **Pilots have a skill.** A pilot skill (`PilotSkill`, kept in `Data/AI/` as a `PilotSkillDefinition`) sets how well a pilot flies and fights. There are three presets:
+
+  | | Rookie | Regular | Veteran |
+  |---|---|---|---|
+  | Aim wanders off the lead, at most | 10° | 5° | 2° |
+  | Reaction time | 0.7 s | 0.35 s | 0.12 s |
+  | Steering used | 70% | 90% | 100% |
+  | Fires with the aim within | 22° | 15° | 6° |
+  | Fires from | 750 m | 600 m | 500 m |
+  | Bursts, then pauses | 2–4 s, 0.3–1 s | 1–3 s, 0.5–2 s | 0.6–1.5 s, 0.4–1.2 s |
+  | Missiles once locked | never | every 10–25 s | every 8–15 s |
+  | Breaks off at shields | never | 5% (as they fail) | 30% |
+  | Breaks off at hull, once | never | never | 50% |
+
+  Regular keeps the kit pilot's gun and missile timing. Rookies spray long bursts from far off and fight on until destroyed. Veterans wait for the shot, fire short bursts up close and look after themselves.
+- **Aim and the kit's aim assist.** The aim follows the target's lead position (where shots meet it) with the pilot's reaction time, so a target that jinks leaves slow pilots shooting behind it. It also wanders off the lead by up to the aim error, smoothly. The kit's ship guns aim themselves onto the lead within 3.3° of the nose, inside 1 km, so aim error only costs hits beyond that. A veteran's stays inside it; a rookie's is mostly outside.
+- **Turning by skill.** A pilot uses its share of the ship's steering, and plans its turns on that share, so a rookie turns more gently but still stops on its mark.
+- **One skill per heat tier.** Each tier of the **Authority Response** names the skill it sends: NOTICED Rookie, WANTED Regular, HUNTED Veteran. A pilot keeps its skill when heat changes, so rookies sent early stay rookies.
+- **A wing.** Every hunter flies in the Authority's wing.
+  - **They fan out.** Beyond 450 m from you, hunters attacking from bearings within 60° of each other push apart and swing round to their own sides first. So two or three come at you from different directions, not in a line.
+  - **They hold fire when a friend is in the way.** A hunter with a wingman within 30 m of its line of fire holds its guns.
+- **Breaking off to regroup.** A new state, **REGROUPING**: a pilot whose skill says it is hurt (shields, or once the hull, at or under its share) breaks off.
+  - It boosts away from you up to 40° off the straight line, then circles 1.2 km out.
+  - It comes back once its shields are back to 50%, after at least 5 s and at most 25 s. With the kit fighter's recharge, a broken shield takes about 20 s.
+  - It will not break off again for 15 s.
+- **God Menu.**
+  - **Spawn by skill.** The **Ships** section has a button for each skill the tiers send, to spawn one pilot of that skill.
+  - **Break Hunters' Shields** knocks the hunting ships' shields out, as if shot away, to test breaking off.
+  - **Rows.** Each row shows the pilot's skill and shields, and **holding fire** when it is.
+- **Overlay.** Channel 8 adds the skill, shields and the **holding fire** flag.
+
+### Implementation (step 3)
+| File | Role |
+|---|---|
+| `Scripts/AI/PilotSkill.cs`, `PilotSkillDefinition.cs` | A pilot's skill and its presets; the named skill asset |
+| `Scripts/AI/PilotWing.cs` | Hunters together: fanning out, and the line of fire |
+| `Scripts/AI/AttackRunBehaviour.cs` | Aim with reaction time and aim error; gun discipline, range and missiles from the skill; fanning out; holding fire |
+| `Scripts/AI/PilotBrain.cs`, `PilotState.cs`, `PilotStateNames.cs` | Skill and wing; REGROUPING; shield and hull readouts; `BreakShields` for debug tools |
+| `Scripts/AI/PilotFlight.cs` | Steering share |
+| `Scripts/AI/DogfightBehaviour.cs` | Passes the skill and wing to the attack run |
+| `Scripts/AI/PilotMath.cs` | Gains the aim lag, the bearing push and the distance to the line of fire: pure maths |
+| `Scripts/Authority/AuthorityTierResponse.cs`, `AuthorityResponse.cs` | A skill per tier; spawning by skill; the wing |
+| `Editor/AuthorityPilotSetup.cs` | Creates the skill assets, gives each tier its skill, gives the pilot the kit's shield and hull types |
+| `Editor/GodMenu/Tabs/AuthorityTab.cs`, `Scripts/Debugging/DebugReadouts.cs`, `DebugWorldDraw.cs` | Spawning by skill, Break Hunters' Shields, skill, shields and holding fire |
+
+The attack run's own gun timing from step 2 now comes from the skill, so it has left the **Attack Run** part. No kit file is changed.
+
+### Verified outside Unity (step 3)
+- Every Dead Cargo assembly compiles with Unity's own compiler, with no warnings from Dead Cargo code.
+- The pilot maths checks pass outside Unity against the same source, the step 1 and 2 checks with them:
+  - The aim lag closes 63% of a gap in one reaction time, the same at 20 and at 100 frames a second; no reaction time snaps.
+  - Three wingmen starting within a couple of degrees of one bearing fan out until the closest pair are 60° apart.
+  - Wingmen 90° apart do not push. A wingman just to one side pushes the bearing round the other way. Identical bearings split both ways.
+  - The line of fire finds a wingman 10 m off it halfway along, and a wingman behind the shooter is never in the way.
+  - Every count gets better from Rookie to Regular to Veteran, the Veteran's aim error stays inside the aim assist, and Regular keeps the kit pilot's timing.
+- Not run in Unity: the setup, and how the skills, the wing and regrouping look and fight.
+
+### Test steps (step 3)
+1. Click into Unity and let it compile. In Polaris, the **Project** tab shows **Authority Pilot** missing: press **Set Up Sector** and save the scene.
+   - `Assets/DeadCargo/Data/AI/` holds **RookiePilot**, **RegularPilot** and **VeteranPilot**.
+   - On the **Authority Response**, **Tier Responses** read NOTICED Rookie, WANTED Regular, HUNTED Veteran.
+   - The prefab's **Pilot Brain** has **Shield Type** and **Hull Type** set.
+2. Press Play and launch. Tick **Invulnerable** (Player tab) and **Hold Heat** (Heat tab), then click **NOTICED**. In the **Authority** tab, untick **Auto Spawn** and press **Despawn All**. The **Ships** section shows **Rookie**, **Regular** and **Veteran** buttons.
+3. Press **Rookie**. Its row and overlay label (channel 8) say **Rookie**. It opens fire from far off and from wide angles in long bursts, a lot of it missing, turns a little more gently, and never launches missiles.
+4. **Despawn All**, then press **Veteran**. It waits for the shot, fires short bursts from closer in, lands far more of them on your shields, turns hard, and launches missiles every 8 to 15 s once locked.
+5. **Despawn All**, then press **Regular** and shoot its shields down, or press **Break Hunters' Shields**. It reads **REGROUPING**, boosts away and circles about 1.2 km out, its shield climbing in its row. About 20 s later, at 50%, it reads **ENGAGING** and comes back.
+6. Press **Rookie** and **Break Hunters' Shields**: the rookie fights on regardless.
+7. Press **Veteran** and wear its shields down by shooting: it breaks off at 30%, before they fail. Keep at it: once its hull is half gone it breaks off once more, even with shields up.
+8. **Despawn All**, then press **Regular** three times and fly a long way off, then turn back. Watch the overlay arrows: as they close they swing apart and come at you from different sides, not in a line.
+9. Turn so one hunter is between you and another, close behind it. The one behind reads **holding fire** and does not shoot through its wingman.
+10. Tick **Auto Spawn** again and step through **NOTICED**, **WANTED** and **HUNTED**: rookies, then regulars, then veterans arrive. Ships already out keep their skill.
+
+### Tuning (step 3)
+- **Skill assets** in `Data/AI/`: every row of the table above.
+- On the **AuthorityPilot** prefab:
+  - **Attack Run:** Spread Distance, Spread Angle, Wingman Clearance.
+  - **Pilot Brain:** Regroup Distance, Return Shield, Shortest and Longest Regroup, Regroup Cooldown.
+- On the **Authority Response:** each tier's **Pilot Skill**.
