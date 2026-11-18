@@ -4,10 +4,16 @@ using UnityEngine;
 
 namespace DeadCargo.EditorTools.GodMenu
 {
-    /// <summary>Inspect and edit the player ship's cargo hold.</summary>
+    /// <summary>Inspect and edit the player ship's cargo hold, with a small picture of its grid.</summary>
     internal sealed class CargoTab : GodMenuTab
     {
         private static readonly string[] HoldLabels = { "Empty Hold", "Jettison All" };
+
+        // The grid picture, in editor pixels.
+        private const float PreviewCell = 14f;
+        private const float PreviewGap = 1f;
+        private static readonly Color PreviewFree = new Color(0.16f, 0.17f, 0.2f);
+        private static readonly Color PreviewSelected = new Color(0.95f, 0.93f, 0.89f);
 
         public override string Title => "Cargo";
         public override GodMenuGroup Group => GodMenuGroup.Run;
@@ -24,7 +30,7 @@ namespace DeadCargo.EditorTools.GodMenu
                     return null;
 
                 string darkMatter = hold.DarkMatterUnits > 0 ? $"  ·  {hold.DarkMatterUnits} DM" : "";
-                return $"{hold.TotalMass:0.#} / {hold.MassCapacity:0.#} t{darkMatter}";
+                return $"{hold.TotalMass:0.#} / {hold.MassCapacity:0.#} t  ·  {hold.UsedCells}/{hold.CellCount} cells{darkMatter}";
             }
         }
 
@@ -51,10 +57,13 @@ namespace DeadCargo.EditorTools.GodMenu
                 float load = hold != null ? hold.LoadFraction : 0f;
 
                 GodMenuGUI.Bar(load, $"{mass:0.#} / {capacity:0.#} t", GodMenuGUI.Accent);
+                GodMenuGUI.Field("Space", hold != null ? $"{hold.UsedCells} / {hold.CellCount} cells" : "0");
                 GodMenuGUI.Field("Dark Matter", hold != null ? $"{hold.DarkMatterUnits} / {hold.DarkMatterCapacity}" : "0");
                 GodMenuGUI.Field("Value", hold != null ? $"{hold.TotalValue:N0} cr" : "0 cr");
 
                 CargoJettison jettison = hold != null ? hold.GetComponent<CargoJettison>() : null;
+                if (hold != null)
+                    DrawGrid(hold, jettison != null ? jettison.SelectedId : 0);
                 bool[] enabled = { true, jettison != null };
 
                 int clicked = GodMenuGUI.ButtonRow(HoldLabels, enabled);
@@ -65,6 +74,32 @@ namespace DeadCargo.EditorTools.GodMenu
                     hold.Clear();
                 else if (clicked == 1)
                     jettison.JettisonAll();
+            }
+        }
+
+        // Each unit in its item's colour, the selected one outlined, as the hold panel shows it.
+        private static void DrawGrid(CargoHold hold, int selectedId)
+        {
+            float step = PreviewCell + PreviewGap;
+            Rect area = GUILayoutUtility.GetRect(hold.GridColumns * step, hold.GridRows * step, GUILayout.ExpandWidth(false));
+            if (Event.current.type != EventType.Repaint)
+                return;
+
+            for (int y = 0; y < hold.GridRows; ++y)
+            {
+                for (int x = 0; x < hold.GridColumns; ++x)
+                    EditorGUI.DrawRect(new Rect(area.x + x * step, area.y + y * step, PreviewCell, PreviewCell), PreviewFree);
+            }
+
+            foreach (CargoPlacement unit in hold.Placements)
+            {
+                Vector2Int size = unit.Size;
+                var block = new Rect(area.x + unit.Cell.x * step, area.y + unit.Cell.y * step, size.x * step - PreviewGap,
+                    size.y * step - PreviewGap);
+                if (unit.Id == selectedId)
+                    EditorGUI.DrawRect(new Rect(block.x - 1f, block.y - 1f, block.width + 2f, block.height + 2f), PreviewSelected);
+
+                EditorGUI.DrawRect(block, unit.Item.BlockColor);
             }
         }
 
@@ -122,7 +157,8 @@ namespace DeadCargo.EditorTools.GodMenu
 
                 foreach (CargoItemDefinition item in GodMenuContext.CargoItems)
                 {
-                    GodMenuGUI.BeginItemRow(item.DisplayName, $"{item.UnitMass:0.#} t  ·  {item.UnitValue:N0} cr");
+                    string size = item.Slot == CargoSlot.Hold ? $"{item.Size.x}×{item.Size.y}  ·  " : "";
+                    GodMenuGUI.BeginItemRow(item.DisplayName, $"{size}{item.UnitMass:0.#} t  ·  {item.UnitValue:N0} cr");
                     bool addOne = GodMenuGUI.MiniButton("+1", 30f);
                     bool addFive = GodMenuGUI.MiniButton("+5", 30f);
                     bool fill = GodMenuGUI.MiniButton("Fill", 40f);

@@ -17,13 +17,14 @@ namespace DeadCargo.UI
 {
     /// <summary>
     /// The run HUD: heat and hunters, the jump drive, the extraction point, the player's hold, and screen markers
-    /// for the extraction point, Authority ships and nearby pickups.
+    /// for the extraction point, Authority ships and nearby pickups. I opens the hold panel, which has the mouse while it
+    /// is open: steering holds and the guns are off until it closes.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler))]
     public sealed class ExtractionHud : MonoBehaviour
     {
-        private const KeyCode ManifestKey = KeyCode.I;
+        private const KeyCode HoldKey = KeyCode.I;
         private const float NoticeDuration = 2.7f;
         private const float DisruptedDisplayTime = 0.6f;
         private const int UiLayer = 5;
@@ -73,6 +74,8 @@ namespace DeadCargo.UI
 
         private HudMarkerLayer markers;
         private ExtractionHudView view;
+        private CargoHoldPanel holdPanel;
+        private readonly KitControlsPause controlsPause = new KitControlsPause();
         private GameAgentManager agents;
         private Vehicle vehicle;
         private CargoHold hold;
@@ -98,8 +101,7 @@ namespace DeadCargo.UI
         private int displayedPointState = -1;
         private int displayedPointValue = -1;
         private int displayedPointDistance = -1;
-        private int manifestPage;
-        private bool manifestOpen;
+        private bool holdOpen;
         private float noticeStarted;
         private bool noticeVisible;
         private bool noticeUrgent;
@@ -129,6 +131,7 @@ namespace DeadCargo.UI
             // Built first, so the markers draw behind the plates.
             markers = new HudMarkerLayer((RectTransform)transform, MarkerCapacity);
             view = new ExtractionHudView((RectTransform)transform);
+            holdPanel = new CargoHoldPanel((RectTransform)transform);
         }
 
         private void Start()
@@ -168,6 +171,9 @@ namespace DeadCargo.UI
             if (run != null)
                 run.Ended -= OnRunEnded;
             ExtractionPoint.StateChanged -= OnPointStateChanged;
+
+            // The scene is going; the next scene sets up its own cursor and controls.
+            SetHoldOpen(false, false);
             UnbindVehicle();
         }
 
@@ -188,19 +194,12 @@ namespace DeadCargo.UI
             markers.SetCoveredCorner(view.StackSize);
             UpdateMarkers();
 
-            if (hold != null && Time.timeScale > 0f)
-            {
-                if (Input.GetKeyDown(ManifestKey))
-                    SetManifestOpen(!manifestOpen);
+            bool playing = Time.timeScale > 0f;
+            if (hold != null && playing && Input.GetKeyDown(HoldKey))
+                SetHoldOpen(!holdOpen, true);
 
-                if (manifestOpen)
-                {
-                    if (Input.GetKeyDown(KeyCode.PageUp))
-                        SetManifestPage(manifestPage - 1);
-                    else if (Input.GetKeyDown(KeyCode.PageDown))
-                        SetManifestPage(manifestPage + 1);
-                }
-            }
+            holdPanel.Tick(Time.unscaledDeltaTime, playing);
+            controlsPause.Tick();
 
             if (noticeVisible && Time.unscaledTime - noticeStarted >= NoticeDuration)
             {
@@ -240,6 +239,7 @@ namespace DeadCargo.UI
                 if (jettison != null)
                     jettison.Jettisoned += OnJettisoned;
 
+                holdPanel.Bind(hold, jettison, handling);
                 RefreshCargo();
             }
 
@@ -269,6 +269,8 @@ namespace DeadCargo.UI
 
         private void UnbindVehicle()
         {
+            SetHoldOpen(false, true);
+            holdPanel.Unbind();
             if (vehicle != null)
                 vehicle.onDestroyed.RemoveListener(OnVehicleDestroyed);
             prompts.Unbind();
@@ -301,8 +303,6 @@ namespace DeadCargo.UI
             handling = null;
             jettison = null;
             jumpDrive = null;
-            manifestOpen = false;
-            manifestPage = 0;
             noticeVisible = false;
         }
 
@@ -314,7 +314,8 @@ namespace DeadCargo.UI
 
         private void OnRunEnded(RunResult result)
         {
-            // The run result screen takes over.
+            // The run result screen takes over, with the controls already off and the cursor its own.
+            SetHoldOpen(false, false);
             gameObject.SetActive(false);
         }
 
@@ -333,9 +334,9 @@ namespace DeadCargo.UI
 
         private void RefreshCargo()
         {
-            view.SetCargo(hold, manifestOpen);
-            if (manifestOpen)
-                SetManifestPage(manifestPage);
+            view.SetCargo(hold, holdOpen);
+            if (holdOpen)
+                holdPanel.Refresh();
 
             // The idle plate shows fuel or spool time, and both depend on the hold.
             if (jumpDrive != null && !jumpDrive.IsSpooling)
@@ -809,19 +810,29 @@ namespace DeadCargo.UI
             }
         }
 
-        private void SetManifestOpen(bool open)
+        // Closing with restoreControls false leaves the cursor and controls to whoever owns them now (the end of the run).
+        // A selection made in the panel is dropped on close, so J outside it goes back to the heaviest stack.
+        private void SetHoldOpen(bool open, bool restoreControls)
         {
-            manifestOpen = open;
-            RefreshCargo();
-            Layout();
-        }
+            if (open == holdOpen)
+                return;
 
-        private void SetManifestPage(int page)
-        {
-            int last = Mathf.Max(0, (hold.Stacks.Count - 1) / ExtractionHudView.RowsPerPage);
-            manifestPage = Mathf.Clamp(page, 0, last);
-            view.SetManifest(hold, handling, jettison != null && jettison.CanJettison, manifestPage);
-            Layout();
+            holdOpen = open;
+            if (open)
+            {
+                controlsPause.Begin(agents != null ? agents.FocusedGameAgent : null);
+                holdPanel.Open();
+            }
+            else
+            {
+                holdPanel.Close();
+                controlsPause.End(restoreControls);
+                if (jettison != null)
+                    jettison.ClearSelection();
+            }
+
+            if (hold != null)
+                view.SetCargo(hold, holdOpen);
         }
 
         // Pickups pulse their own tag rather than raising a notice: dark matter the jump drive's, cargo the hold's.
@@ -838,9 +849,20 @@ namespace DeadCargo.UI
             ShowNotice($"NOT ENOUGH DARK MATTER  ·  {jumpDrive.DarkMatterAboard} / {jumpDrive.DarkMatterPerJump}", HudFactory.WarningColor, true);
         }
 
-        private void OnCapacityExceeded(CargoItemDefinition item)
+        private void OnCapacityExceeded(CargoItemDefinition item, CargoLimit limit)
         {
-            ShowNotice("HOLD FULL  ·  Cargo left in space", HudFactory.WarningColor, true);
+            switch (limit)
+            {
+                case CargoLimit.Space:
+                    ShowNotice("NO ROOM IN THE HOLD  ·  Cargo left in space", HudFactory.WarningColor, true);
+                    break;
+                case CargoLimit.DarkMatter:
+                    ShowNotice("DARK MATTER SLOT FULL  ·  Left in space", HudFactory.WarningColor, true);
+                    break;
+                default:
+                    ShowNotice("HOLD FULL  ·  Cargo left in space", HudFactory.WarningColor, true);
+                    break;
+            }
         }
 
         private void OnJettisoned(CargoStack stack)
@@ -885,7 +907,7 @@ namespace DeadCargo.UI
 
         private void Layout()
         {
-            view.Layout(heat != null, hold != null, jumpDrive != null, cruise != null, hasPointPlate, manifestOpen, noticeVisible);
+            view.Layout(heat != null, hold != null, jumpDrive != null, cruise != null, hasPointPlate, noticeVisible);
         }
     }
 }

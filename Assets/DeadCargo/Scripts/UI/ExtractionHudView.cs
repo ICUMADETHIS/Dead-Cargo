@@ -8,12 +8,11 @@ namespace DeadCargo.UI
     /// The run HUD as pop-up tags (<see cref="HudTag"/>) stacked up the screen's right edge, above the status strip, each
     /// shown only while it matters: cargo when it changes or the hold is full, heat while there is any, the jump drive while
     /// it is ready, spooling or taking on fuel, the extraction point near or in use, cruise while a destination is ahead,
-    /// the ship's own prompts (such as launching) while they apply, and notices on top. The manifest is an inked panel on the left while it is open. The stack eases as tags come and go.
+    /// the ship's own prompts (such as launching) while they apply, and notices on top. The stack eases as tags come and go.
+    /// The hold itself opens as its own panel (<see cref="CargoHoldPanel"/>).
     /// </summary>
     internal sealed class ExtractionHudView
     {
-        internal const int RowsPerPage = 5;
-
         private const float TagWidth = 340f;
         private const float NoticeWidth = 520f;
         private const float Gap = 14f;
@@ -23,16 +22,8 @@ namespace DeadCargo.UI
         private const float StackLift = 180f;
 
         private const float PulseTime = 3.5f;
-        private const float ManifestWidth = 390f;
-        private const float ManifestLeft = 40f;
-        private const float ManifestLift = 30f;
-        private const float ManifestSlant = 0.06f;
-        private const float ManifestRowsTop = 74f;
-        private const float RowHeight = 24f;
 
         private const string PromptLabel = "SHIP";
-
-        private static readonly Color PanelFace = new Color32(24, 27, 34, 245);
 
         private readonly HudTag cargoTag;
         private readonly HudTag heatTag;
@@ -42,13 +33,6 @@ namespace DeadCargo.UI
         private readonly HudTag promptTag;
         private readonly HudTag noticeTag;
         private readonly HudTag[] stack;
-
-        private readonly RectTransform manifest;
-        private readonly HudSticker manifestBody;
-        private readonly Text handling;
-        private readonly Text emptyManifest;
-        private readonly Text manifestFooter;
-        private readonly Text[,] manifestRows = new Text[RowsPerPage, 4];
 
         private string heatStatus = "";
         private Color heatColor = HudFactory.Muted;
@@ -61,7 +45,7 @@ namespace DeadCargo.UI
         private string cargoMass = "";
         private string cargoValue = "";
         private bool cargoFull;
-        private bool manifestOpen;
+        private bool holdOpen;
 
         private string jumpHeadline;
         private float jumpHeadlineLeft;
@@ -85,36 +69,6 @@ namespace DeadCargo.UI
             promptTag = new HudTag(parent, "Prompt Tag", TagWidth, "");
             noticeTag = new HudTag(parent, "Notice Tag", NoticeWidth, null);
             stack = new[] { cargoTag, heatTag, jumpTag, pointTag, cruiseTag, promptTag, noticeTag };
-
-            manifest = HudFactory.Anchored("Cargo Manifest", parent, Vector2.zero, ManifestWidth, 160f);
-            manifestBody = manifest.gameObject.AddComponent<HudSticker>();
-            manifestBody.Configure(PanelFace, 4f, new Vector2(8f, -8f), ManifestSlant);
-
-            Text title = HudFactory.Label("Manifest Title", manifest, "CARGO MANIFEST", 22f, 10f, 220f, 30f, 24, HudFactory.CargoColor);
-            title.font = HudFactory.FigureFont;
-            title.fontStyle = FontStyle.Italic;
-            HudFactory.Unclipped(title);
-            handling = Caption("Handling Penalties", manifest, "", 200f, 16f, 168f, 20f, 12, HudFactory.CargoColor, TextAnchor.MiddleRight);
-            Caption("Item Column", manifest, "ITEM", 24f, 48f, 140f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleLeft);
-            Caption("Quantity Column", manifest, "QTY", 170f, 48f, 34f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
-            Caption("Mass Column", manifest, "MASS", 208f, 48f, 62f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
-            Caption("Value Column", manifest, "VALUE", 276f, 48f, 92f, 18f, 11, HudFactory.Muted, TextAnchor.MiddleRight);
-
-            for (int i = 0; i < RowsPerPage; i++)
-            {
-                float y = ManifestRowsTop + i * RowHeight;
-                manifestRows[i, 0] = Caption("Item", manifest, "", 24f, y, 144f, RowHeight, 14, HudFactory.Ink, TextAnchor.MiddleLeft);
-                manifestRows[i, 1] = Numbers("Quantity", manifest, 170f, y, 34f);
-                manifestRows[i, 2] = Numbers("Mass", manifest, 208f, y, 62f);
-                manifestRows[i, 3] = Numbers("Value", manifest, 276f, y, 92f);
-                HudFactory.Fit(manifestRows[i, 0], 11);
-                HudFactory.Fit(manifestRows[i, 3], 11);
-            }
-
-            emptyManifest = Caption("Empty Hold", manifest, "HOLD EMPTY", 24f, ManifestRowsTop, 250f, RowHeight, 14, HudFactory.Muted,
-                TextAnchor.MiddleLeft);
-            manifestFooter = Caption("Manifest Controls", manifest, "", 24f, 0f, 344f, 20f, 12, HudFactory.Muted, TextAnchor.MiddleLeft);
-            manifest.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -215,14 +169,14 @@ namespace DeadCargo.UI
             promptTag.SetProgress(-1f);
         }
 
-        /// <summary>The hold: shown while full or while the manifest is open, and for a while after it changes.</summary>
-        internal void SetCargo(CargoHold hold, bool expanded)
+        /// <summary>The hold: shown while full or while the hold panel is open, and for a while after it changes.</summary>
+        internal void SetCargo(CargoHold hold, bool panelOpen)
         {
             cargoFull = hold.LoadFraction >= .9999f;
             cargoMass = $"{hold.TotalMass:0.#} / {hold.MassCapacity:0.#} T";
             cargoValue = $"{hold.TotalValue:N0} CR";
-            manifestOpen = expanded;
-            cargoTag.SetHeld(cargoFull || expanded);
+            holdOpen = panelOpen;
+            cargoTag.SetHeld(cargoFull || panelOpen);
             cargoTag.SetProgress(hold.LoadFraction);
             ShowCargo();
         }
@@ -236,54 +190,13 @@ namespace DeadCargo.UI
             ShowCargo();
         }
 
-        internal void SetManifest(CargoHold hold, CargoLoadHandling loadHandling, bool canJettison, int page)
-        {
-            int start = page * RowsPerPage;
-            int count = Mathf.Min(RowsPerPage, hold.Stacks.Count - start);
-            int pageCount = Mathf.CeilToInt((float)hold.Stacks.Count / RowsPerPage);
-            for (int i = 0; i < RowsPerPage; i++)
-            {
-                bool visible = i < count;
-                for (int column = 0; column < 4; column++)
-                    manifestRows[i, column].enabled = visible;
-
-                if (!visible)
-                    continue;
-
-                CargoStack stack = hold.Stacks[start + i];
-                manifestRows[i, 0].text = stack.Item.DisplayName.ToUpperInvariant();
-                manifestRows[i, 1].text = stack.Quantity.ToString();
-                manifestRows[i, 2].text = $"{stack.Mass:0.#} t";
-                manifestRows[i, 3].text = $"{stack.Value:N0} cr";
-            }
-
-            emptyManifest.enabled = hold.IsEmpty;
-            if (loadHandling != null && loadHandling.isActiveAndEnabled)
-            {
-                int speed = Mathf.RoundToInt(100f * (1f - loadHandling.CurrentSpeedMultiplier));
-                int turn = Mathf.RoundToInt(100f * (1f - loadHandling.CurrentTurnMultiplier));
-                handling.text = speed != 0 || turn != 0 ? $"SPEED −{speed}%   TURN −{turn}%" : "";
-            }
-            else
-            {
-                handling.text = "";
-            }
-
-            string jettison = canJettison ? "[J] JETTISON HEAVIEST" : "";
-            string pages = pageCount > 1 ? $"[PGUP/PGDN]  {page + 1}/{pageCount}" : "";
-            manifestFooter.text = jettison.Length > 0 && pages.Length > 0 ? jettison + "       " + pages : jettison + pages;
-            float footer = ManifestRowsTop + Mathf.Max(1, count) * RowHeight + 6f;
-            HudFactory.SetOffset(manifestFooter.rectTransform, 24f, footer);
-            manifest.sizeDelta = new Vector2(ManifestWidth, footer + (manifestFooter.text.Length > 0 ? 30f : 8f));
-        }
-
         internal void SetNotice(string message, Color color)
         {
             noticeTag.SetContent(null, message, null, color);
         }
 
-        /// <summary>Which systems the HUD has, whether the manifest is open, and whether a notice is up.</summary>
-        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasCruise, bool hasPoint, bool isExpanded, bool hasNotice)
+        /// <summary>Which systems the HUD has, and whether a notice is up.</summary>
+        internal void Layout(bool hasHeat, bool hasCargo, bool hasJumpDrive, bool hasCruise, bool hasPoint, bool hasNotice)
         {
             heatTag.SetAvailable(hasHeat);
             cargoTag.SetAvailable(hasCargo);
@@ -291,10 +204,6 @@ namespace DeadCargo.UI
             cruiseTag.SetAvailable(hasCruise);
             pointTag.SetAvailable(hasPoint);
             noticeTag.SetHeld(hasNotice);
-
-            bool showManifest = hasCargo && isExpanded;
-            if (manifest.gameObject.activeSelf != showManifest)
-                manifest.gameObject.SetActive(showManifest);
         }
 
         /// <summary>
@@ -314,8 +223,6 @@ namespace DeadCargo.UI
                 jumpHeadline = null;
                 jumpTag.SetContent("JUMP DRIVE", jumpStatus, jumpFigure, jumpColor);
             }
-
-            manifest.anchoredPosition = new Vector2(ManifestLeft, coveredBottom + ManifestLift);
 
             float y = coveredBottom + StackLift;
             float widest = 0f;
@@ -353,25 +260,8 @@ namespace DeadCargo.UI
 
         private void ShowCargo()
         {
-            string label = cargoHeadline ?? (cargoFull ? "HOLD FULL" : manifestOpen ? "CARGO  ·  CLOSE" : "CARGO HOLD");
+            string label = cargoHeadline ?? (cargoFull ? "HOLD FULL" : holdOpen ? "CARGO  ·  CLOSE" : "CARGO HOLD");
             cargoTag.SetContent(label, cargoMass, cargoValue, cargoFull ? HudFactory.WarningColor : HudFactory.CargoColor);
-        }
-
-        private static Text Caption(string name, RectTransform parent, string content, float x, float y, float width, float height, int size,
-            Color tint, TextAnchor alignment)
-        {
-            Text text = HudFactory.Label(name, parent, content, x, y, width, height, size, tint, alignment);
-            text.font = HudFactory.StickerFont;
-            HudFactory.Unclipped(text);
-            return text;
-        }
-
-        private static Text Numbers(string name, RectTransform parent, float x, float y, float width)
-        {
-            Text text = HudFactory.Label(name, parent, "", x, y, width, RowHeight, 16, HudFactory.Ink, TextAnchor.MiddleRight);
-            text.font = HudFactory.FigureFont;
-            HudFactory.Unclipped(text);
-            return text;
         }
     }
 }

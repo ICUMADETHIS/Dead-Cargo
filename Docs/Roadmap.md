@@ -24,6 +24,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen: 1 a cruise drive, 2 the descent to the ground, 2b an autopilot cruise, 2c a long atmospheric descent, 2d a real star system, 3 the sun's and planets' look. First person on C | Steps 1, 2 and 2b and first person on C tested 2026-11-17. Step 2c (atmospheric descent) built; in its test the ship kept rolling itself, fixed with level flight, tested 2026-11-17 ("a lot better") |
 | 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Steps 1 (status strip) and 2 (pop-up tags) built and fixed after a first look, step 2 tested; step 3 (markers and reticle) built, awaiting test |
 | 6.14 | Authority AI | Authority pilots that fly well, fight well and can be shaken off, in six steps: 1 Dead Cargo's own pilot, 2 flight, 3 dogfight skill, 4 sight and memory, 5 heat that follows sight, 6 arrival and ship types | Steps 1 (Authority pilot) and 2 (flight) tested 2026-11-17. Step 3 (dogfight skill) built and compile-checked, awaiting test |
+| 6.15 | Hold grid | The hold as a grid you pack (concept B, Flight Panel, of three, chosen 2026-11-18): every unit takes cells as well as tonnes, and the hold panel on I takes the mouse to select, drag, turn and dump. 1 the grid and the hold panel | Step 1 built and compile-checked, awaiting test |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -2252,3 +2253,95 @@ The attack run's own gun timing from step 2 now comes from the skill, so it has 
   - **Attack Run:** Spread Distance, Spread Angle, Wingman Clearance.
   - **Pilot Brain:** Regroup Distance, Return Shield, Shortest and Longest Regroup, Regroup Cooldown.
 - On the **Authority Response:** each tier's **Pilot Skill**.
+
+---
+
+## Phase 6.15: Hold grid
+
+### Goal
+The hold becomes a space you pack, not a list. On 2026-11-18 the user asked for a grid inventory in the ship, opened with I, with placeholder loot and dark matter shown in it. Of three concepts (A hull cutaway, B flight panel, C cargo pods) they chose **B, Flight Panel**, and asked for the mouse to select and drag items.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Grid and hold panel | Every unit of cargo takes cells on an 8 × 5 grid as well as tonnes. The hold panel on I takes the mouse: select, drag, turn, and drag out to dump. J dumps the selected unit and holding J dumps the rest. Dark matter shows in its sealed tank. Placeholder loot in three new sizes | Built and compile-checked, awaiting test |
+
+Later steps are chosen after step 1's test. Item icons on the blocks are the obvious next one.
+
+### Design (step 1)
+- **Two limits.** Ordinary cargo needs tonnes (40 t, which still slows the ship) and a free space on the grid (8 × 5 cells by default). A pickup that does not fit is partly collected, as before. The notice says which limit was hit: HOLD FULL for tonnes, NO ROOM IN THE HOLD for space.
+- **Item sizes.** Each item has a size in cells, a short name for narrow blocks, and a block colour:
+
+  | Item | Size | Mass | Value |
+  |---|---|---|---|
+  | Scrap Metal | 1 × 1 | 2 t | 40 cr |
+  | Fuel Cells | 1 × 2 | 4 t | 150 cr |
+  | Reactor Core | 2 × 2 | 12 t | 900 cr |
+  | Gun Crate (placeholder) | 3 × 2 | 6 t | 380 cr |
+  | Data Shards (placeholder) | 1 × 1 | 0.5 t | 220 cr |
+  | Med Kits (placeholder) | 1 × 1 | 1 t | 90 cr |
+
+- **Packing.** New cargo goes into the first space it fits, row by row from the top-left, upright before turned. Each unit is its own block. Everything else (the God Menu's contents, the run report, the stash) still lists cargo by item.
+- **Dark matter takes no space.** It shows as a sealed violet tank above the grid, in units out of 200, and cannot be dragged or dumped.
+- **The hold panel (I).** An inked panel slides in on the left. It holds:
+  - HOLD, and the value at risk (cargo and dark matter).
+  - The mass bar, the speed and turn penalties, and the cells used.
+  - The dark matter tank.
+  - The grid.
+  - The selected item: size, mass, value, and credits per tonne.
+  - The controls.
+
+  It replaces the list manifest and its Page Up / Page Down.
+- **The mouse.** While the panel is open the cursor is free.
+  - Click a block to select it (a cream outline). Click an empty cell to clear the selection.
+  - Drag a block to move it. A green or red outline shows whether it fits where it would land. **R** turns it while it is dragged.
+  - Drag it out of the panel and let go to dump it. Outside the panel the block turns red and reads DUMP. It leaves as a crate of one.
+  - Steering holds, so the ship keeps its heading. Throttle, strafe and boost still work. The guns do not fire.
+  - Closing the panel recentres the steering reticle, so the ship does not swing to where the mouse went.
+- **J.** A press ejects the selected unit, or with none selected the heaviest stack, as before. Holding J for 0.6 s dumps the rest of the hold; dark matter stays. Closing the panel clears the selection.
+- **God Menu.** The Cargo tab shows cells in its header and in the Hold section, a small picture of the grid in item colours with the selected unit outlined, and each item's size on the Add Cargo rows.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Cargo/CargoGrid.cs` | The grid: cells, placed units, first-fit packing, moves, counting what fits |
+| `Scripts/Cargo/CargoPlacement.cs` | One unit's place: item, top-left cell, turned or not |
+| `Scripts/Cargo/CargoLimit.cs` | What stopped cargo fitting: mass, space or the dark matter slot |
+| `Scripts/Cargo/CargoHold.cs` | Owns the grid. Adding packs units, removing frees them. `Placements`, `RemovePlacement`, `CanMove`, `Move`; `CapacityExceeded` names the limit |
+| `Scripts/Cargo/CargoItemDefinition.cs` | Gains `Size`, `ShortName` and `BlockColor` |
+| `Scripts/Cargo/CargoJettison.cs` | The selected unit, `JettisonPlacement`, `JettisonNext` |
+| `Scripts/Cargo/CargoJettisonInput.cs` | A press ejects the next unit; holding dumps the rest |
+| `Scripts/UI/CargoHoldPanel.cs` | The panel, and the mouse on it |
+| `Scripts/UI/HudGridLines.cs` | The grid's floor, lines and border |
+| `Scripts/UI/KitControlsPause.cs` | While the panel is open: frees the cursor, holds the kit's steering and weapon triggers, and puts them back |
+| `Scripts/UI/ExtractionHud.cs`, `ExtractionHudView.cs` | I opens the panel; the list manifest is removed; the new notices |
+| `Editor/CargoPhaseSetup.cs` | Gives the items their sizes and colours, once, on items with no short name yet, and creates the placeholder items |
+| `Editor/GodMenu/Tabs/CargoTab.cs` | Cells and the grid picture |
+
+The kit's steering is held through its public `DisableSteering` and `EnableSteering`. Its reticle is recentred by reflection on `reticuleViewportPosition`, the way the Status Strip already reaches the kit's cursor canvas. No kit file is changed, and the ship and the scene need no new components.
+
+### Test (step 1)
+1. Outside Play Mode, open Polaris or the test range, and press **Re-run Setup** in the God Menu **Project** tab. Gun Crate, Data Shards and Med Kits appear in `Assets/DeadCargo/Data/Cargo/`, and the older items gain a Size, Short Name and Block Color.
+2. Press Play and board the ship. Press **I**. The hold panel slides in on the left: HOLD and AT RISK, the mass bar, SPEED / TURN / CELLS, the dark matter tank, an empty 8 × 5 grid and "CLICK AN ITEM TO SELECT IT". The mouse cursor shows.
+3. With the panel open, move the mouse: the ship does not turn. **W** and **S** still change speed. Clicking does not fire.
+4. In the God Menu **Cargo** tab, add a Reactor Core, two Fuel Cells, a Gun Crate, three Scrap Metal, two Data Shards and a Med Kit. Blocks appear in the panel and in the tab's grid picture, packed from the top-left. Fly through a pickup and its blocks appear too. Fly through dark matter: the tank fills, the grid does not.
+5. Click a block. It gets a cream outline, and the row under the grid names it with its size, mass, value and credits per tonne.
+6. Drag a block to an empty space. A green outline shows where it will land; let go and it moves. Drag it onto another block: the outline turns red, and letting go puts it back.
+7. Drag the Gun Crate and press **R**: it turns from 3 × 2 to 2 × 3. Drop it where it fits.
+8. Drag a block out of the panel. It turns red and reads DUMP. Let go: a crate drifts out behind the ship and the cargo tag reads JETTISONED. Fly back through it and the unit packs back in.
+9. Select a block and press **J**: that unit is dumped. With nothing selected, J dumps the heaviest stack, as before.
+10. Hold **J**. After a moment the rest of the hold is dumped. Dark matter stays.
+11. Empty the hold and press **Fill** on Data Shards: the grid fills while tonnes are left. Fly through a pickup: the notice reads NO ROOM IN THE HOLD. Empty the hold and fill it with Reactor Cores: the notice reads HOLD FULL, with cells to spare.
+12. Close the panel with **I**. The cursor hides, steering comes back, the ship does not swing, and the guns fire again.
+13. Open the panel, then press Esc and resume, or exit the ship with **F**. The cursor and steering behave normally afterwards.
+14. Extract, or lose the ship, with the panel open. The run report shows as before and lists the cargo by item.
+
+### Tuning
+- On the ship's `CargoHold`: `Grid Columns`, `Grid Rows`, and `Mass Capacity`.
+- On each item in `Data/Cargo/`: `Size`, `Short Name` and `Block Color`.
+- On the player's `CargoControls` (`CargoJettisonInput`): `Dump All Hold Time`.
+- Constants in `CargoHoldPanel`: the cell size (60 reference pixels), the panel's place and the drag threshold.
+
+### Verified outside Unity (step 1)
+- Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code. Unity's own recompile in the open editor was clean too, with only the kit's 8 known warnings.
+- Not run in Unity: the setup, the panel, the mouse, packing, moving, dumping, and holding the steering and guns.

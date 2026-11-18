@@ -75,6 +75,11 @@ Every scene follows one layout, so it stays readable as the game grows.
 - Save data refers to assets by stable ID (`CargoItemDefinition.Id`), never by name or path, and resolves IDs through a catalog.
 - Never change an item's ID once saves exist. Change the format by raising `PlayerProfile.CurrentVersion` and migrating in `ProfileStore`.
 
+## Cargo
+- **Change a hold only through `CargoHold`'s methods.** They keep the per-item stacks, which saves, the run report and the God Menu read, in step with the grid (`Placements`). Every unit of ordinary cargo has exactly one place on the grid; dark matter never has one.
+- **Packing is first fit.** `CargoGrid` packs row by row from the top-left, upright before turned. `GetFreeUnits` counts with the same packing, so every unit it promises finds a space.
+- **A screen that needs the mouse in flight borrows it through `KitControlsPause`.** It frees the cursor, holds the kit's steering and weapon triggers, and gives back only what it took. Screens never lock the cursor or switch kit input themselves.
+
 ## Units
 | Quantity | Unit |
 |---|---|

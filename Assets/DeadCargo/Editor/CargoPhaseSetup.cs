@@ -53,34 +53,91 @@ namespace DeadCargo.EditorTools
             return !EditorApplication.isPlayingOrWillChangePlaymode;
         }
 
+        // The first three are the range's pickups. The rest are placeholder loot for the hold grid (phase 6.15).
+        private static readonly ItemSpec[] Items =
+        {
+            new ItemSpec("ScrapMetal", "Scrap Metal", "Scrap", 2f, 40, 1, 1, new Color32(158, 182, 185, 255)),
+            new ItemSpec("FuelCells", "Fuel Cells", "Fuel", 4f, 150, 1, 2, new Color32(255, 121, 91, 255)),
+            new ItemSpec("ReactorCore", "Reactor Core", "Reactor", 12f, 900, 2, 2, new Color32(242, 163, 58, 255)),
+            new ItemSpec("GunCrate", "Gun Crate", "Guns", 6f, 380, 3, 2, new Color32(243, 238, 228, 255)),
+            new ItemSpec("DataShards", "Data Shards", "Data", 0.5f, 220, 1, 1, new Color32(96, 224, 208, 255)),
+            new ItemSpec("MedKits", "Med Kits", "Med", 1f, 90, 1, 1, new Color32(124, 226, 158, 255))
+        };
+
+        private const int PickupItemCount = 3;
+
         private static CargoItemDefinition[] EnsureItems()
         {
             SceneSetupUtility.EnsureFolder(DataFolder);
 
-            return new[]
+            var pickupItems = new CargoItemDefinition[PickupItemCount];
+            for (int i = 0; i < Items.Length; ++i)
             {
-                EnsureItem("ScrapMetal", "Scrap Metal", 2f, 40),
-                EnsureItem("FuelCells", "Fuel Cells", 4f, 150),
-                EnsureItem("ReactorCore", "Reactor Core", 12f, 900)
-            };
+                CargoItemDefinition item = EnsureItem(Items[i]);
+                if (i < PickupItemCount)
+                    pickupItems[i] = item;
+            }
+
+            return pickupItems;
         }
 
-        private static CargoItemDefinition EnsureItem(string fileName, string displayName, float unitMass, int unitValue)
+        private static CargoItemDefinition EnsureItem(in ItemSpec spec)
         {
-            string path = $"{DataFolder}/{fileName}.asset";
+            string path = $"{DataFolder}/{spec.FileName}.asset";
             var item = AssetDatabase.LoadAssetAtPath<CargoItemDefinition>(path);
-            if (item != null)
+            if (item == null)
+            {
+                item = ScriptableObject.CreateInstance<CargoItemDefinition>();
+                var created = new SerializedObject(item);
+                created.FindProperty("displayName").stringValue = spec.DisplayName;
+                created.FindProperty("unitMass").floatValue = spec.UnitMass;
+                created.FindProperty("unitValue").intValue = spec.UnitValue;
+                WriteGridLook(created, spec);
+                created.ApplyModifiedPropertiesWithoutUndo();
+                AssetDatabase.CreateAsset(item, path);
                 return item;
+            }
 
-            item = ScriptableObject.CreateInstance<CargoItemDefinition>();
+            // Items made before the hold grid have no short name. They get their grid size and colour once, so later tuning stays.
             var serialized = new SerializedObject(item);
-            serialized.FindProperty("displayName").stringValue = displayName;
-            serialized.FindProperty("unitMass").floatValue = unitMass;
-            serialized.FindProperty("unitValue").intValue = unitValue;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
+            if (string.IsNullOrEmpty(serialized.FindProperty("shortName").stringValue))
+            {
+                WriteGridLook(serialized, spec);
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                AssetDatabase.SaveAssetIfDirty(item);
+            }
 
-            AssetDatabase.CreateAsset(item, path);
             return item;
+        }
+
+        private static void WriteGridLook(SerializedObject item, in ItemSpec spec)
+        {
+            item.FindProperty("shortName").stringValue = spec.ShortName;
+            item.FindProperty("size").vector2IntValue = spec.Size;
+            item.FindProperty("blockColor").colorValue = spec.BlockColor;
+        }
+
+        private readonly struct ItemSpec
+        {
+            public ItemSpec(string fileName, string displayName, string shortName, float unitMass, int unitValue, int width, int height,
+                Color blockColor)
+            {
+                FileName = fileName;
+                DisplayName = displayName;
+                ShortName = shortName;
+                UnitMass = unitMass;
+                UnitValue = unitValue;
+                Size = new Vector2Int(width, height);
+                BlockColor = blockColor;
+            }
+
+            public string FileName { get; }
+            public string DisplayName { get; }
+            public string ShortName { get; }
+            public float UnitMass { get; }
+            public int UnitValue { get; }
+            public Vector2Int Size { get; }
+            public Color BlockColor { get; }
         }
 
         private static void EnsureHold(GameObject ship)

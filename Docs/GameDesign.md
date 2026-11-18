@@ -27,7 +27,7 @@ The loop is inspired by crime-sandbox extraction games. The setting, name, facti
 
 | System | Summary | Phase |
 |---|---|---|
-| Cargo hold | Mass-limited storage on a ship. Load reduces speed and turn rate. | 1 |
+| Cargo hold | Mass-limited storage on a ship, packed on a grid you sort with the mouse (6.15). Load reduces speed and turn rate. | 1 |
 | Jettison and loose cargo | Dump cargo to escape. Dropped cargo stays in the world. | 2 |
 | Heat | Actions raise heat. Heat decays when the player lies low. | 3 |
 | Authority response | Heat tiers trigger escalating Authority spawns. | 4 |

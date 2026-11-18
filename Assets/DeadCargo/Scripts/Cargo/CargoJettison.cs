@@ -3,7 +3,10 @@ using UnityEngine;
 
 namespace DeadCargo.Cargo
 {
-    /// <summary>Ejects ordinary cargo from a ship's hold as loose crates. The sealed dark matter slot is never ejected.</summary>
+    /// <summary>
+    /// Ejects ordinary cargo from a ship's hold as loose crates. The sealed dark matter slot is never ejected. A unit picked
+    /// out in the hold view (<see cref="SelectedId"/>) is the next to go.
+    /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(CargoHold))]
     public sealed class CargoJettison : MonoBehaviour
@@ -32,16 +35,66 @@ namespace DeadCargo.Cargo
         private CargoHold hold;
         private Rigidbody body;
 
-        /// <summary>Raised for each stack that leaves the hold.</summary>
+        /// <summary>Raised for each crate that leaves the hold, with what it holds.</summary>
         public event Action<CargoStack> Jettisoned;
+
+        /// <summary>Raised when the selected unit changes, including when it leaves the hold.</summary>
+        public event Action SelectionChanged;
 
         /// <summary>True when there is ordinary cargo to eject and a crate to put it in.</summary>
         public bool CanJettison => cratePrefab != null && hold != null && FindLastEjectable() >= 0;
+
+        /// <summary>Placement ID of the unit picked out in the hold view, which <see cref="JettisonNext"/> ejects. Zero for none.</summary>
+        public int SelectedId { get; private set; }
 
         private void Awake()
         {
             hold = GetComponent<CargoHold>();
             body = GetComponent<Rigidbody>();
+        }
+
+        private void OnEnable()
+        {
+            hold.Changed += OnHoldChanged;
+        }
+
+        private void OnDisable()
+        {
+            hold.Changed -= OnHoldChanged;
+        }
+
+        /// <summary>Picks out a unit by its placement ID; zero, or an ID not aboard, clears the selection.</summary>
+        public void Select(int placementId)
+        {
+            if (placementId != 0 && !hold.TryGetPlacement(placementId, out _))
+                placementId = 0;
+
+            if (placementId == SelectedId)
+                return;
+
+            SelectedId = placementId;
+            SelectionChanged?.Invoke();
+        }
+
+        public void ClearSelection()
+        {
+            Select(0);
+        }
+
+        /// <summary>Ejects the selected unit, or with none selected the stack that frees the most mass.</summary>
+        public bool JettisonNext()
+        {
+            return SelectedId != 0 ? JettisonPlacement(SelectedId) : JettisonHeaviest();
+        }
+
+        /// <summary>Ejects one unit by its placement on the hold grid, in a crate of its own.</summary>
+        public bool JettisonPlacement(int placementId)
+        {
+            if (cratePrefab == null || !hold.RemovePlacement(placementId, out CargoPlacement unit))
+                return false;
+
+            SpawnCrate(unit.Item, 1, UnityEngine.Random.insideUnitCircle.normalized, 0f);
+            return true;
         }
 
         /// <summary>Ejects the stack that frees the most mass.</summary>
@@ -96,8 +149,16 @@ namespace DeadCargo.Cargo
             return -1;
         }
 
-        // Spawns one crate, offset sideways along the given direction, drifting outward along it.
-        // The direction lies in the plane at right angles to the ejection, in ship space.
+        // A unit that has left the hold, by any route, can no longer be selected.
+        private void OnHoldChanged()
+        {
+            if (SelectedId != 0 && !hold.TryGetPlacement(SelectedId, out _))
+            {
+                SelectedId = 0;
+                SelectionChanged?.Invoke();
+            }
+        }
+
         private bool Eject(CargoItemDefinition item, int quantity, Vector2 sideways, float offset)
         {
             if (cratePrefab == null || item == null || item.Slot != CargoSlot.Hold)
@@ -107,12 +168,20 @@ namespace DeadCargo.Cargo
             if (removed <= 0)
                 return false;
 
+            SpawnCrate(item, removed, sideways, offset);
+            return true;
+        }
+
+        // Spawns one crate, offset sideways along the given direction, drifting outward along it.
+        // The direction lies in the plane at right angles to the ejection, in ship space.
+        private void SpawnCrate(CargoItemDefinition item, int quantity, Vector2 sideways, float offset)
+        {
             Vector3 ejectDirection = ejectOffset.sqrMagnitude > 0f ? ejectOffset.normalized : Vector3.back;
             Vector3 lateral = SidewaysDirection(ejectDirection, sideways);
 
             Vector3 localPosition = ejectOffset + lateral * offset;
             CargoPickup crate = Instantiate(cratePrefab, transform.position + transform.rotation * localPosition, transform.rotation);
-            crate.Initialize(item, removed);
+            crate.Initialize(item, quantity);
             crate.DelayCollection(recollectDelay);
 
             if (crate.TryGetComponent(out Rigidbody crateBody))
@@ -122,8 +191,7 @@ namespace DeadCargo.Cargo
                 crateBody.linearVelocity = inherited + transform.rotation * eject;
             }
 
-            Jettisoned?.Invoke(new CargoStack(item, removed));
-            return true;
+            Jettisoned?.Invoke(new CargoStack(item, quantity));
         }
 
         // Maps a 2D direction onto the plane at right angles to the ejection.
