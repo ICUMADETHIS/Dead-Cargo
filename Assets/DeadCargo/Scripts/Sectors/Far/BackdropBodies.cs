@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DeadCargo.Flow;
 using DeadCargo.Visuals;
 using SpaceGraphicsToolkit.Sky;
 using Unity.Mathematics;
@@ -13,6 +14,10 @@ namespace DeadCargo.Sectors.Far
     /// in the sky from the sector seed (<see cref="BackdropLayout"/>), clear of the sun, and built in the far world at the
     /// distance that gives each its size. A new seed builds a new system; a pinned seed brings the same one back. Each body
     /// turns slowly about its own tilted axis. Play Mode only.
+    /// Behind the loading screen, and for a new seed in play, the prefabs load in the background and one planet is placed
+    /// a frame, while the loading screen waits (phase 6.6). Readers see each body as <see cref="IsBuilt"/> turns true, and
+    /// <see cref="Built"/> once all are placed. In a scene the game starts in, with no loading screen to hide it, the system
+    /// is built before the first frame instead.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(FarSpace))]
@@ -28,6 +33,9 @@ namespace DeadCargo.Sectors.Far
 
         // Far content beyond the furthest body's far side, so atmospheres are never cut off.
         private const float ReachMargin = 1.25f;
+
+        private const string LoadLabel = "Planets";
+        private const string PlaceTaskLabel = "Placing planets";
 
         private static readonly int SunSizeId = Shader.PropertyToID(SpaceSkyProperties.SunSize);
         private static readonly int CoronaSizeId = Shader.PropertyToID(SpaceSkyProperties.SunCoronaSize);
@@ -114,7 +122,11 @@ namespace DeadCargo.Sectors.Far
         private readonly List<Body> bodies = new List<Body>();
         private readonly List<Transform> instances = new List<Transform>();
         private readonly List<double> airHeights = new List<double>();
+        private readonly List<ResourceRequest> requests = new List<ResourceRequest>();
 
+        // The next plan to place while building over frames, or -1 when no build is under way.
+        private int nextToPlace = -1;
+        private LoadTask placeTask;
         private FarSpace far;
         private SectorSpace space;
         private Vector3 startView = Vector3.forward;
@@ -168,6 +180,9 @@ namespace DeadCargo.Sectors.Far
 
         /// <summary>How many times the system has been built, so readers can tell when it changed.</summary>
         public int BuildCount { get; private set; }
+
+        /// <summary>True while the system's planets are loading and being placed over frames.</summary>
+        public bool IsPlacing => nextToPlace >= 0;
 
         /// <summary>The name of the planet playing body <paramref name="index"/>.</summary>
         public string NameOf(int index)
@@ -267,13 +282,15 @@ namespace DeadCargo.Sectors.Far
             if (view != null)
                 startView = view.transform.forward;
 
-            Build();
+            Build(!SceneFlow.IsEntering);
         }
 
         private void OnDestroy()
         {
             if (space != null)
                 space.SeedChanged -= Rebuild;
+
+            EndPlacing();
         }
 
         // Rules changed in Play Mode show at once.
@@ -288,14 +305,19 @@ namespace DeadCargo.Sectors.Far
             if (rebuild)
             {
                 rebuild = false;
-                Build();
+                Build(false);
             }
 
+            PlaceNext();
             Spin();
         }
 
-        private void Build()
+        // Plans the system at once. With <paramref name="now"/> every planet is loaded and placed here; otherwise they load in
+        // the background and are placed one a frame by PlaceNext.
+        private void Build(bool now)
         {
+            using LoadScope measure = LoadReport.Measure(LoadLabel);
+            EndPlacing();
             Clear();
             if (far == null || !far.IsValid || catalog == null || catalog.Count == 0)
             {
@@ -314,36 +336,98 @@ namespace DeadCargo.Sectors.Far
             BackdropLayout.Plan(seed, Settings, SceneSun.Direction, SunRadius, startView, catalog.Entries, plans);
 
             float furthest = 0f;
-            Vector3 origin = far.World.position;
             for (int i = 0; i < plans.Count; ++i)
             {
-                BackdropPlan plan = plans[i];
-                PlanetEntry entry = catalog.Entries[plan.Entry];
-                GameObject prefab = PlanetCatalog.Load(entry);
+                PlanetEntry entry = catalog.Entries[plans[i].Entry];
                 instances.Add(null);
                 airHeights.Add(0.0);
-                if (prefab == null)
-                    continue;
-
-                // Sector directions and the far world share their axes, so a direction places the body as it is.
-                float distance = plan.DistanceFor(entry.Radius);
-                Quaternion tilt = Quaternion.FromToRotation(Vector3.up, plan.SpinAxis);
-                GameObject instance = Instantiate(prefab, origin + plan.Direction * distance, tilt);
-                instance.name = entry.Name;
-                far.Adopt(instance);
-
-                instances[i] = instance.transform;
-                airHeights[i] = AtmosphereHeight(instance, entry.Radius);
-                bodies.Add(new Body(instance.transform, tilt, plan.SpinPhase, plan.SpinSpeed));
-                furthest = Mathf.Max(furthest, distance + entry.Radius * ReachMargin);
+                furthest = Mathf.Max(furthest, plans[i].DistanceFor(entry.Radius) + entry.Radius * ReachMargin);
             }
 
             // Cruise can carry the camera to the far side of the system, so the far camera reaches across all of it.
             far.SetReach(furthest * 2f);
             spinClock = 0f;
+
+            if (now)
+            {
+                for (int i = 0; i < plans.Count; ++i)
+                    Place(i, PlanetCatalog.Load(EntryOf(i)));
+
+                FinishBuild();
+                return;
+            }
+
+            for (int i = 0; i < plans.Count; ++i)
+                requests.Add(PlanetCatalog.LoadAsync(EntryOf(i)));
+
+            nextToPlace = 0;
+            placeTask = LoadGate.Begin(PlaceTaskLabel);
+            LoadReport.StartSpan(LoadLabel);
+        }
+
+        // One planet a frame, in plan order, each once its prefab is in. A planet whose prefab is missing is skipped.
+        private void PlaceNext()
+        {
+            if (nextToPlace < 0)
+                return;
+
+            if (nextToPlace < plans.Count)
+            {
+                ResourceRequest request = requests[nextToPlace];
+                if (request != null && !request.isDone)
+                    return;
+
+                using (LoadReport.Measure(LoadLabel))
+                    Place(nextToPlace, PlanetCatalog.Loaded(EntryOf(nextToPlace), request));
+
+                ++nextToPlace;
+                placeTask.Report((float)nextToPlace / plans.Count);
+            }
+
+            if (nextToPlace < plans.Count)
+                return;
+
+            EndPlacing();
+            FinishBuild();
+        }
+
+        private void Place(int index, GameObject prefab)
+        {
+            if (prefab == null)
+                return;
+
+            // Sector directions and the far world share their axes, so a direction places the body as it is. The far
+            // world follows the camera, so its position is read in the frame the body is placed.
+            BackdropPlan plan = plans[index];
+            PlanetEntry entry = catalog.Entries[plan.Entry];
+            Quaternion tilt = Quaternion.FromToRotation(Vector3.up, plan.SpinAxis);
+            GameObject instance = Instantiate(prefab, far.World.position + plan.Direction * plan.DistanceFor(entry.Radius), tilt);
+            instance.name = entry.Name;
+            far.Adopt(instance);
+
+            instances[index] = instance.transform;
+            airHeights[index] = AtmosphereHeight(instance, entry.Radius);
+            bodies.Add(new Body(instance.transform, tilt, plan.SpinPhase, plan.SpinSpeed));
+        }
+
+        private void FinishBuild()
+        {
             Spin();
             ++BuildCount;
             Built?.Invoke();
+        }
+
+        // Ends a build over frames, finished or given up for a newer one. Requests still loading finish unused.
+        private void EndPlacing()
+        {
+            if (nextToPlace < 0)
+                return;
+
+            nextToPlace = -1;
+            requests.Clear();
+            LoadReport.EndSpan(LoadLabel);
+            placeTask.Complete();
+            placeTask = null;
         }
 
         private void Clear()

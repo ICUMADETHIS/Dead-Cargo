@@ -1,10 +1,15 @@
+using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace DeadCargo.Flow
 {
-    /// <summary>Moves the game between the mothership and sector scenes behind the loading screen.</summary>
+    /// <summary>
+    /// Moves the game between the mothership and sector scenes behind the loading screen. A new scene starts up hidden
+    /// (<see cref="IsEntering"/>), with the player's controls held, and is shown once its setup is done
+    /// (<see cref="Entered"/>). Anything that must not start in the dark, such as the run's clock, waits for that.
+    /// </summary>
     public static class SceneFlow
     {
         private const string MothershipTitle = "RETURNING TO MOTHERSHIP";
@@ -23,7 +28,17 @@ namespace DeadCargo.Flow
             }
         }
 
+        /// <summary>Raised when the loading screen starts to show a new scene. Not raised for the scene the game starts in.</summary>
+        public static event Action Entered;
+
         public static bool IsLoading => LoadingScreen.IsLoading;
+
+        /// <summary>
+        /// True while a new scene runs hidden behind the loading screen, from its switch until it is shown. Objects that
+        /// start then and must not run in the dark wait for <see cref="Entered"/>.
+        /// </summary>
+        public static bool IsEntering => LoadGate.IsOpen;
+
         public static bool HasMothership => Settings != null && !string.IsNullOrEmpty(Settings.MothershipScene);
         public static bool HasSector => Settings != null && !string.IsNullOrEmpty(Settings.SectorScene);
 
@@ -49,6 +64,18 @@ namespace DeadCargo.Flow
         public static bool LoadScene(string scenePath, string title)
         {
             return LoadingScreen.Begin(scenePath, title);
+        }
+
+        internal static void RaiseEntered()
+        {
+            Entered?.Invoke();
+        }
+
+        // Statics survive play sessions when domain reload is off.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Entered = null;
         }
     }
 }

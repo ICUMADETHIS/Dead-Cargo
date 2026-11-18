@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DeadCargo.Destruction.Voxels;
+using DeadCargo.Flow;
 using UnityEngine;
 
 namespace DeadCargo.Destruction
@@ -13,6 +14,9 @@ namespace DeadCargo.Destruction
     /// </summary>
     internal sealed class DestructionWarmUp
     {
+        private const string LoadLabel = "Warm-up";
+        private const string TaskLabel = "Warming up";
+
         private enum Step
         {
             Waiting,
@@ -47,6 +51,8 @@ namespace DeadCargo.Destruction
         private float stepStarted;
         private int settled;
         private int prewarmed;
+        private bool timing;
+        private LoadTask task;
 
         public DestructionWarmUp(DestructionSystem system)
         {
@@ -62,6 +68,11 @@ namespace DeadCargo.Destruction
         {
             if (HasStarted || definition == null)
                 return;
+
+            using LoadScope measure = LoadReport.Measure(LoadLabel);
+            timing = true;
+            LoadReport.StartSpan(LoadLabel);
+            task = LoadGate.Begin(TaskLabel);
 
             // Set first: building the rock goes through the same path that starts the warm-up.
             Enter(Step.Building);
@@ -80,7 +91,20 @@ namespace DeadCargo.Destruction
         public void Update()
         {
             if (!IsRunning)
+            {
+                // The load report times the warm-up from its start until the pools are full.
+                if (timing)
+                {
+                    timing = false;
+                    LoadReport.EndSpan(LoadLabel);
+                    task.Complete();
+                }
+
                 return;
+            }
+
+            // Half for the pools, half for the rock's steps.
+            task.Report(0.5f * prewarmed / PrewarmPieces + 0.5f * ((int)step - (int)Step.Building) / ((int)Step.Done - (int)Step.Building));
 
             if (prewarmed < PrewarmPieces)
             {

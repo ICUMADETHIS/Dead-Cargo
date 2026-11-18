@@ -51,7 +51,10 @@ One public type per file. The file name matches the type.
 - **The Dev Test Range stays blank.** Test content is spawned into it on demand from the God Menu **Range** tab, and removed when the test is done. Content comes from the template scene `Assets/DeadCargo/DevTest/Templates/TestRangeTemplate.unity`, a saved copy of the fully built range.
 - To make new content spawnable on its own, add it to the template and add a `RangeGroup` line in `Editor/TestRange/TestRangeLibrary.cs`. Do not leave new test objects permanently in the range.
 - After a phase adds objects to the player rig, spawn everything, run the phase setup, and save the scene as the template again so the template stays current.
-- New scenes are created only when the design calls for one, through a setup tool. The game has a **Mothership** scene and **sector** scenes, and moves between them through `SceneFlow`, never by loading scenes directly.
+- New scenes are created only when the design calls for one, through a setup tool. The game has a **Mothership** scene and **sector** scenes, and moves between them through `SceneFlow`, never by loading scenes directly. Dev tools do too.
+- **Load-time work is measured.** Setup that runs when a scene starts, or that is built on demand in play, is wrapped in `using LoadScope measure = LoadReport.Measure("Label");`. Work that runs over frames, such as jobs, is marked with `LoadReport.StartSpan` and `EndSpan`. Labels are short constant names, and the load report names them in its blame.
+- **Setup that runs over frames holds the loading screen.** Begin a task with `LoadGate.Begin("Label")`, report its progress and `Complete` it when done, or when the work is abandoned. The screen waits for it under a 15 s limit. Outside a load the task is not tracked, so the same code runs in play.
+- **Nothing starts in the dark.** A new scene starts up hidden behind the loading screen, with the player's controls held. Timers and anything else that belongs to play start on `SceneFlow.Entered` when `SceneFlow.IsEntering` is true at `Start`, and at once otherwise.
 
 ## Hierarchy
 Every scene follows one layout, so it stays readable as the game grows.

@@ -39,6 +39,7 @@ namespace DeadCargo.Extraction
         private AuthorityResponse authority;
         private CargoHold hold;
         private float startTime;
+        private bool clockRunning;
         private int peakTierIndex;
         private int authorityShipsDestroyed;
 
@@ -59,8 +60,13 @@ namespace DeadCargo.Extraction
 
         public bool IsOver => Result != null;
 
-        /// <summary>Time since the run started, in seconds. Stops when the run ends.</summary>
-        public float Elapsed => IsOver ? Result.Duration : Time.time - startTime;
+        /// <summary>
+        /// Time since the run started, in seconds. The run starts when the loading screen shows the sector, so it reads
+        /// zero while the sector starts up hidden. Stops when the run ends.
+        /// </summary>
+        public float Elapsed => IsOver ? Result.Duration : RunTime;
+
+        private float RunTime => clockRunning ? Time.time - startTime : 0f;
 
         /// <summary>True when the player is flying the run ship.</summary>
         public bool IsPlayerAboard
@@ -148,7 +154,10 @@ namespace DeadCargo.Extraction
 
         private void Start()
         {
-            startTime = Time.time;
+            if (SceneFlow.IsEntering)
+                SceneFlow.Entered += OnSceneEntered;
+            else
+                StartClock();
 
             agents = GameAgentManager.Instance;
             if (agents == null)
@@ -180,6 +189,7 @@ namespace DeadCargo.Extraction
 
         private void OnDestroy()
         {
+            SceneFlow.Entered -= OnSceneEntered;
             if (agents != null)
             {
                 agents.onFocusedVehicleChanged.RemoveListener(OnFocusedVehicleChanged);
@@ -193,6 +203,18 @@ namespace DeadCargo.Extraction
                 authority.ShipDestroyed -= OnAuthorityShipDestroyed;
 
             UnbindShip();
+        }
+
+        private void OnSceneEntered()
+        {
+            SceneFlow.Entered -= OnSceneEntered;
+            StartClock();
+        }
+
+        private void StartClock()
+        {
+            startTime = Time.time;
+            clockRunning = true;
         }
 
         private void OnFocusedVehicleChanged(Vehicle vehicle)
@@ -270,7 +292,7 @@ namespace DeadCargo.Extraction
             int shipLossFee = shipLost ? Mathf.Min(shipReplacementCost, ProfileStore.Current.Credits) : 0;
 
             HeatTier? peakHeat = heat != null ? heat.Tiers[peakTierIndex] : (HeatTier?)null;
-            Result = new RunResult(outcome, route, Time.time - startTime, peakHeat, authorityShipsDestroyed, cargo, shipLost, shipLossFee);
+            Result = new RunResult(outcome, route, RunTime, peakHeat, authorityShipsDestroyed, cargo, shipLost, shipLossFee);
             RecordToProfile(Result);
 
             if (outcome == RunOutcome.Lost)

@@ -43,7 +43,32 @@ namespace DeadCargo.Sectors.Far
             if (entry == null || string.IsNullOrEmpty(entry.ResourcePath))
                 return null;
 
-            var prefab = Resources.Load<GameObject>(entry.ResourcePath);
+            return Checked(entry, Resources.Load<GameObject>(entry.ResourcePath));
+        }
+
+        /// <summary>
+        /// Starts loading the planet's prefab in the background, textures and all. Null when the entry names none; read
+        /// the prefab with <see cref="Loaded"/> once the request is done.
+        /// </summary>
+        public static ResourceRequest LoadAsync(PlanetEntry entry)
+        {
+            if (entry == null || string.IsNullOrEmpty(entry.ResourcePath))
+                return null;
+
+            return Resources.LoadAsync<GameObject>(entry.ResourcePath);
+        }
+
+        /// <summary>The prefab a finished <see cref="LoadAsync"/> request brought in. Null when there is none, after a warning.</summary>
+        public static GameObject Loaded(PlanetEntry entry, ResourceRequest request)
+        {
+            if (request == null)
+                return null;
+
+            return Checked(entry, request.asset as GameObject);
+        }
+
+        private static GameObject Checked(PlanetEntry entry, GameObject prefab)
+        {
             if (prefab == null)
                 Debug.LogWarning($"Planet '{entry.Name}' has no prefab at Resources/{entry.ResourcePath}. Build the planet catalogue again.");
 

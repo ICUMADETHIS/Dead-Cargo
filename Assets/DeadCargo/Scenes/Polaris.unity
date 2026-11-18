@@ -651,7 +651,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!223 &220705691
 Canvas:
   m_ObjectHideFlags: 0
@@ -2591,7 +2591,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1361740847129606, guid: bfb4e62c148bb074b91ba5ccba7d04a1, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1396699111484680, guid: bfb4e62c148bb074b91ba5ccba7d04a1, type: 3}
       propertyPath: m_IsActive
@@ -2649,7 +2649,7 @@ PrefabInstance:
     - target: {fileID: 54219335505582196, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}
       propertyPath: m_IsKinematic
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 54219335505582196, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}
@@ -2659,7 +2659,7 @@ PrefabInstance:
     - target: {fileID: 114290421733573952, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}
       propertyPath: currentState
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 114290421733573952, guid: bfb4e62c148bb074b91ba5ccba7d04a1,
         type: 3}

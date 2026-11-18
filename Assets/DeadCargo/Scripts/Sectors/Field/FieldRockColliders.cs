@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using DeadCargo.Destruction;
 using DeadCargo.Destruction.Voxels;
+using DeadCargo.Flow;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine;
@@ -73,6 +74,7 @@ namespace DeadCargo.Sectors.Field
                     bake.Complete();
                     isBaking = false;
                     isBaked = true;
+                    LoadReport.EndSpan("Rock shapes");
                 }
 
                 return isBaked;
@@ -99,6 +101,7 @@ namespace DeadCargo.Sectors.Field
         /// </summary>
         public void Prepare(FieldRockMeshes meshes, int poolSize)
         {
+            using LoadScope measure = LoadReport.Measure("Rock shapes");
             int count = meshes.Shapes * LevelCount;
             bakeIds = new NativeArray<EntityId>(count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
             for (int shape = 0; shape < meshes.Shapes; ++shape)
@@ -110,6 +113,7 @@ namespace DeadCargo.Sectors.Field
             bake = new ColliderBakeJob { MeshIds = bakeIds }.Schedule(count, 1);
             isBaking = true;
             isBaked = false;
+            LoadReport.StartSpan("Rock shapes");
             JobHandle.ScheduleBatchedJobs();
 
             while (proxies.Count < poolSize)

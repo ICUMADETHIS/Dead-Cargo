@@ -44,6 +44,12 @@ namespace DeadCargo.UI
         // Distances are shown in steps, so the text is not rebuilt every frame of flight. In metres.
         private const int DistanceStep = 10;
 
+        // The big countdown shows the last seconds of a spool, and of an open extraction point's window.
+        private const int SpoolCountdown = 5;
+        private const int WindowCountdown = 10;
+        private const string JumpCountdownLabel = "JUMP IN";
+        private const string WindowCountdownLabel = "WINDOW CLOSES";
+
         // Pickups beyond this are not marked, in metres. Markers fade towards it, in steps so meshes rarely rebuild.
         private const float PickupMarkerRange = 800f;
         private const float PickupFadeSteps = 10f;
@@ -75,6 +81,8 @@ namespace DeadCargo.UI
         private HudMarkerLayer markers;
         private ExtractionHudView view;
         private CargoHoldPanel holdPanel;
+        private HudCountdown countdown;
+        private ExtractionPoint nearestPoint;
         private readonly KitControlsPause controlsPause = new KitControlsPause();
         private GameAgentManager agents;
         private Vehicle vehicle;
@@ -132,6 +140,7 @@ namespace DeadCargo.UI
             markers = new HudMarkerLayer((RectTransform)transform, MarkerCapacity);
             view = new ExtractionHudView((RectTransform)transform);
             holdPanel = new CargoHoldPanel((RectTransform)transform);
+            countdown = new HudCountdown((RectTransform)transform);
         }
 
         private void Start()
@@ -188,6 +197,8 @@ namespace DeadCargo.UI
             UpdatePoint();
             UpdateHunters();
             UpdatePrompt();
+            UpdateCountdown();
+            countdown.Tick(Time.unscaledDeltaTime);
 
             StatusStrip strip = StatusStrip.Active;
             view.Tick(Time.unscaledDeltaTime, strip != null ? strip.CoveredHeight : 0f);
@@ -368,9 +379,7 @@ namespace DeadCargo.UI
         // The plate text only changes when the whole second or the state changes, so it is rebuilt only then.
         private void UpdateSpool()
         {
-            int state = jumpDrive.TimeSinceKnockback < DisruptedDisplayTime ? DisruptedState
-                : jumpDrive.IsHeld ? HeldState
-                : SpoolingState;
+            int state = SpoolState();
             Color color = state == SpoolingState ? HudFactory.JumpColor : HudFactory.WarningColor;
 
             int seconds = Mathf.CeilToInt(jumpDrive.SpoolRemaining);
@@ -382,6 +391,42 @@ namespace DeadCargo.UI
             }
 
             view.SetJumpProgress(jumpDrive.SpoolProgress, color);
+        }
+
+        private int SpoolState()
+        {
+            return jumpDrive.TimeSinceKnockback < DisruptedDisplayTime ? DisruptedState
+                : jumpDrive.IsHeld ? HeldState
+                : SpoolingState;
+        }
+
+        // The last seconds that matter, big at the top: the jump spool first, then the nearest point's window closing.
+        private void UpdateCountdown()
+        {
+            if (jumpDrive != null && jumpDrive.IsSpooling)
+            {
+                int seconds = Mathf.CeilToInt(jumpDrive.SpoolRemaining);
+                if (seconds <= SpoolCountdown)
+                {
+                    int state = SpoolState();
+                    bool building = state == SpoolingState;
+                    countdown.Show(building ? JumpCountdownLabel : SpoolStatus(state), seconds,
+                        building ? HudFactory.JumpColor : HudFactory.WarningColor);
+                    return;
+                }
+            }
+
+            if (nearestPoint != null && nearestPoint.State == ExtractionPointState.Open)
+            {
+                int seconds = Mathf.CeilToInt(nearestPoint.TimeRemaining);
+                if (seconds <= WindowCountdown)
+                {
+                    countdown.Show(WindowCountdownLabel, seconds, HudFactory.SuccessColor);
+                    return;
+                }
+            }
+
+            countdown.Hide();
         }
 
         private void UpdateHunters()
@@ -712,6 +757,7 @@ namespace DeadCargo.UI
         private void UpdatePoint()
         {
             ExtractionPoint point = hold != null ? ExtractionPoint.FindNearest(vehicle.transform.position) : null;
+            nearestPoint = point;
             bool show = point != null;
             if (show != hasPointPlate)
             {

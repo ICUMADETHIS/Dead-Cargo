@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using DeadCargo.Destruction;
+using DeadCargo.Flow;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -43,6 +44,9 @@ namespace DeadCargo.Sectors.Field
         private const int ScheduleBatch = 4;
         private const int MaxBatchCells = 128;
         private const float FallbackDrawDistance = 3000f;
+
+        // The loading screen waits under this label until the rock shapes are cooked and the first cells are in.
+        private const string BuildTaskLabel = "Building field";
 
         // Slack on the view planes, per metre of distance: covers the camera turning about 3 degrees in the frame
         // between culling and drawing.
@@ -136,6 +140,7 @@ namespace DeadCargo.Sectors.Field
         private bool needsStream;
         private CellCoord streamedCell;
         private bool slotsReported;
+        private LoadTask buildTask;
 
         private NativeArray<RegionVolume> regions;
         private NativeArray<FieldRock> rocks;
@@ -307,6 +312,7 @@ namespace DeadCargo.Sectors.Field
 
                 if (isReady)
                 {
+                    using LoadScope streaming = LoadReport.Measure("Field streaming");
                     FinishGeneration();
                     Camera view = Camera.main;
                     if (view != null)
@@ -316,11 +322,28 @@ namespace DeadCargo.Sectors.Field
                     }
 
                     ScheduleSolid();
+                    ReportBuild();
                 }
             }
 
             timer.Stop();
             streamMilliseconds = (float)timer.Elapsed.TotalMilliseconds;
+        }
+
+        // Half for the rock shapes, half for the first cells round the camera: streamed once, with no batch left to run.
+        private void ReportBuild()
+        {
+            if (buildTask == null)
+                return;
+
+            bool shapesReady = colliders.IsReady;
+            bool cellsIn = !needsStream && !isGenerating;
+            buildTask.Report((shapesReady ? 0.5f : 0f) + (cellsIn ? 0.5f : 0f));
+            if (shapesReady && cellsIn)
+            {
+                buildTask.Complete();
+                buildTask = null;
+            }
         }
 
         private void LateUpdate()
@@ -339,6 +362,7 @@ namespace DeadCargo.Sectors.Field
         // Sizes every buffer for the definition, grid and draw distance, builds the rock shapes, and starts streaming afresh.
         private void Initialise()
         {
+            using LoadScope measure = LoadReport.Measure("Asteroid field");
             needsRebuild = false;
             Release();
 
@@ -410,6 +434,7 @@ namespace DeadCargo.Sectors.Field
             slotsReported = false;
             needsStream = true;
             isReady = true;
+            buildTask = LoadGate.Begin(BuildTaskLabel);
         }
 
         // Frees every buffer once no job uses them. A rebuild or teardown is the only place this waits for jobs.
@@ -423,6 +448,10 @@ namespace DeadCargo.Sectors.Field
             isSolidScheduled = false;
             isReady = false;
             DrawnRocks = 0;
+
+            // A field torn down mid-load holds the loading screen no longer.
+            buildTask?.Complete();
+            buildTask = null;
             DrawCalls = 0;
 
             // The rock shapes are about to be rebuilt or destroyed, so nothing may stay solid on them.

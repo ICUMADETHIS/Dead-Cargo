@@ -5,10 +5,14 @@ using UnityEngine.UI;
 
 namespace DeadCargo.UI
 {
-    /// <summary>Builds the end-of-run screen: a dimmed backdrop, a centred report plate and a full-screen jump flash.</summary>
+    /// <summary>
+    /// Builds the end-of-run screen: a dimmed backdrop, a centred report plate, a comic burst where the ship jumped from, and a
+    /// full-screen jump flash.
+    /// </summary>
     internal sealed class RunResultView
     {
         private const float Width = 600f;
+        private const float BurstSize = 320f;
         private const float Padding = 28f;
         private const float ContentWidth = Width - Padding * 2f;
         private const float StatColumnWidth = ContentWidth / 3f;
@@ -27,6 +31,8 @@ namespace DeadCargo.UI
         private readonly GameObject content;
         private readonly CanvasGroup contentGroup;
         private readonly Image flash;
+        private readonly RectTransform canvas;
+        private readonly HudBurst burst;
         private readonly HudPlate panel;
         private readonly Text outcome;
         private readonly Text summary;
@@ -101,6 +107,10 @@ namespace DeadCargo.UI
             footerKey = HudFactory.Key(p, "ENTER", 0, 0, FooterKeyWidth);
             footerLabel = HudFactory.Label("Footer action", p, "", 0, 0, ContentWidth, 22, 17, ink);
 
+            canvas = parent;
+            burst = HudFactory.Anchored("Jump Burst", parent, new Vector2(0.5f, 0.5f), BurstSize, BurstSize).gameObject.AddComponent<HudBurst>();
+            burst.SetAge(0f);
+
             flash = HudFactory.Overlay("Jump Flash", parent, new Color(1f, 1f, 1f, 0f));
             flash.enabled = false;
             content.SetActive(false);
@@ -173,6 +183,23 @@ namespace DeadCargo.UI
         internal void SetOpacity(float alpha)
         {
             contentGroup.alpha = alpha;
+        }
+
+        /// <summary>
+        /// The burst over a point in the world, at its age in seconds from the jump. Hidden while the point is behind the
+        /// camera.
+        /// </summary>
+        internal void SetBurst(Camera view, Vector3 worldPoint, float age)
+        {
+            Vector3 screen = view != null ? view.WorldToScreenPoint(worldPoint) : Vector3.back;
+            if (screen.z <= 0f || !RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas, screen, null, out Vector2 local))
+            {
+                burst.SetAge(-1f);
+                return;
+            }
+
+            burst.rectTransform.anchoredPosition = local;
+            burst.SetAge(age);
         }
 
         internal void SetFlash(float alpha)

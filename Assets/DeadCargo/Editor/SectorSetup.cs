@@ -52,6 +52,7 @@ namespace DeadCargo.EditorTools
             new Step("Planet Flight", PlanetFlightSetup.Apply, PlanetFlightSetup.IsInstalled),
             new Step("First Person", FirstPersonSetup.Apply, FirstPersonSetup.IsInstalled),
             new Step("Smooth Flight", SmoothFlightSetup.Apply, SmoothFlightSetup.IsInstalled),
+            new Step("Start In Flight", FlightStartSetup.Apply, FlightStartSetup.IsInstalled),
             new Step("Status Strip", StatusStripSetup.Apply, StatusStripSetup.IsInstalled),
             new Step("Scene Flow", MothershipPhaseSetup.Apply, MothershipPhaseSetup.IsSector)
         };

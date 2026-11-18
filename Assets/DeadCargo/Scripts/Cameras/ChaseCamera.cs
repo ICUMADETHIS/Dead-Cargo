@@ -22,6 +22,12 @@ namespace DeadCargo.Cameras
         // A move further than this between frames is a teleport, such as a debug jump: the camera cuts instead of chasing.
         private const float CutDistance = 200f;
 
+        // Watching the ship jump out: how fast the camera turns after it, and where it steps back to from the cockpit, in metres.
+        private const float WatchTurnRate = 12f;
+        private const float WatchMinDistance = 15f;
+        private const float WatchStandOff = 30f;
+        private const float WatchRise = 8f;
+
         [Header("Dead Cargo")]
         [Tooltip("The kit's space fighter camera this replaces. Switched off while this camera is smooth, on while it is not.")]
         [SerializeField] private SpaceFighterCameraController kitCamera;
@@ -35,6 +41,8 @@ namespace DeadCargo.Cameras
         private Rigidbody body;
         private Engines engines;
         private bool smooth = true;
+        private bool held;
+        private Transform watched;
 
         /// <summary>The chase camera in the loaded scenes, or null.</summary>
         public static ChaseCamera Active { get; private set; }
@@ -44,6 +52,9 @@ namespace DeadCargo.Cameras
 
         /// <summary>The followed ship's rigidbody, or null while the camera follows no ship.</summary>
         public Rigidbody Body => body;
+
+        /// <summary>True while the camera is held still by <see cref="Hold"/>.</summary>
+        public bool IsHeld => held;
 
         // Statics survive play sessions when domain reload is off.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -78,6 +89,57 @@ namespace DeadCargo.Cameras
             ApplyInterpolation();
         }
 
+        /// <summary>
+        /// Stops following and holds the camera where it is, turning it to keep <paramref name="target"/> in view, for the jump
+        /// out (phase 6.17). From the cockpit it first steps back behind the ship, so it is not carried off inside it.
+        /// </summary>
+        public void Watch(Transform target)
+        {
+            watched = target;
+            if (target == null || cameraEntity == null)
+                return;
+
+            if (kitCamera != null)
+                kitCamera.enabled = false;
+
+            Transform rig = cameraEntity.transform;
+            if (rig.parent != null)
+                rig.SetParent(null, true);
+
+            if ((rig.position - target.position).sqrMagnitude < WatchMinDistance * WatchMinDistance)
+            {
+                rig.position = target.position - target.forward * WatchStandOff + target.up * WatchRise;
+                rig.rotation = Quaternion.LookRotation(target.position - rig.position, target.up);
+            }
+        }
+
+        /// <summary>
+        /// Stops following and holds the camera exactly where it is, for the ship's arrival (phase 6.6): the ship streaks in
+        /// to its start while the camera waits at its chase view. Returns false, holding nothing, when the camera rides
+        /// inside the ship, as from the cockpit, since it would be carried along.
+        /// </summary>
+        public bool Hold()
+        {
+            if (cameraEntity == null || cameraEntity.transform.parent != null)
+                return false;
+
+            held = true;
+            if (kitCamera != null)
+                kitCamera.enabled = false;
+            return true;
+        }
+
+        /// <summary>Follows the ship again after <see cref="Hold"/>.</summary>
+        public void Release()
+        {
+            if (!held)
+                return;
+
+            held = false;
+            if (kitCamera != null)
+                kitCamera.enabled = !smooth;
+        }
+
         protected override bool Initialize(CameraTarget newTarget)
         {
             if (!base.Initialize(newTarget))
@@ -96,8 +158,17 @@ namespace DeadCargo.Cameras
 
         protected override void CameraControllerUpdate()
         {
-            CameraViewTarget view = cameraEntity.CurrentViewTarget;
+            if (held)
+                return;
+
             float deltaTime = Time.deltaTime;
+            if (watched != null)
+            {
+                WatchUpdate(deltaTime);
+                return;
+            }
+
+            CameraViewTarget view = cameraEntity.CurrentViewTarget;
             if (!smooth || view == null || deltaTime <= 0f)
                 return;
 
@@ -110,6 +181,24 @@ namespace DeadCargo.Cameras
             }
 
             UpdateFieldOfView(deltaTime);
+        }
+
+        // The view locks would pull the camera back onto the ship while it is watched leaving or held for its arrival.
+        protected override void CameraControllerLateUpdate()
+        {
+            if (watched == null && !held)
+                base.CameraControllerLateUpdate();
+        }
+
+        private void WatchUpdate(float deltaTime)
+        {
+            Transform rig = cameraEntity.transform;
+            Vector3 toTarget = watched.position - rig.position;
+            if (deltaTime <= 0f || toTarget.sqrMagnitude < 0.01f)
+                return;
+
+            Quaternion goal = Quaternion.LookRotation(toTarget, rig.up);
+            rig.rotation = Quaternion.Slerp(rig.rotation, goal, 1f - Mathf.Exp(-WatchTurnRate * deltaTime));
         }
 
         private Vector3 FollowPosition(CameraViewTarget view, Vector3 current, float deltaTime)

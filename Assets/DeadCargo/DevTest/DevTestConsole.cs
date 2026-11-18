@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using DeadCargo.Cargo;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
 using DeadCargo.Debugging;
+using DeadCargo.Flow;
 #endif
 using DeadCargo.Heat;
 #if UNITY_EDITOR
@@ -22,6 +23,7 @@ namespace DeadCargo.DevTesting
         public const string RangePath = "Assets/DeadCargo/DevTest/Dev Test Range.unity";
 
         private const KeyCode PanelKey = KeyCode.F6;
+        private const string ScenarioTitle = "LOADING SCENARIO";
         private const KeyCode ResetKey = KeyCode.F7;
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || DDT_ENABLED
         private const string KeyHint = "F3  Debug     F6  Dev Test     F7  Reset scene";
@@ -65,7 +67,7 @@ namespace DeadCargo.DevTesting
 #if UNITY_EDITOR
         private bool touchInputOverride;
 #endif
-        private AsyncOperation sceneLoad;
+        private bool loadingScenario;
         private Vector2 scroll;
         private float previousTimeScale;
         private bool previousAudioPause;
@@ -133,11 +135,11 @@ namespace DeadCargo.DevTesting
 
         private void Update()
         {
-            if (sceneLoad != null)
+            if (loadingScenario)
             {
-                if (!sceneLoad.isDone)
+                if (SceneFlow.IsLoading)
                     return;
-                sceneLoad = null;
+                loadingScenario = false;
             }
 
             if (showAtStart || Input.GetKeyDown(PanelKey))
@@ -244,7 +246,7 @@ namespace DeadCargo.DevTesting
 
         internal bool LoadScenario(string path)
         {
-            if (sceneLoad != null && !sceneLoad.isDone)
+            if (SceneFlow.IsLoading)
                 return false;
 
 #if UNITY_EDITOR
@@ -268,12 +270,11 @@ namespace DeadCargo.DevTesting
                 touchInputOverride = true;
                 CrossPlatformInputManager.SwitchActiveInputMethod(CrossPlatformInputManager.ActiveInputMethod.Touch);
             }
-
-            sceneLoad = EditorSceneManager.LoadSceneAsyncInPlayMode(path, new LoadSceneParameters(LoadSceneMode.Single));
-#else
-            sceneLoad = SceneManager.LoadSceneAsync(buildIndex, LoadSceneMode.Single);
 #endif
-            return sceneLoad != null;
+
+            // Through the loading screen, like every scene change in the game.
+            loadingScenario = SceneFlow.LoadScene(path, ScenarioTitle);
+            return loadingScenario;
         }
 
         private void OnGUI()
@@ -282,7 +283,7 @@ namespace DeadCargo.DevTesting
 
             if (!panelOpen)
             {
-                var hint = sceneLoad != null ? "Loading scenario…" : KeyHint;
+                var hint = loadingScenario ? "Loading scenario…" : KeyHint;
                 GUI.Label(new Rect(12, Screen.height - 34, KeyHintWidth, 23), hint, hintStyle);
                 return;
             }

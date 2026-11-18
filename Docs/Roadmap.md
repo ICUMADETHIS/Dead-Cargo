@@ -15,7 +15,7 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.3 | Extraction point | A second way out: a point in the sector, opened by a timed uplink, open for a limited window | Done, tested 2026-11-16 |
 | 6.4 | HUD markers | Hunter count; Dead Cargo's own screen markers for the extraction point, Authority ships and pickups | Done, tested 2026-11-16 |
 | 6.5 | Object pooling | Reuse crates and Authority ships instead of creating and destroying them | Planned |
-| 6.6 | Scene flow performance | Every scene change through one path, load hitches hidden behind the loading screen, load timing | Planned |
+| 6.6 | Scene flow performance | Every scene change through one path, load hitches hidden behind the loading screen, load timing. Planned 2026-11-18 in four steps: 1 measure and one path, 2 ready gate, 3 cheaper load, 4 arrival and loading card | Steps 1 and 2 tested in the editor 2026-11-18; build numbers pending |
 | 6.7 | Polaris sector | The game sector runs launch into, built up from an empty scene. 6.7a: the scene with the star sky. 6.7b: the player starts aboard the ship. 6.7c: pause menu Quit and Restart | Done, tested 2026-11-16 |
 | 6.8 | Sector generation | Custom, seed-driven space generation for large sectors, in seven steps. Step 1: sector definition, seeded random, cell grid and debug view | Step 1 and its hardening done, tested 2026-11-16. Step 2 (asteroid field) built, awaiting test. Detail pass, solid rocks (step 5a), natural placement and field dust built and compile-checked, awaiting test. Step 7a (a new sector every load) built, awaiting test |
 | 6.9 | Space visuals | Cel-shaded space to match the ships, in six steps. Step 1: a procedural sky | Step 1 built, awaiting test. Step 3b (distance fade) built, awaiting test. Steps 2a (the sun) and 2b (a new sun each run, darker space) built, awaiting test |
@@ -24,8 +24,9 @@ Each phase is small, ends in something playable, and is tested in the open scene
 | 6.12 | Planet flight | Fly from Polaris to Ixara and down to its surface with no loading screen: 1 a cruise drive, 2 the descent to the ground, 2b an autopilot cruise, 2c a long atmospheric descent, 2d a real star system, 3 the sun's and planets' look. First person on C | Steps 1, 2 and 2b and first person on C tested 2026-11-17. Step 2c (atmospheric descent) built; in its test the ship kept rolling itself, fixed with level flight, tested 2026-11-17 ("a lot better") |
 | 6.13 | HUD: Status Strip | The on-screen UI redone in the comic look, uncluttered, for the chase view and the cockpit (concept C of three, chosen 2026-11-17): 1 the status strip, 2 pop-up tags for the run, 3 markers and reticle, 4 the cockpit | Steps 1 (status strip) and 2 (pop-up tags) built and fixed after a first look, step 2 tested; step 3 (markers and reticle) built, awaiting test |
 | 6.14 | Authority AI | Authority pilots that fly well, fight well and can be shaken off, in six steps: 1 Dead Cargo's own pilot, 2 flight, 3 dogfight skill, 4 sight and memory, 5 heat that follows sight, 6 arrival and ship types | Steps 1 (Authority pilot) and 2 (flight) tested 2026-11-17. Step 3 (dogfight skill) built and compile-checked, awaiting test |
-| 6.15 | Hold grid | The hold as a grid you pack (concept B, Flight Panel, of three, chosen 2026-11-18): every unit takes cells as well as tonnes, and the hold panel on I takes the mouse to select, drag, turn and dump. 1 the grid and the hold panel | Step 1 built and compile-checked, awaiting test |
-| 6.16 | Flight feel | Flight that looks and handles better (chosen 2026-11-18 from six groups of options: D2, B1, D1): 1 smooth flight, 2 mouse aim, 3 camera feel | Step 1 built and compile-checked, awaiting test |
+| 6.15 | Hold grid | The hold as a grid you pack (concept B, Flight Panel, of three, chosen 2026-11-18): every unit takes cells as well as tonnes, and the hold panel on I takes the mouse to select, drag, turn and dump. 1 the grid and the hold panel | Step 1 tested 2026-11-18 |
+| 6.16 | Flight feel | Flight that looks and handles better (chosen 2026-11-18 from six groups of options: D2, B1, D1): 1 smooth flight, 2 mouse aim, 3 camera feel | Step 1 tested 2026-11-18 |
+| 6.17 | Extraction set-pieces | The way out as the run's climax (chosen 2026-11-18: A1, A2, C2, D1, D2 without an alarm, D3, E2, E3): 1 jump-out and countdown, 2 jump cost by load and hot extraction bonus, 3 blockade and interdictor, 4 secure slot, 5 run report card | Step 1 tested 2026-11-18 |
 | 7 | Station heist | Dock, on-foot vault, carry loot to the ship | Planned |
 | 8 | Mining | Mining tool, ore, refinery value | Planned |
 | 9 | Planetary cargo | Landing zones and contract pickups | Planned |
@@ -38,6 +39,8 @@ Phases 1 to 6 form the first complete run: launch, loot, escape, bank. **Milesto
 Phases 6.1 to 6.6 improve the systems from the first run before phase 7 adds new ones. Phases 6.2 and 6.3 give a run two ways out: burn dark matter to jump anywhere, or reach an extraction point and open it.
 
 Tooling: the **God Menu** (`Dead Cargo > God Menu`) is the editor control panel for testing every phase. It gains a section whenever a phase adds a system.
+
+Builds: **Dead Cargo > Build > Windows** builds the game from the enabled Build Settings scenes into `Builds/Windows/Dead Cargo.exe`, starting at the mothership. The build uses its own product name, Dead Cargo, so it keeps a save profile apart from the editor's.
 
 Setup: **Set Up Sector** in the God Menu **Project** tab runs every phase setup on the open scene in order, and is safe to re-run. The individual phase setups referred to in the test steps below are under `Dead Cargo > Setup`.
 
@@ -512,6 +515,457 @@ The player can see where to go and what is coming: the way out, the hunters, and
 
 ### Tuning
 Constants in `ExtractionHud`: `PickupMarkerRange` (800 m) and the marker styles (sizes, and whether off-screen arrows show). Colours come from `HudFactory`.
+
+---
+
+## Phase 6.6: Scene flow performance
+
+### Goal
+Every scene change looks deliberate, and nothing stutters once the game is visible. Planned on 2026-11-18. The user chose every recommended option (D1 load timing, C1 one path, A1 to A3 the ready gate, B1 background planets, B2 early planet ground, B4 shader warm-up, E2 loading card) and added B3 (spread setup over frames) and E1 (the arrival).
+
+### Where it stands (2026-11-18)
+- **One loading screen for most loads.** It fades to black over 0.25 s, loads the scene in the background with a bar, stays up at least 0.8 s, then fades in.
+- **The switch freezes the screen.** Switching the loaded scene on takes about 0.6 s in one frame (Editor.log: Polaris 631 ms, Mothership 664 ms), so the bar stops dead.
+- **The fade-in starts too early.** It begins the moment the scene exists, while sector setup still runs in the first frames:
+  - `BackdropBodies.Start` loads the planets with a synchronous `Resources.Load` and builds them at once.
+  - `SpaceSkyRandomizer.Start` bakes the run's sky.
+  - `AsteroidField` allocates its buffers and streams its first cells.
+  - `FieldRockColliders` cooks the rock shapes on worker threads.
+  - `DestructionWarmUp` runs the rock-breaking pipeline once, for about 0.5 s.
+- **Mid-run:** `PlanetGround` builds the planet's ground copy when the ship drops below 40 km, during the dive.
+- **Two loads skip the loading screen:** the God Menu Session tab and the F6 dev console.
+- **Nothing is timed.**
+
+### Targets
+- The loading screen never looks stuck. Whenever the main thread is busy the screen is fully black and still, and the bar only moves forward.
+- From the fade-in on, no frame over 50 ms in the first 10 seconds, in the editor and in the Windows build.
+- No frame over 50 ms when the ground copy appears on the way down to Ixara.
+- Every load's timings are in the console, and in the built game's Player.log.
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Measure and one path (D1, C1) | A load report for every scene change: its stages, the setup work by name, and the worst frames after the fade-in, in the console, the build's Player.log and the God Menu. The dev tools' loads go through the loading screen too | Tested in the editor 2026-11-18; a build report is still to come |
+| 2. Ready gate (A1, A2, A3) | The loading screen waits until the sector reports it is ready and the frames have settled. The bar and its line show each stage. The scene switches on behind a full, still bar. The run's clock starts when the game appears | Tested in the editor 2026-11-18; a build report is still to come |
+| 3. Cheaper load (B1, B2, B3, B4) | Planets load in the background and are built one a frame. The planet's ground is ready before the dive. Heavy setup is spread over frames to a budget, and shaders are warmed behind the gate. In four parts: 3a the sky off the main thread, 3b planets in the background, 3c the ground ready early, 3d shader warm-up | 3a and 3b tested in the editor 2026-11-18; 3c dropped; 3d waits for a build report |
+| 4. Arrival and loading card (E1, E2) | A comic loading card. Arriving in a sector, the ship streaks in and settles while the camera holds, and the controls come back when it stops | In two parts: 4a the loading card, 4b the arrival. 4a and 4b tested in the editor 2026-11-18 |
+
+Each step is tested in the editor and in a Windows build (**Dead Cargo > Build > Windows**) before the next starts. The step 1 report is how every later step is checked against the targets.
+
+### Design (step 1: measure and one path)
+- **The load report** (`LoadReport`, in `Scripts/Flow`) starts when a load begins. It records each stage:
+  - the fade-out;
+  - the background load, up to 90%;
+  - the switch, the one frozen frame;
+  - the first frame of the new scene;
+  - the setup work;
+  - the fade-in;
+  - then 10 seconds of play, counting the worst frame and the frames over 33 ms and 50 ms.
+- **Setup work by name.** Systems with setup wrap it in a measured scope, such as `LoadReport.Measure("Planets")`: `BackdropBodies`, `SpaceSkyRandomizer`, `AsteroidField`, `FieldRockColliders`, `DestructionWarmUp` and `PlanetGround`. The report then names what was running when the worst frame came.
+- **Where it goes.** One block in the console, which is the Player.log in a build, for example: `LOAD Polaris 3.4 s · fade 0.25 · load 1.10 · switch 0.63 · setup 0.84 (planets 0.41, sky 0.12, field 0.20, warm-up 0.11) · after fade worst 96 ms (planets), 3 frames over 50 ms`. The God Menu **Session** tab shows the last load's report.
+- **Hitches in play.** A ground copy built mid-run is measured the same way, and logged with its frame time.
+- **One path (C1).** The Session tab's scene buttons and the F6 console load through `SceneFlow.LoadScene`. The loading screen already loads editor-only scenes in Play Mode.
+- The step's numbers decide where step 3 spends its effort.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Flow/LoadReport.cs` | The report: stage marks, `Measure` and spans, frame counting, the summary, `Last`; hitches in play |
+| `Scripts/Flow/LoadWatcher.cs` | Ticks the report once a frame, before every other script |
+| `Scripts/Flow/LoadScope.cs`, `LoadWork.cs`, `LoadRecord.cs` | A measured block, one piece of work, a finished report |
+| `Scripts/Flow/LoadingScreen.cs` | Marks fade-out, loaded, switched, fade-in and faded in |
+| `Scripts/Sectors/SectorSpace.cs` | Times **Sector layout** |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Times **Planets** |
+| `Scripts/Visuals/SpaceSkyRandomizer.cs` | Times **Sky** |
+| `Scripts/Sectors/Field/AsteroidField.cs` | Times **Asteroid field** (set-up) and **Field streaming** (every frame) |
+| `Scripts/Sectors/Field/FieldRockColliders.cs` | Times **Rock shapes**, and how long their cooking runs on workers |
+| `Scripts/Destruction/DestructionWarmUp.cs` | Times **Warm-up**, from its start until the pools are full |
+| `Scripts/Flight/PlanetGround.cs` | Times **Planet ground**, logged as a hitch when it is built in play |
+| `DevTest/DevTestConsole.cs`, `Editor/GodMenu/Tabs/SessionTab.cs` | Scenario loads, F7 and **Restart Scene** go through the loading screen; the Session tab's **Load Report** section and **Copy Report** |
+
+The game's first scene, which no loading screen covers, is watched from its first frame and reported as "started".
+
+### Test (step 1)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. Open Polaris and press Play. About 10 seconds in, the Console shows a `[LoadReport] Polaris started` block: the first frames, the setup work by name (Sector layout, Planets, Sky, Asteroid field, Field streaming, Rock shapes, Warm-up), and the first 10 seconds' frames with the worst one and what ran in it.
+3. In the God Menu **Session** tab, open **Load Report**: the same numbers. The tab's header reads the last load's worst frame. **Copy Report** puts the text on the clipboard.
+4. Press **Restart Scene** in the Session tab: the loading screen covers it now, and 10 seconds after the fade-in a `Polaris loaded, shown after …` report adds the stages (fade out, load, switch, first frames, waiting, fade in).
+5. Press **F6** and load a scenario, or **F7** to reset: the loading screen covers these too.
+6. Go to the mothership and launch again: one report for each scene change.
+7. Fly down to Ixara: when the ground copy is built, the Console notes `Planet ground took … ms during play` if it took 25 ms or more.
+8. Make a Windows build (**Dead Cargo > Build > Windows**), play it, and open `%USERPROFILE%\AppData\LocalLow\DefaultCompany\Dead Cargo\Player.log`: the same reports are there. Send them over; they set step 3's priorities.
+
+### Measured (step 1, editor, 2026-11-18)
+Six reports from the user's first tests: Play pressed in Polaris twice, Restart Scene three times, and one trip to the mothership.
+
+| Load | Shown after | Switch | First frames | Worst after the fade-in | Biggest work |
+|---|---|---|---|---|---|
+| Polaris, Play pressed | — | — | 2.35 to 2.41 s | the first frame; 2 to 3 frames over 50 ms | Sky 317 to 322 ms, Asteroid field 61 to 65 ms, Planets 47 ms |
+| Polaris, restart or launch | 1.05 s | 0.54 to 0.61 s | 0.61 to 0.69 s | 11 to 12 ms, none over 33 ms | Sky 294 to 356 ms, Asteroid field 33 to 34 ms, Rock shapes 11 ms (plus 0.02 s on workers), Planets 1 ms |
+| Mothership | 1.04 s | 0.17 s | 0.17 s | 11 ms, none over 33 ms | nothing measured |
+
+What it shows:
+- **After the fade-in a sector load is already smooth in the editor.** The loading screen's 0.8 s minimum covers the start-up, so the target is met there.
+- **The cost is a stopped screen.** One frame of about 0.6 s, with the bar full and the screen unable to move. Step 2's labelled, still switch is for this. (Corrected after step 2: the switch and the first frames are that same frame, not 0.6 s plus 0.65 s. Unity runs the new scene's Start in the frame the switch ends.)
+- **The sky is the biggest single cost:** 300 to 360 ms per Polaris load, about half the start-up frame. It is step 3's first target, to be spread over frames or moved off the main thread.
+- **Planets cost 47 ms the first time and 1 ms after,** once their prefabs are in memory. A built game loads them from disk, so its numbers matter more.
+- **About 0.25 s of the start-up frame is unmeasured:** the kit's objects starting, Planet Forge building meshes, the HUD being built.
+- **Pressing Play in the editor is not the game's start.** Its 2.4 s first frame is mostly the editor's own Play Mode start, so a build's cold start is needed.
+- **The warm-up and the planet ground did not appear.** No voxel asteroid was built, and no dive happened, in these tests.
+
+### Verified outside Unity (step 1)
+- Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code.
+- In the editor the reports, frame counting, timed systems and loads through the loading screen all worked (see Measured). Not yet seen: a built game's Player.log, the warm-up span, and the planet-ground hitch line.
+
+### Design (step 2: ready gate)
+- **Readiness.** Systems with setup work register a load task with a label, its progress and whether it is done. The loading screen waits until every task is done, then until the frames settle: 10 frames in a row under 25 ms. Then it fades in.
+- **A time limit.** The gate lasts at most 15 seconds. Past that it fades in anyway, and the report names the task that held it.
+- **The bar means something.** Its line reads LOADING, then ENTERING, then each task's label (PLANETS, SKY, BUILDING FIELD, WARMING UP), then SETTLING. The bar is shared out across these stages and never goes back.
+- **The switch behind a still screen.** The loaded scene is switched on only once the bar has reached its share and the screen is fully black, with `allowSceneActivation` held until then. The 0.6 s freeze happens under a still, labelled bar.
+- **Nothing starts in the dark.** While the gate is up, the player's controls are off, and the run's clock and heat do not start until the loading screen has faded in (a new `SceneFlow.Entered` event).
+- **The mothership uses the same gate.** With no tasks registered, it settles quickly.
+
+### Implementation (step 2)
+| File | Role |
+|---|---|
+| `Scripts/Flow/LoadTask.cs` | One piece of setup the screen waits for: a label, progress that only rises, and `Complete` |
+| `Scripts/Flow/LoadGate.cs` | Open from the switch until the fade-in. `LoadGate.Begin("Label")` returns a task, tracked only while the gate is open, so the same code runs in play |
+| `Scripts/Flow/PlayerControlsHold.cs` | Switches the player's kit inputs off each frame they come on, and gives back only those it switched off |
+| `Scripts/Flow/LoadingScreen.cs` | The stages and the bar's shares: LOADING to 50%, ENTERING to 60%, the tasks to 90%, SETTLING to 100%. `allowSceneActivation` is held until two still frames are drawn. Then it waits for the tasks and 10 frames under 25 ms, at most 3 s of settling and 15 s in all |
+| `Scripts/Flow/SceneFlow.cs` | `IsEntering`, true while the new scene runs hidden, and `Entered`, raised as the fade-in starts |
+| `Scripts/Flow/LoadReport.cs`, `LoadRecord.cs`, `LoadWait.cs` | New stages (entering, tasks, settling), each task's wait, and the task that held the screen at the limit |
+| `Scripts/Extraction/RunTracker.cs` | The run's clock starts on `Entered`, or at once for a scene with no loading screen |
+| `Scripts/Sectors/Field/AsteroidField.cs` | **Building field**: done when the rock shapes are cooked and the first cells round the camera are in |
+| `Scripts/Destruction/DestructionWarmUp.cs` | **Warming up**: done when the warm-up rock is gone and the pools are full |
+| `Editor/GodMenu/Tabs/SessionTab.cs` | **Load Report** shows the gate: the task wait and settling, each task's wait, or what held it |
+
+Choices made while building:
+- **A settling limit of 3 s.** A machine that never runs frames under 25 ms would otherwise wait the full 15 s every load. Past 3 s of settling the screen fades in, and the report says the frames did not settle.
+- **The outgoing scene's controls are held too**, from the fade-out, so the ship cannot fly on while the next scene loads behind the black screen.
+- **Planets and the sky have no task yet.** Both finish inside the new scene's first frame, so there is nothing to wait for. Step 3 spreads them over frames and gives them tasks.
+- Heat needs no hold. It only rises from the player's actions, and those are held.
+
+### Test (step 2)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. Open the Mothership, press Play and launch. The loading screen's line under the bar reads LOADING, then ENTERING while the screen is frozen, then BUILDING FIELD, then SETTLING. The bar only moves forward.
+3. While the screen is black, hold the throttle and steer. When the sector appears the ship is where it started, and the controls work at once.
+4. The run clock (God Menu **Extraction** tab's Run Time, or the debug overlay's run line) starts at 0:00 when the sector appears, not during the loading screen.
+5. About 10 s after the fade-in, the Console's `[LoadReport] Polaris loaded` block has a new **Gate** line: `tasks … (Building field …), settled after …`. The **Stages** line adds `entering`. The God Menu **Session** tab's **Load Report** shows the same.
+6. Restart the run (Session tab **Restart Scene**, or the pause menu's Restart): the same stages, and the clock starts at 0:00 again.
+7. Return to the mothership: the line goes LOADING, ENTERING, SETTLING, with no tasks, and you can walk once it appears.
+8. Press Play in Polaris directly: no loading screen, and the run clock starts at once, as before.
+9. Make a Windows build (**Dead Cargo > Build > Windows**), play it, and send the reports from `Player.log`; they set step 3's priorities.
+
+### Measured (step 2, editor, 2026-11-18)
+Seven reports: Play pressed in the Mothership, four launches or restarts into Polaris, and two returns to the mothership. No warnings or errors, and the gate never reached its limit.
+
+| Load | Shown after | Switch, first frames | Gate | Worst after the fade-in |
+|---|---|---|---|---|
+| Polaris, first launch | 1.63 s | 0.84 s, 1.10 s | Building field 0.39 s, settled after 0.07 s | 12 ms, none over 33 ms |
+| Polaris, later launches and restarts | 1.07 to 1.13 s | 0.55 to 0.59 s, 0.62 to 0.66 s | Building field 0.17 to 0.19 s, settled after 0.06 to 0.07 s | 11 to 12 ms, none over 33 ms |
+| Mothership | 1.04 to 1.05 s | 0.14 to 0.17 s | no tasks, settled after 0.04 s | 11 to 12 ms, none over 33 ms |
+
+What it shows:
+- **The gate costs little.** Polaris is shown about 0.05 s later than in step 1. In that time the field streams its first cells behind the screen, instead of after the fade-in.
+- **The still frames cost 0.01 s**, the two frames drawn before the switch.
+- **The frozen frame is one frame, not two stages.** Shown after = fade out + load + entering + switch + waiting, and the first frames are not part of that sum. The new scene's Start and first Update run in the same frame as the switch, before the loading screen sees it end. The Building field task starts about 0.03 s before the switch is marked, which confirms it.
+- **What the frozen frame holds,** from Unity's own log: about 0.2 s of scene integration (Deserialize 17 to 28 ms, Integration 178 to 213 ms), then the Sky bake (293 to 364 ms), the Asteroid field (33 ms) and the Rock shapes (11 ms). The sky is half of it, so step 3 starts there.
+- **The first launch after Play is slower** (switch 0.84 s, Planets 45 ms): assets loading for the first time.
+
+**Fixed after the test:** the report now splits the frozen frame. **Switch** runs until the new scene's objects have woken (Awake and OnEnable, marked by `SceneManager.sceneLoaded`). **Start-up** is their Start and first Update. The first frames, the whole frozen frame, are shown beside them.
+
+Not shown by the logs: the stage line, the controls being held, and the run clock starting at 0:00. The Windows build in `Builds/Windows` was made before step 1: its scripts have no `LoadReport`, and its `Player.log` has no reports. A new build is still needed for build numbers.
+
+### Design (step 3: cheaper load)
+- **Planets in the background (B1).** `PlanetCatalog` loads with `Resources.LoadAsync`, and `BackdropBodies` builds one planet a frame. Its load task is done when all are built.
+- **The planet's ground ready early (B2).** The run's primary planet's ground copy is built behind the gate and kept switched off until the ship descends. If step 1 shows that costs too much memory or load time, it is built in slices as the ship closes from 60 km instead.
+- **Spread over frames (B3).** Setup that can be cut into pieces runs to a per-frame budget (`LoadBudget`): about 8 ms a frame behind the gate, 2 ms in play. It is applied where step 1 shows the cost: likely the sky bake and the field's first cells.
+- **Shader warm-up (B4).** An editor tool records the shader variants seen while playing into a variant collection asset in Resources. The gate warms it a little each frame with `ShaderVariantCollection.WarmUpProgressively`, so the first explosion or new effect in a build does not stutter. The tool is re-run when new effects arrive.
+
+### Parts (step 3)
+Step 2's numbers set the order. The frozen frame is about 0.6 s: about 0.2 s of Unity switching the scene on, then the new scene's start-up, which is mostly the sky.
+
+| Part | Delivers | Status |
+|---|---|---|
+| 3a. The sky off the main thread (B3) | The nebula bakes on worker threads while the frames run on, and the gate waits for it under **Painting sky**. About 0.3 s comes out of the frozen frame | Tested in the editor 2026-11-18 |
+| 3b. Planets in the background (B1) | `Resources.LoadAsync` and one planet placed a frame, under a **Placing planets** task | Tested in the editor 2026-11-18 |
+| 3c. The ground ready early (B2) | The primary planet's ground copy built behind the gate, measured first | Dropped 2026-11-18: the cost is in SGT, and the user does not notice the one frame |
+| 3d. Shader warm-up (B4) | Waits for a build report that shows shader stutters. The build runs on Direct3D 12, where Unity 6 warms pipeline states with `GraphicsStateCollection` rather than a variant collection, so the tool is chosen then | Planned |
+
+The per-frame budget (`LoadBudget`) is built only if work over 8 ms a frame is left after 3a to 3c. The asteroid field's 33 ms set-up is the one candidate.
+
+### Design (3a: the sky off the main thread)
+- **The bake is already plain maths on every core,** but the main thread waited for it: 290 to 360 ms of the frozen frame. Now it runs as a task on worker threads, and the main thread polls it each frame. Behind the loading screen it starts the frame after the start-up frame, so it never slows the start-up, and takes all but two cores. A seed changed in play bakes on half the cores.
+- **What changes at once and what waits.** The run's sky material, its stars and its tilts are set at once, so everything that reads the sky at start (the sun's size for the planets, the space depth) sees the run's values. Only the nebula map comes later. Until then the sky shows the authored nebula, hidden behind the loading screen.
+- **The loading screen waits** under **Painting sky**. The map's upload (a 1024 × 1024 half-float texture, about 4 MB) happens on the main thread when the bake is done, measured under **Sky**.
+- **A seed changed in Play Mode** bakes on workers too, so it no longer hitches. The sky keeps the last nebula until the new one is in.
+- **The scene the game starts in** (Play pressed in Polaris) has no loading screen to hide a change of nebula, so it still bakes before the first frame, as before.
+- The halves are converted with `Unity.Mathematics`, which is safe off the main thread, instead of `Mathf.FloatToHalf`.
+
+### Implementation (3a)
+| File | Role |
+|---|---|
+| `Scripts/Visuals/NebulaMap.cs` | `BakeTexels`, safe on workers, and `Create(texels)` for the main thread; the editor's bake uses both |
+| `Scripts/Visuals/SpaceSkyRandomizer.cs` | Bakes on a worker task behind the loading screen and on a seed change, under the **Painting sky** load task and a **Sky** span; swaps the map in when done; drops a bake that is no longer wanted |
+
+### Test (3a)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. From the mothership, launch to Polaris. The loading screen's line shows PAINTING SKY, and the bar keeps moving instead of freezing for as long.
+3. When Polaris appears, its sky has a new nebula, different from the authored one (compare a few launches). It never changes after the fade-in.
+4. About 10 s in, the report's **Stages** line shows a start-up about 0.3 s shorter than step 2's (about 0.3 s, down from about 0.6 s of first frames). The **Gate** line lists `Painting sky`. **Setup** lists `Sky … over 2 calls, ran for …`, the bake's time on workers.
+5. In the God Menu **Sector** tab's **Seed** section, press **Random Seed**: the stars and tilts change at once and the new nebula follows a moment later, with no hitch line (`Sky took … ms during play`) in the Console.
+6. Press Play in Polaris directly: the sky is baked before the first frame, as before, so it never changes on screen.
+
+### Measured (3a, editor, 2026-11-18)
+Three launches into Polaris (two the first after Play, one warm), two Random Seed presses, and Play pressed in Polaris. No warnings or errors, and no Sky hitch on Random Seed.
+
+| Load | Shown after | Switch + start-up (first frames) | Gate | Worst after the fade-in |
+|---|---|---|---|---|
+| Polaris, first launch | 1.29 to 1.30 s (step 2: 1.63 s) | 0.28 + 0.27 s (0.80 to 0.81 s; step 2: 1.10 s) | Painting sky 0.52 s, Building field 0.40 s | 12 to 19 ms, none over 33 ms |
+| Polaris, warm | 1.05 s (step 2: 1.07 to 1.13 s) | 0.20 + 0.16 s (0.47 s; step 2: 0.62 to 0.66 s) | Painting sky 0.39 s, Building field 0.23 s | 14 ms, none over 33 ms |
+
+What it shows:
+- **The sky left the frozen frame.** Sky's main-thread cost fell from 290 to 360 ms to 1 to 6 ms, and the bake ran 0.39 to 0.52 s on workers behind the gate.
+- **The frozen frame shrank by 0.15 to 0.3 s, not the whole 0.3 s.** The bake started in the same frame as the start-up and took every core, so the start-up's own work slowed down: Asteroid field 80 ms (was 33 ms warm, 61 cold), Planets 69 to 70 ms cold (was 45), Rock shapes 17 to 20 ms (was 11), and Field streaming's longest frame 24 to 34 ms (was 3).
+- **Random Seed** logged `Asteroid field took 44 ms` and `47 ms during play`: the field rebuilds on a new seed. It did before too, at about 33 ms, then slowed by the bake beside it.
+
+**Fixed after the test:** the bake waits until the frame after the start-up frame, and takes at most half the cores (`SystemInfo.processorCount / 2`), leaving the rest to the main thread and Unity's job workers. A seed changed in play bakes at once, on half the cores. Expected in the next report: Asteroid field back near 33 ms, the warm frozen frame near 0.35 s, and Painting sky a little longer, still behind the gate.
+
+**Re-test (editor, 2026-11-18).** Three launches into Polaris (the first after Play, then two warm) and one return to the mothership. No warnings or errors.
+
+| Load | Shown after | Switch + start-up (first frames) | Gate | Worst after the fade-in |
+|---|---|---|---|---|
+| Polaris, first launch | 2.02 s | 0.29 + 0.24 s (0.78 s) | Painting sky 1.06 s (ran 0.56 s), Building field 0.54 s | 16 ms |
+| Polaris, warm | 1.25 to 1.26 s | 0.20 to 0.21 + 0.05 s (0.32 to 0.34 s) | Painting sky 0.70 s (ran 0.56 to 0.57 s), Building field 0.23 to 0.54 s | 20 to 27 ms, none over 33 ms |
+
+- **The start-up frame is fixed.** Asteroid field 34 to 35 ms and Rock shapes 11 ms again, start-up 0.05 s, and the warm frozen frame 0.32 to 0.34 s, about half of step 2's. What is left of it is mostly Unity switching the scene on (0.2 s).
+- **The load is longer.** On half the cores the bake ran 0.56 s, and the screen waited for it: Polaris showed after 1.25 s warm, 0.2 s later than before. The first launch waited 1.06 s for the sky.
+- **The worst frame after the fade-in rose** to 16 to 27 ms (was 11 to 14 ms). Still none over 33 ms, but nothing measured explains it. One candidate is garbage: the bake leaves about 12 MB of arrays behind.
+
+**Fixed after the re-test:**
+- Behind the loading screen the bake now takes all but two cores (`processorCount - 2`). It starts after the start-up frame, so it only competes with hidden frames, and the two spare cores keep the bar and the field's jobs going. In play it keeps to half the cores.
+- The report's worst frame now says when it came (`at 3.2 s`) and whether a garbage collection finished in it, and the watch counts garbage collections.
+
+Expected in the next report: Painting sky near 0.35 s, Polaris shown after about 1.05 s warm, the frozen frame still about 0.33 s.
+
+**Second re-test (editor, 2026-11-18).** Four launches into Polaris (the first after Play, then three warm) and two returns to the mothership. No warnings or errors from Dead Cargo code.
+
+| Load | Shown after | Frozen frame (switch + start-up) | Gate | Worst after the fade-in |
+|---|---|---|---|---|
+| Polaris, first launch | 1.86 s (step 2: 1.63 s) | 0.74 s (0.28 + 0.20 s; step 2: 1.10 s) | Painting sky 0.99 s (ran 0.54 s), Building field 0.42 s | 13 ms at 0.07 s |
+| Polaris, warm | 1.14 to 1.16 s (step 2: 1.07 to 1.13 s) | 0.32 to 0.34 s (0.19 to 0.21 + 0.05 s; step 2: 0.62 to 0.66 s) | Painting sky 0.59 to 0.60 s (ran 0.45 s), Building field 0.26 to 0.47 s | 16 to 19 ms at 1.8, 5.5 and 9.5 s, no garbage collections |
+| Mothership | 1.05 s | 0.15 s | no tasks, settled after 0.03 to 0.05 s | 10 to 11 ms |
+
+What it shows:
+- **3a's goal is met.** The frozen frame is about half of step 2's, warm and cold, and the start-up's own work is back to its step 2 cost.
+- **The total is about the same.** Warm loads show 0.03 to 0.05 s later than in step 2, and the first launch 0.23 s later, because the screen now waits for the bake instead of freezing for it. The bake takes 0.45 to 0.54 s on 14 threads, longer than the 0.3 s it took on the main thread with every core. It shares the cores with the field's jobs, which also run longer (Building field 0.26 to 0.47 s, was 0.17 to 0.23 s).
+- **On the first launch the bake starts about 0.45 s after its task,** because it waits out the start-up frame, which is long when cold.
+- **The 16 to 19 ms frames are not the load.** They come 1.8 to 9.5 s after the fade-in, long after the bake is done, with no garbage collection in them. Field streaming is the longest measured work in them. All are under the 33 ms limit; a build will show whether they are the editor's own.
+
+**3a is done.** A further cut is possible: the bake as a Burst job instead of managed threads could take it from about 0.45 s to a fraction of that, so loads would beat step 2. That needs the nebula field ported to Burst-safe structs, with the editor's bake kept identical. It is not part of the plan.
+
+### Design (3b: planets in the background)
+- **Where the cost is.** Placing the planets took 45 to 76 ms of the start-up frame on a first launch, when their prefabs and textures (about 17 MB a planet) are read from disk, and 1 ms once they are in memory. A built game is likely to read them from disk each launch, since leaving Polaris unloads them.
+- **The plan stays at once.** The layout is drawn in `Start`, as before: which planets, where, their sizes and spins, and the far camera's reach. Readers can ask a body's centre and radius straight away.
+- **The prefabs load in the background.** `Resources.LoadAsync` for each planet, all started together.
+- **One planet a frame.** Each is placed once its prefab is in, in plan order, so no frame places more than one. `IsBuilt` turns true for each as it is placed, which every reader (cruise, the HUD's markers, atmosphere flight, the ground copy, the God Menu) already checks every frame. `Built` and `BuildCount` follow once all are placed.
+- **The loading screen waits** under **Placing planets**, its progress the share placed.
+- **A seed changed in play** builds the same way, so a new system no longer hitches while its planets load.
+- **The scene the game starts in** still builds before the first frame, so its planets never pop in.
+- **Loading gets more of each frame behind the screen.** From the fade-out to the fade-in, `Application.backgroundLoadingPriority` is High, so background loading (the scene itself, then the planets) may take up to 50 ms of a frame instead of a few. It is put back as the game appears.
+
+### Implementation (3b)
+| File | Role |
+|---|---|
+| `Scripts/Sectors/Far/PlanetCatalog.cs` | `LoadAsync` starts a planet's background load; `Loaded` reads the prefab from the finished request |
+| `Scripts/Sectors/Far/BackdropBodies.cs` | Plans at once, loads in the background and places one planet a frame under the **Placing planets** task and a **Planets** span; `IsPlacing`; a newer build drops one under way |
+| `Scripts/Flow/LoadingScreen.cs` | High background loading priority from the fade-out to the fade-in |
+
+### Test (3b)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. Press Play in the Mothership and launch to Polaris (the first launch reads the planets from disk). The loading screen's line may show PLACING PLANETS beside PAINTING SKY. When Polaris appears, both planets are in the sky.
+3. About 10 s in, the report's **Setup** line shows `Planets … over 3 calls, … ran for …`: the plan, then one call per planet placed, each in its own frame. On this first launch the start-up should be shorter than 3a's 0.20 s, since the planets no longer load inside it. The **Gate** line lists `Placing planets`.
+4. Launch again, warm: the same, with Placing planets done within a few frames.
+5. Fly cruise towards Ixara (God Menu **Flight** tab): the planet markers, names and cruise work as before.
+6. In the God Menu **Sector** tab press **Random Seed**: the planets go and the new ones appear a frame or two apart, with no `Planets took … ms during play` line.
+7. Press Play in Polaris directly: the planets are there from the first frame, as before.
+
+### Measured (3b, editor, 2026-11-18)
+Five launches into Polaris (one the first after Play, four warm), two Random Seed presses, and Play pressed in Polaris. No warnings or errors, no missing planet prefabs, and no Planets hitch on Random Seed.
+
+| Load | Shown after | Frozen frame (switch + start-up) | Gate | Worst after the fade-in |
+|---|---|---|---|---|
+| Polaris, first launch | 1.55 s (3a: 1.86 s, step 2: 1.63 s) | 0.56 s (0.29 + 0.15 s; 3a: 0.74 s, step 2: 1.10 s) | Painting sky 0.73 s, Placing planets 0.54 s, Building field 0.53 s | 22 ms at 7.4 s |
+| Polaris, warm | 1.06 to 1.15 s (3a: 1.14 to 1.16 s, step 2: 1.07 to 1.13 s) | 0.26 to 0.29 s (0.19 to 0.21 + 0.05 s; 3a: 0.32 to 0.34 s, step 2: 0.62 to 0.66 s) | Painting sky 0.51 to 0.60 s, Placing planets 0.15 to 0.16 s, Building field 0.24 to 0.37 s | 11 to 13 ms |
+
+What it shows:
+- **The planets left the frozen frame.** The first launch's start-up fell from 0.20 s to 0.15 s and its frozen frame from 0.74 s to 0.56 s, half of step 2's. Placing them cost 46 ms on the main thread over three calls, the longest 41.5 ms: one cold planet's placing frame, behind the gate.
+- **Loads are now as fast as step 2's, or faster,** with the frozen frame less than half as long: warm 1.06 to 1.15 s, the first launch 1.55 s.
+- **The sky now holds the gate in every load** (0.51 to 0.73 s). The planets take 0.15 s warm and the field 0.24 to 0.53 s, so a Burst bake would now shorten every load.
+- **The worst frames after the fade-in are back to 11 to 13 ms warm.** The one 22 ms frame came 7.4 s in, in flight.
+- **Random Seed** logged `Asteroid field took 38 ms during play` twice: the field's rebuild, as before (about 33 ms alone, 44 to 47 ms beside the full-core bake in 3a's first test).
+- **A planet new to memory placed in play** would still take about 40 ms in its frame, as the 41.5 ms call shows. Behind the loading screen it is hidden; in play it happens only on Random Seed.
+- **What the frozen frame holds now:** about 0.2 s of Unity switching the scene on, which is outside this phase (B5), then 0.05 s warm or 0.15 s cold of start-up.
+
+**3b is done.** 3c, the ground copy, is measured first: no dive below 40 km has been logged yet, so its cost is unknown. If `Planet ground took … ms during play` never appears on a dive, it costs under 25 ms and 3c is not needed.
+
+### Measuring the ground copy (3c)
+**First dive (editor, 2026-11-18).** Two launches into Polaris, then a dive. No `Planet ground` line appeared, so the copy's own build (instantiate, strip to its landscape, add colliders) took under 25 ms, if the dive reached below 40 km. That build is only half the cost, though. The landscape then builds its chunks and colliders over the frames that follow, which nothing watched. So it is not yet known whether the dive meets the target of no frame over 50 ms as the ground appears.
+
+**Added:** `LoadReport.WatchPlay`. Work built on demand in play can ask for the next 3 s of frames to be watched. `PlanetGround` asks for it each time it builds a ground copy. The Console then always gets one line, whatever the cost, for example: `[LoadReport] Planet ground built in 12 ms during play; the next 3 s: 410 frames, worst 31 ms at 0.20 s (Planet ground), 0 over 50 ms, 1 over 33 ms`. The report's frame counting is now one tally shared by the load watch and this one.
+
+**Test (the dive):**
+1. Stop Play Mode before Unity compiles the new scripts.
+2. Launch to Polaris, then cruise away from the sector, so the sector sleeps.
+3. In the God Menu **Flight** tab press **Low Over Ixara** (6 km up, inside the 40 km ground range). If the jump lands you in the sector's reach, cruise out first.
+4. About 3 s later the Console shows the `Planet ground built in …` line. Fly lower towards the surface and back up a few times; each new ground copy logs its own line.
+5. Send the log over. A worst frame over 50 ms means 3c is needed: the ground built behind the loading screen, or in slices from 60 km. Under 33 ms means 3c can be dropped.
+
+**Also in the log, not from this phase:**
+- `Leak Detected : Persistent allocates 1 individual allocations`, when Play Mode stops. It is in the log from long before phase 6.6 began, on every Play session. It goes in the backlog.
+- `Can not play a disabled audio source`, from the kit's `DamageReceiver` when the ship hit something.
+
+**Second dive, watched (editor, 2026-11-18).** One launch into Polaris (shown after 1.37 s, like 3b), then one dive:
+`Planet ground built in 2 ms during play; the next 3 s: 451 frames, worst 52 ms at 0.06 s, 1 over 50 ms, 1 over 33 ms`.
+- **The copy itself is cheap** (2 ms). Building it behind the loading screen, as 3c planned, would save almost nothing.
+- **One frame a few frames later took 52 ms,** just over the 50 ms target, with no measured work in it.
+- **The cause is in Planet Forge's landscape (SGT), which is never edited.** A landscape's first update (`SgtLandscape.Prepare`) and its switch-off (`OnDisable`) both call `SgtLandscapeTextures.RebuildAll`. That waits for every landscape's jobs, then regenerates the shared texture atlases (height, mask, gradient, detail, flow, albedo, normal) for every planet in the scene. So the frame costs the same whether the copy is new or was kept switched off. It happens:
+  - when a ground copy appears, as measured;
+  - when it goes: climbing out of range, or engaging cruise near the planet. Not yet measured, but the same call;
+  - when planets are placed or cleared. Behind the loading screen that is hidden; on Random Seed in play it is not.
+- **3c as designed cannot help,** since switching a copy on or off is itself the cost. What would help is to never add or remove a landscape in flight. The run's ground copies would be built behind the loading screen and kept until the scene ends, parked with no colliders in use while the ship is elsewhere.
+
+**Decision (2026-11-18): 3c is dropped.** The user does not notice the one frame. The target "no frame over 50 ms when the ground copy appears" is left at about 50 ms in the editor, a single frame on arriving at a planet's surface and probably one on leaving. If it shows in a build or as planets grow, the fix is the one above. `WatchPlay` stays: every ground copy still logs its line, so a change in its cost shows up.
+
+### Design (step 4: arrival and loading card)
+- **The loading card (E2).** In the comic HUD look:
+  - a leaning sticker naming the destination (POLARIS, MOTHERSHIP);
+  - the stage line;
+  - the bar as an inked sticker bar;
+  - a tip that changes each load.
+
+  It replaces the plain panel.
+- **The arrival (E1).** Arriving in a sector, the gate ends with a white flash instead of a fade from black:
+  - The ship streaks in from behind its start: the jump-out in reverse, stretched and fast, slowing and shrinking to its size at its start place.
+  - The camera already waits at its chase view and holds.
+  - A burst pops where the ship arrives.
+  - The controls come back when the ship stops, after about 0.7 s.
+
+  Restarting a run and the test range arrive the same way. Returning to the mothership keeps the fade.
+
+### Parts (step 4)
+| Part | Delivers | Status |
+|---|---|---|
+| 4a. The loading card (E2) | The comic card in place of the plain panel, with a tip each load, and at least 3 s into Polaris | Tested in the editor 2026-11-18 |
+| 4b. The arrival (E1) | The ship streaks in behind a white flash, the camera holds, a burst pops, and the controls come back when the ship stops | Tested in the editor 2026-11-18 |
+
+### Design (4a: the loading card)
+- **The card,** centred and tilted 2°, in the HUD's comic look. It pops in at 1.12 times its size as the screen fades out, and settles over 0.25 s. It has:
+  - the load's title in small type (JUMPING TO SECTOR, RETURNING TO MOTHERSHIP, RESTARTING RUN);
+  - the destination in big italic figures on a leaning sticker with a bold ink outline and a hard shadow, swaying 0.6° while it waits. The type shrinks for a long name;
+  - the bar as an inked sticker bar, filling with the stage shares from step 2;
+  - the stage line under it.
+- **Colours.** The mothership is warm (the cargo colour); everywhere else is the jump's blue.
+- **The tip,** along the bottom of the screen beside a TIP tag. A different one every load, never the same twice in a row. The tips live on the **Scene Flow Settings** asset (`Resources/SceneFlowSettings`), editable in its inspector. The asset starts with twelve, written against how the systems work now:
+  - the jump drive: dark matter, speed, hits, a heavy hold;
+  - extraction points: the uplink broadcasts, the window;
+  - heat;
+  - losses;
+  - the hold: I, drag, R, J;
+  - cruise: B, fields on the route;
+  - new sectors each run.
+- The background, the fades, the stages and the gate are unchanged.
+- **Longer into Polaris** (asked for on 2026-11-18). A load into the sector scene, a launch or a restart, keeps the card up for at least 3 s from when the screen is dark, so the tip can be read. Every other load keeps 0.8 s. The bar never runs ahead of that time, so a quick load fills it steadily instead of sitting full. Once the load is done the line reads READY while the bar finishes. Both times are on **Scene Flow Settings** (**Minimum Load Seconds**, **Sector Load Seconds**). The run's clock still starts at the fade-in, and the controls stay held until then.
+
+### Implementation (4a)
+| File | Role |
+|---|---|
+| `Scripts/UI/LoadingCardView.cs` | The card: title, destination sticker, sticker bar, stage line, tip; the pop and the sway |
+| `Scripts/Flow/LoadingScreen.cs` | Builds the card in place of the panel, picks its colour and a tip, and ticks it each frame on unscaled time |
+| `Scripts/Flow/SceneFlowSettings.cs` | `LoadingTips`, the tips with their defaults; `MinimumLoadSeconds` (0.8 s) and `SectorLoadSeconds` (3 s) |
+
+### Test (4a)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. From the mothership, launch to Polaris. The card pops in as the screen goes dark: JUMPING TO SECTOR, then POLARIS on a blue leaning sticker, the sticker bar filling under it with its stage line (LOADING, ENTERING, PAINTING SKY, …), and a tip at the bottom.
+3. Return to the mothership: RETURNING TO MOTHERSHIP on a warm orange sticker, with a different tip.
+4. Restart the run a few times: the tip changes every load.
+5. Select `Assets/DeadCargo/Resources/SceneFlowSettings` and look at **Loading Tips**: the twelve tips, editable.
+6. Loading into Polaris takes about 3.25 s (the fade out and 3 s of card), with the bar filling steadily and READY at the end. The report shows `shown after` about 3.25 s, with the gate as in 3b. The mothership still shows after about 1.05 s.
+7. Change **Sector Load Seconds** on the asset and launch again: the card stays up that long.
+
+### Measured (4a, editor, 2026-11-18)
+The user tested the card and the longer load: "better now". Four launches into Polaris showed after 3.24 to 3.25 s, the gate underneath as in 3b (Painting sky 0.50 to 0.72 s, Placing planets 0.16 to 0.51 s, Building field 0.25 to 0.51 s). The worst frames after the fade-in were 11 to 18 ms, none over 33 ms, with no warnings or errors. **4a is done.**
+
+### Design (4b: the arrival)
+- **When.** A load that ends in a ship the chase camera follows from outside, anywhere but the mothership: launching into Polaris, restarting a run, the test range, F6 scenarios. On foot, from the cockpit, or arriving at the mothership, the screen fades from black as before.
+- **The flash.** The card and its dark background go at once and the screen is white, fading over 0.25 s. The run's clock starts here (`SceneFlow.Entered`), as the scene appears.
+- **The ship** (`ArrivalStreak`, the jump-out in reverse):
+  - It is moved 900 m behind its start in one clean step (`RigShift`), stretched six times along its nose and thinned.
+  - Over 0.6 s it comes in nose first. It closes on a cube, so it starts at about 4,500 m/s, passes under the camera and slows hard into its start.
+  - It shrinks back to its own size as it stops dead at the exact start.
+  - It trails the streak's ink-edged light (now shared with the jump-out as `StreakTrails`).
+  - Collisions are off until it stops.
+- **The camera** (`ChaseCamera.Hold`) stays exactly where it waited at the chase view behind the start, and follows again once the ship has stopped. Since the ship stops where it started, the camera does not move.
+- **The burst** (`HudBurst`, as on the jump-out) pops over the ship's start 0.12 s before it stops, then shrinks away.
+- **The controls** stay held until 0.1 s after the ship stops, about 0.7 s after the flash. The loading screen goes once the burst is gone, about 1.1 s after the flash.
+- **The load report** counts its 10 s of frames from the flash, so the arrival's frames are in it. Its **fade in** stage reads the arrival's length.
+
+### Implementation (4b)
+| File | Role |
+|---|---|
+| `Scripts/Visuals/ArrivalStreak.cs` | The ship's run-in: the jump back, the path, the stretch, the stop, and putting the ship back if it is removed early |
+| `Scripts/Visuals/StreakTrails.cs` | The streak's trails, moved out of `JumpStreak` so both streaks share them |
+| `Scripts/Visuals/JumpStreak.cs` | Uses `StreakTrails` |
+| `Scripts/Cameras/ChaseCamera.cs` | `Hold` and `Release`: stop following and keep the camera where it is; refused from the cockpit |
+| `Scripts/Flow/LoadingArrival.cs` | The arrival as the loading screen plays it: flash, burst, camera hold, and when the controls may come back |
+| `Scripts/Flow/LoadingScreen.cs` | Ends with the arrival when it can, or the fade; the background and card sit under a cover the flash replaces |
+
+### Test (4b)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. From the mothership, launch to Polaris. After the card, the screen flashes white. Through it the ship streaks in from behind the camera, stretched and trailing light, slows hard and stops at its start, with a burst popping where it lands. The camera does not move.
+3. Hold the throttle during the arrival: nothing happens until the ship has stopped (about 0.7 s), then the controls answer at once.
+4. The run clock (God Menu **Extraction** tab) starts at 0:00 from the flash.
+5. Restart the run (pause menu, or the Session tab's **Restart Scene**): the same arrival.
+6. Switch to the cockpit view before restarting: the scene fades in from black instead, since the camera rides in the ship.
+7. Return to the mothership: the fade from black, as before.
+8. In the report after a launch, the worst frame after the fade-in is still under 33 ms; if not, note when it came (`at … s`).
+9. Extract a run by the jump drive: the jump-out streak and its trails look as before.
+
+### First test (4b, editor, 2026-11-18)
+Three launches into Polaris. The report's **fade in** read 1.08 s each time, the arrival's length. But the log held about 300 warnings:
+- `Setting linear velocity of a kinematic body is not supported` and the same for angular velocity, from `ArrivalStreak` (90 pairs) and `JumpStreak` (60 pairs);
+- the cause: Polaris, the Dev Test Range and the range template all had the player's Fighter start **Landed** (the kit's `ShipLander`, state 0, overriding the prefab's Launched). A landed ship is kinematic until it launches.
+- Velocity moves nothing on a kinematic body. So the arrival left the ship 900 m back for 0.6 s and then snapped it to its start, and a jump-out before launching did not move the ship at all.
+
+One launch also had a 1.3 s frame 3.8 s after the flash. Nothing measured ran long in it; the watch was cut short by the next load, so it was most likely the editor (the Console logging the warnings, or a click).
+
+**Decision (2026-11-18): the ship starts the run in flight; the landing start is removed.** The user chose this over moving a landed ship by `MovePosition`.
+- A new **Set Up Sector** step, **Start In Flight** (`Editor/FlightStartSetup.cs`), sets the player's ship's lander to Launched and its body to dynamic in the open scene, with Undo. That is how the kit's fighter prefab has them.
+- The arrival's velocity-driven run-in then works as built.
+- Getting out of the ship on foot still needs the ship landed, which is the kit's rule, but a run no longer starts landed.
+- **The boarding bubble.** After the first run of the step, the green `EnterExitBubble` still showed beside the ship at the start. The kit's fighter keeps it hidden and shows it only while landed (its lander's `onShipLanded`; `onShipLaunching` hides it again). The scenes had it switched on to match their landed start. The step now also applies what a launch switches on and off, read from the lander's `onShipLaunching` and `onShipLaunched` `SetActive` calls, so the bubble is hidden. The launch's other call, the weapons' `TriggeringEnabled`, is already on in the prefab.
+
+**Re-test (4b):**
+1. Stop Play Mode. Open Polaris and press **Set Up Sector** (God Menu **Project** tab): it reports **Start In Flight** done, and the green bubble beside the Fighter is gone from the Scene view. Save the scene.
+2. For the test range, open `DevTest/Templates/TestRangeTemplate.unity`, run **Dead Cargo > Setup > Flight - Start In Flight (Open Scene)** with the Fighter selected, and save it. Do the same in the Dev Test Range if a Fighter is spawned there.
+3. Repeat the tests above. The Console has no `kinematic body` warnings, the ship visibly streaks in, and the controls fly the ship as soon as they come back.
+
+### Measured (4b re-test, editor, 2026-11-18)
+Two sessions, each from the mothership into Polaris, with the ship starting in flight. No warnings or errors and no `kinematic body` warnings, so the run-in moves the ship. Every Polaris load showed after 3.25 s, with the arrival 1.08 s ("fade in").
+- The worst frames after the flash were 16 ms (at 10.6 s, with a garbage collection) and 45 ms (at 1.9 s, 2 frames over 33 ms, none over 50 ms).
+- The 45 ms frame came about 1.2 s after the controls returned, with the field's streaming at 18 ms at most, so most of it was unmeasured.
+- Before this the run started landed, and the ship could not move for its first seconds. So this is likely the first moments of flight: new cells, first engine and weapon effects. It is a candidate for 3d's shader warm-up, to watch in a build.
+
+**4b is done.** Backlog #7, the native leak, was fixed in the same test (see the Backlog).
+
+### Not in this phase
+- Shortening the 0.6 s switch itself (B5), which needs profiling of what Polaris holds.
+- Launching straight from the hub while the next scene loads (E3).
+
+### Risks
+- **A task that never finishes.** The gate's 15 s limit fades in anyway, and the report names it.
+- **The kit's own managers.** The gate freezes nothing in the kit; it only holds the player's controls and the run's start.
+- **Shader warm-up only knows what was played.** New effects need the variants recording again; the tool says when its asset is older than the newest shader.
 
 ---
 
@@ -2265,7 +2719,7 @@ The hold becomes a space you pack, not a list. On 2026-11-18 the user asked for 
 ### Steps
 | Step | Delivers | Status |
 |---|---|---|
-| 1. Grid and hold panel | Every unit of cargo takes cells on an 8 × 5 grid as well as tonnes. The hold panel on I takes the mouse: select, drag, turn, and drag out to dump. J dumps the selected unit and holding J dumps the rest. Dark matter shows in its sealed tank. Placeholder loot in three new sizes | Built and compile-checked, awaiting test |
+| 1. Grid and hold panel | Every unit of cargo takes cells on an 8 × 5 grid as well as tonnes. The hold panel on I takes the mouse: select, drag, turn, and drag out to dump. J dumps the selected unit and holding J dumps the rest. Dark matter shows in its sealed tank. Placeholder loot in three new sizes | Done, tested 2026-11-18 |
 
 Later steps are chosen after step 1's test. Item icons on the blocks are the obvious next one.
 
@@ -2359,7 +2813,7 @@ The smoothness fix turned out to be more than interpolation. The kit's camera fo
 ### Steps
 | Step | Delivers | Status |
 |---|---|---|
-| 1. Smooth flight | Dead Cargo's own chase camera in place of the kit's, moving every rendered frame with the same framing. The player's ship, Authority ships and jettisoned crates are drawn between physics steps. The player's ship gets continuous collision, so fast flight no longer passes through small rock (Backlog: fast ships and small rocks). The God Menu switches between this camera and the kit's to compare | Built and compile-checked, awaiting test |
+| 1. Smooth flight | Dead Cargo's own chase camera in place of the kit's, moving every rendered frame with the same framing. The player's ship, Authority ships and jettisoned crates are drawn between physics steps. The player's ship gets continuous collision, so fast flight no longer passes through small rock (Backlog: fast ships and small rocks). The God Menu switches between this camera and the kit's to compare | Done, tested 2026-11-18 |
 | 2. Mouse aim | The mouse moves an aim point and the camera looks along it, while the ship turns to follow, flown by the same `PilotFlight` as the Authority's pilots: tightest turns at combat speed, banking into hard turns. Today's virtual stick stays as an option | Planned |
 | 3. Camera feel | The view widens with speed as well as boost, the camera shakes on hits and boost, and it lags and leads into turns, each with a strength setting | Planned |
 
@@ -2409,3 +2863,65 @@ The chase camera derives from the kit's public `VehicleCameraController`, as the
 ### Verified outside Unity (step 1)
 - Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code.
 - Not run in Unity: the setup, the camera in any view, the interpolation, collision and the God Menu switch.
+
+---
+
+## Phase 6.17: Extraction set-pieces
+
+### Goal
+Make getting out the climax of a run. On 2026-11-18 the user was offered five groups of extraction options and chose eight:
+- the blockade at HUNTED (A1) and an interdictor ship (A2);
+- a jump cost that grows with the load (C2);
+- the jump-out effect (D1), a countdown with no alarm (D2) and a better run report (D3);
+- a secure slot (E2) and a hot extraction bonus (E3).
+
+### Steps
+| Step | Delivers | Status |
+|---|---|---|
+| 1. Jump-out and countdown | The ship stretches and streaks away while the camera holds and watches, and a comic burst marks where it left, then the flash and the report. A big silent countdown shows the spool's last 5 seconds and an open point's last 10 | Done, tested 2026-11-18 |
+| 2. Jump cost and hot bonus | The jump burns more dark matter the heavier the hold. Extracting at a higher heat tier pays a credit bonus | Planned |
+| 3. Blockade and interdictor | Spooling or uplinking at HUNTED brings a blockade. An interdictor's field stops the spool nearby until it is destroyed or left behind | Planned |
+| 4. Secure slot | A small slot, bought at the mothership, whose cargo survives a lost run | Planned |
+| 5. Run report card | A comic results card: an earnings breakdown with the bonus and fees, a heat graph and close calls | Planned |
+
+The report comes last, so it can show everything the earlier steps add.
+
+### Design (step 1: jump-out and countdown)
+- **The jump out.** It plays for both ways out, the jump drive and flying into an open point:
+  - The ship stretches six times along its nose and thins, over 0.2 s.
+  - It streaks away, reaching 4 km/s within half a second, with a cel-banded trail: cream, blue, then teal, edged in ink.
+  - Collisions are off, so nothing in the way ends the jump early.
+- **The camera holds.** It stops following and turns to watch the ship go. From the cockpit it first steps back behind and above the ship, so it is not carried off inside it.
+- **The burst.** A comic starburst, inked, cream with a blue core, pops out where the ship left, spins and shrinks away.
+- **Then the report.** The white flash starts 0.7 s after the jump, once the ship is gone, and the report follows as before. A lost run is unchanged.
+- **The countdown.** A big leaning sticker at the top centre:
+  - The spool's last 5 seconds read JUMP IN, in the jump's blue. TOO FAST or DISRUPTED show in the warning colour while the spool is held back.
+  - An open extraction point's last 10 seconds read WINDOW CLOSES, in green.
+
+  The figure pops as each second ticks. There is no sound.
+
+### Implementation (step 1)
+| File | Role |
+|---|---|
+| `Scripts/Visuals/JumpStreak.cs` | The ship's stretch, launch and trail, added to the ship as the run is extracted |
+| `Scripts/Cameras/ChaseCamera.cs` | `Watch`: hold and turn to keep the leaving ship in view |
+| `Scripts/UI/HudBurst.cs` | The comic starburst |
+| `Scripts/UI/RunResultScreen.cs`, `RunResultView.cs` | Play the jump out, place the burst, and start the flash once the ship is gone |
+| `Scripts/UI/HudCountdown.cs` | The countdown sticker |
+| `Scripts/UI/ExtractionHud.cs` | Drives the countdown from the spool and the nearest point |
+
+No setup step: nothing new is placed in the scene. The trail's material is built at runtime from the built-in `Sprites/Default` shader, which every build includes.
+
+### Test (step 1)
+1. Stop Play Mode before Unity compiles the new scripts.
+2. In Polaris, collect 100 dark matter, slow down and press **H**. At 5 seconds left the countdown sticker drops in: JUMP IN, 5, 4, 3, 2, 1, popping on each second.
+3. During those seconds, speed up past 50 m/s: the sticker turns orange and reads TOO FAST. Take a hit: DISRUPTED.
+4. At 0 the ship stretches and streaks away with its trail, the camera stays put and turns to follow it, and a burst pops where it left. Then the flash, then the report.
+5. Do it again in first person (**C**): the camera steps back behind the ship and watches it go.
+6. Uplink an extraction point (**U**) and wait for it to open. With 10 seconds left the sticker reads WINDOW CLOSES in green and counts down. Fly through the ring before it ends: the ship streaks out through it.
+7. For a quick look, press **Jump Now** in the God Menu **Extraction** tab.
+8. Lose the ship (**Destroy Vehicle** in the Player tab): no jump out, and the report comes as before.
+
+### Verified outside Unity (step 1)
+- Both Dead Cargo assemblies compile with Unity's own compiler and response files, with no warnings from Dead Cargo code.
+- Not run in Unity: the jump out, the camera's watch, the burst, the trail and the countdown.

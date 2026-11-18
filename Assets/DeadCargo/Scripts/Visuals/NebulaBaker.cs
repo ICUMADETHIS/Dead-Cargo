@@ -19,14 +19,16 @@ namespace DeadCargo.Visuals
 
         /// <summary>
         /// Density and hue for every texel, interleaved, row by row from the bottom. Each channel is stretched to
-        /// fill 0..1, so the shader's step thresholds mean the same thing for every shape.
+        /// fill 0..1, so the shader's step thresholds mean the same thing for every shape. <paramref name="maxThreads"/>
+        /// limits the cores it takes; -1 takes them all.
         /// </summary>
-        public static float[] Bake(NebulaShape shape, int size = MapSize)
+        public static float[] Bake(NebulaShape shape, int size = MapSize, int maxThreads = -1)
         {
             var field = new NebulaField(shape);
             var texels = new float[size * size * Channels];
+            var options = new ParallelOptions { MaxDegreeOfParallelism = maxThreads };
 
-            Parallel.For(0, size, row =>
+            Parallel.For(0, size, options, row =>
             {
                 int index = row * size * Channels;
                 for (int column = 0; column < size; ++column, index += Channels)

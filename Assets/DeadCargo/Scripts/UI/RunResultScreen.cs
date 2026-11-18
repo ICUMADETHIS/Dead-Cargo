@@ -1,13 +1,16 @@
+using DeadCargo.Cameras;
 using DeadCargo.Extraction;
 using DeadCargo.Flow;
+using DeadCargo.Visuals;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace DeadCargo.UI
 {
     /// <summary>
-    /// Shows the run report when the run ends and pauses the world behind it.
-    /// An extraction opens with a white jump flash. A loss waits so the destruction plays out.
+    /// Shows the run report when the run ends and pauses the world behind it. An extraction first plays the jump out: the
+    /// ship streaks away (<see cref="JumpStreak"/>) while the camera holds and watches, and a comic burst marks where it left.
+    /// Then a white jump flash opens the report. A loss waits so the destruction plays out.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler))]
@@ -33,6 +36,7 @@ namespace DeadCargo.UI
         private RunResult result;
         private float endTime;
         private bool revealed;
+        private JumpStreak streak;
 
         private void Awake()
         {
@@ -75,22 +79,27 @@ namespace DeadCargo.UI
             bool extracted = result.Outcome == RunOutcome.Extracted;
             float delay = extracted ? jumpRevealDelay : lossRevealDelay;
 
+            // The flash waits for the ship to be gone.
+            float sinceDeparture = elapsed - (streak != null ? JumpStreak.Duration : 0f);
+            if (streak != null)
+                view.SetBurst(Camera.main, streak.Origin, elapsed);
+
             if (extracted)
             {
-                float flash = elapsed < delay
-                    ? Mathf.Clamp01(elapsed / FlashRiseTime)
-                    : 1f - Mathf.Clamp01((elapsed - delay) / FlashFadeTime);
+                float flash = sinceDeparture < 0f ? 0f
+                    : sinceDeparture < delay ? Mathf.Clamp01(sinceDeparture / FlashRiseTime)
+                    : 1f - Mathf.Clamp01((sinceDeparture - delay) / FlashFadeTime);
                 view.SetFlash(flash);
             }
 
             if (!revealed)
             {
-                if (elapsed >= delay)
+                if (sinceDeparture >= delay)
                     Reveal();
                 return;
             }
 
-            view.SetOpacity(Mathf.Clamp01((elapsed - delay) / FadeInTime));
+            view.SetOpacity(Mathf.Clamp01((sinceDeparture - delay) / FadeInTime));
 
             if (Input.GetKeyDown(ContinueKey) || Input.GetKeyDown(ContinueKeypadKey))
                 tracker.ReturnToMothership();
@@ -100,6 +109,13 @@ namespace DeadCargo.UI
         {
             result = runResult;
             endTime = Time.unscaledTime;
+            if (runResult.Outcome != RunOutcome.Extracted || tracker.Ship == null)
+                return;
+
+            streak = JumpStreak.Play(tracker.Ship.gameObject);
+            ChaseCamera chase = ChaseCamera.Active;
+            if (chase != null)
+                chase.Watch(tracker.Ship.transform);
         }
 
         private void Reveal()

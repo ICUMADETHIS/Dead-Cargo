@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DeadCargo.Flow;
 using DeadCargo.Sectors.Placement;
 using Unity.Mathematics;
 using UnityEngine;
@@ -213,6 +214,7 @@ namespace DeadCargo.Sectors
 
         private void BuildRun()
         {
+            using LoadScope measure = LoadReport.Measure("Sector layout");
             Layout.Build(definition != null ? definition.Regions : null, Grid, seed, definition != null && definition.VaryLayout);
             PlaceContent();
         }

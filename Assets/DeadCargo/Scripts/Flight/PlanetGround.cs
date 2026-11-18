@@ -1,3 +1,4 @@
+using DeadCargo.Flow;
 using DeadCargo.Sectors;
 using DeadCargo.Sectors.Far;
 using SpaceGraphicsToolkit.Cloud;
@@ -36,6 +37,8 @@ namespace DeadCargo.Flight
 
         // The ground copy goes this much higher than it came, so it is not rebuilt over and over at the edge.
         private const float LeaveFactor = 1.25f;
+
+        private const string LoadLabel = "Planet ground";
 
         // A move of the ground copy smaller than this, in metres, is not made, so it is not shifted every frame for nothing.
         private const float MoveTolerance = 0.01f;
@@ -151,7 +154,13 @@ namespace DeadCargo.Flight
             if (HasGround && (!wanted || nearest != Planet))
                 RemoveGround();
             if (wanted && !HasGround)
+            {
                 BuildGround(nearest);
+
+                // The landscape builds its chunks and colliders over the frames after, so those are watched too.
+                if (HasGround)
+                    LoadReport.WatchPlay(LoadLabel);
+            }
 
             if (HasGround)
                 PlaceGround(space);
@@ -196,6 +205,7 @@ namespace DeadCargo.Flight
         // Built inactive, so nothing it carries wakes before it is stripped to its landscape.
         private void BuildGround(int planet)
         {
+            using LoadScope measure = LoadReport.Measure(LoadLabel);
             GameObject prefab = PlanetCatalog.Load(bodies.EntryOf(planet));
             Transform farCopy = bodies.InstanceOf(planet);
             if (prefab == null || farCopy == null)
